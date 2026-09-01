@@ -37,7 +37,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 } {
   const { avatarDetails } = useAvatarDetails(() => loadControls())
   const { lockedControls } = useLockedControls()
-  const { command: osCommand } = useOpenShock()
+  const { command: osCommand, isAvailable: openShockAvailable } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
   const { update } = useOscMessages()
 
@@ -46,7 +46,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       ...controlGroup,
       controls: controlGroup.controls.map((control) => ({
         ...control,
-        locked: lockedControls.value[control.id] ?? false
+        locked: lockedControls.value[control.id] ?? false,
+        // OpenShock controls are unavailable to everyone - same as a locked control - unless a
+        // valid API key is configured (see useOpenShock.ts). Other control types never depend on
+        // an external service, so they're always available.
+        unavailable: control.type === 'open-shock-shocker' ? !openShockAvailable.value : false
       }))
     }))
   })
@@ -191,6 +195,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     } else if (command.type === 'slider' && control?.type === 'slider') {
       update({ address: control.inputAddress, args: [command.value] })
     } else if (command.type === 'open-shock-shocker' && control?.type === 'open-shock-shocker') {
+      // Belt-and-suspenders: the UI already hides/blocks this control while OpenShock isn't
+      // configured (see `unavailable` above and useWebsocketHost.ts's enforcement), but guard here
+      // too in case handleCommand is ever called directly (e.g. from the authoring preview).
+      if (!openShockAvailable.value) return
+
       const piShockValue = controlValue.value.get(control.id)
       if (piShockValue && piShockValue.cooldownEnd > Date.now()) return
 

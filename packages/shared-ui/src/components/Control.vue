@@ -14,6 +14,8 @@ type Props = {
   offline?: boolean
   locked?: boolean
   lockedIndicator?: boolean
+  unavailable?: boolean
+  unavailableIndicator?: boolean
 }
 
 defineProps<Props>()
@@ -144,9 +146,24 @@ defineEmits<{
         <span class="w-full text-center">Unavailable</span>
       </div>
     </div>
+    <div
+      v-if="unavailable && !offline && !locked"
+      class="absolute inset-0 z-20 flex h-full w-full cursor-pointer items-center justify-center rounded-lg bg-black/50 dark:bg-black/70"
+    >
+      <div class="flex flex-wrap items-center justify-center gap-4 text-white">
+        <UIcon
+          name="lucide:shield-off"
+          class="size-16"
+        />
+        <span class="w-full text-center">Unavailable</span>
+      </div>
+    </div>
+    <!-- Bottom-left, not top-left: some control types (OpenShock) render their own tooltip icon
+    (e.g. shock/vibrate mode) at top-3 left-3 in their own component, and the edit-mode drag
+    handle above also claims that corner - either would sit directly on top of these otherwise. -->
     <UTooltip
       v-if="lockedIndicator"
-      class="absolute top-3 left-3 z-20 cursor-grab rounded-lg"
+      class="absolute bottom-3 left-3 z-20 cursor-grab rounded-lg"
     >
       <UIcon
         name="lucide:lock"
@@ -155,6 +172,19 @@ defineEmits<{
 
       <template #content>
         This control is seen as locked
+      </template>
+    </UTooltip>
+    <UTooltip
+      v-if="unavailableIndicator && !lockedIndicator"
+      class="absolute bottom-3 left-3 z-20 cursor-grab rounded-lg"
+    >
+      <UIcon
+        name="lucide:shield-off"
+        class="size-6"
+      />
+
+      <template #content>
+        OpenShock isn't configured - this control is unavailable to everyone
       </template>
     </UTooltip>
   </div>

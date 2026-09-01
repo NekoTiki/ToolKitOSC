@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
+import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { COLOR_FAMILIES, useTheme } from '@renderer/composables/useTheme'
 import { useWebsocketSettings } from '@renderer/composables/useWebsocketSettings'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const { open } = useSettingsModal()
 const { selectedPrimary, setTheme } = useTheme()
 const { clientType, setClient } = useClientType()
 const { serverWsUrl, defaultServerWsUrl, isCustom, setServerWsUrl } = useWebsocketSettings()
+const { token: openShockToken, status: openShockStatus, setToken: setOpenShockToken } = useOpenShock()
 
 // Editable draft of the WS URL: mirrors the effective URL, but only commits (and reconnects) on
 // blur/enter rather than on every keystroke.
@@ -23,6 +25,30 @@ const resetWsUrl = (): void => {
   setServerWsUrl(undefined)
   wsUrlDraft.value = defaultServerWsUrl
 }
+
+// Same draft-then-commit pattern as the WS URL above: typing doesn't hit the API on every
+// keystroke, only on blur/enter, which is also when setToken() kicks off validation.
+const openShockTokenDraft = ref(openShockToken.value)
+const openShockTokenVisible = ref(false)
+
+watch(openShockToken, (value) => (openShockTokenDraft.value = value))
+
+const commitOpenShockToken = (): void => {
+  if (openShockTokenDraft.value !== openShockToken.value) setOpenShockToken(openShockTokenDraft.value)
+}
+
+const openShockStatusInfo = computed(() => {
+  switch (openShockStatus.value) {
+    case 'checking':
+      return { icon: 'i-lucide-loader-2', class: 'text-muted animate-spin', label: 'Checking key…' }
+    case 'valid':
+      return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Connected' }
+    case 'invalid':
+      return { icon: 'i-lucide-circle-x', class: 'text-error', label: 'Invalid key' }
+    default:
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Not configured' }
+  }
+})
 
 const clientTypeOptions: { value: ClientType; label: string; description: string; icon: string }[] = [
   {
@@ -79,6 +105,48 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
               aria-label="Reset to default"
               @click="resetWsUrl"
             />
+          </div>
+        </UFormField>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <h3 class="text-xs font-semibold text-highlighted">
+          OpenShock
+        </h3>
+        <UFormField
+          label="API Key"
+          description="Required to use Open Shock controls. Generate one from your OpenShock account settings."
+        >
+          <div class="flex gap-2">
+            <UInput
+              v-model="openShockTokenDraft"
+              :type="openShockTokenVisible ? 'text' : 'password'"
+              placeholder="Paste your OpenShock API key"
+              class="w-full"
+              autocomplete="off"
+              @change="commitOpenShockToken"
+              @keyup.enter="commitOpenShockToken"
+              @blur="commitOpenShockToken"
+            >
+              <template #trailing>
+                <UButton
+                  :icon="openShockTokenVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                  color="neutral"
+                  variant="link"
+                  size="xs"
+                  :aria-label="openShockTokenVisible ? 'Hide API key' : 'Show API key'"
+                  @click="openShockTokenVisible = !openShockTokenVisible"
+                />
+              </template>
+            </UInput>
+          </div>
+          <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+            <UIcon
+              :name="openShockStatusInfo.icon"
+              class="size-3.5"
+              :class="openShockStatusInfo.class"
+            />
+            <span :class="openShockStatusInfo.class">{{ openShockStatusInfo.label }}</span>
           </div>
         </UFormField>
       </div>

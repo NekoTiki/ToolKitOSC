@@ -136,6 +136,7 @@ onBeforeUnmount(removeTheme)
                 :key="control.id"
                 :control="control"
                 :locked="control.locked"
+                :unavailable="control.unavailable"
                 :offline="hostStatus !== 'online'"
                 :disconnected="wsOffline"
                 @command="

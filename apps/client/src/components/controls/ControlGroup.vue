@@ -204,6 +204,7 @@ const handleCommandEvent = (controlId: string, command: CommandWithoutIds): void
             :edit="editMode"
             :last-user="commandsLastUser[control.id]"
             :locked-indicator="control.locked"
+            :unavailable-indicator="control.unavailable"
             @edit="openModal(controlGroup.id, control.id)"
             @delete="handleDeleteControl(control.id)"
             @command="handleCommandEvent(control.id, $event)"

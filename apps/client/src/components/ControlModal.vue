@@ -21,23 +21,29 @@ import type {
   StepEnumControl
 } from '@vrc-osc-toolkit/shared-ui'
 import { Control } from '@vrc-osc-toolkit/shared-ui'
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const { model, open, submit } = useControlModal()
 const { avatarDetails } = useAvatarDetails()
 const { handleCommand } = useControls()
-const { getShockers } = useOpenShock()
+const { getShockers, isAvailable: openShockAvailable } = useOpenShock()
 
-type SelectMenuItemType = SelectMenuItem & { value: ControlType['type'] }
+type SelectMenuItemType = SelectMenuItem & { value: ControlType['type']; disabled?: boolean }
 type SelectMenuItemOpenShockMode = SelectMenuItem & { value: OpenShockControl['mode'] }
 
-const types = ref<SelectMenuItemType[]>([
+// A computed (not a plain ref) so the "Open Shock" option flips back to selectable the moment a
+// valid API key is configured in Settings, without the user needing to reopen this modal.
+const types = computed<SelectMenuItemType[]>(() => [
   { label: 'Toggle', value: 'boolean' },
   { label: 'Toggle Group', value: 'boolean-group' },
   { label: 'Toggle Logic', value: 'boolean-enum' },
   { label: 'Enum', value: 'enum' },
   { label: 'Slider', value: 'slider' },
-  { label: 'Open Shock', value: 'open-shock-shocker' }
+  {
+    label: 'Open Shock',
+    value: 'open-shock-shocker',
+    disabled: !openShockAvailable.value
+  }
 ])
 
 const openShockMode = ref<SelectMenuItemOpenShockMode[]>([
@@ -178,17 +184,36 @@ const enumOptions = computed<EnumControl['options']>({
 
 const shockerList = ref<SelectMenuItem[]>([])
 
-onMounted(() => {
-  getShockers().then((shockers) => {
-    shockerList.value = shockers
-      .map((shocker) => shocker.shockers)
-      .flat()
-      .map((shocker) => ({
-        label: shocker.name,
-        value: shocker.id
-      }))
-  })
-})
+// `openShockAvailable` starts out false and only flips true once the token check (an async
+// network request) resolves - so this can't be a one-shot onMounted fetch, or it fires while the
+// check is still pending, sees `false`, and never retries even after the token is confirmed valid
+// moments later. Watching (immediate, so a component instance that mounts after the check already
+// resolved still fetches once) re-fetches every time availability flips true, including after the
+// user fixes the key in Settings while this modal is still open.
+watch(
+  openShockAvailable,
+  (available) => {
+    if (!available) {
+      shockerList.value = []
+      return
+    }
+
+    getShockers()
+      .then((shockers) => {
+        shockerList.value = shockers
+          .map((shocker) => shocker.shockers)
+          .flat()
+          .map((shocker) => ({
+            label: shocker.name,
+            value: shocker.id
+          }))
+      })
+      .catch(() => {
+        shockerList.value = []
+      })
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -275,6 +300,14 @@ onMounted(() => {
           </UFormField>
 
           <template v-if="model.type === 'open-shock-shocker'">
+            <UAlert
+              v-if="!openShockAvailable"
+              color="warning"
+              variant="subtle"
+              icon="lucide:shield-off"
+              title="OpenShock unavailable"
+              description="No valid OpenShock API key is configured. Add one in Settings - until then this control shows as unavailable to everyone, including you."
+            />
             <OpenShockFields
               v-model:mode="model.mode"
               v-model:shockers="model.shockers"
@@ -290,6 +323,7 @@ onMounted(() => {
           <Control
             class="w-55"
             :control="model as ControlType"
+            :unavailable="model.type === 'open-shock-shocker' && !openShockAvailable"
             @command="handleCommand(model as ControlType, $event)"
           />
           <div class="flex justify-end gap-2">

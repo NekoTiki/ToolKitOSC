@@ -172,11 +172,12 @@ export function useWebsocketHost(): {
           // after an avatar switch. Still log the attempt (using the info the message itself
           // carries) so it shows up in the client's history; only skip execution, which does need
           // a resolved control to know the OSC address/type. A control that *does* resolve but is
-          // explicitly locked is still ignored entirely, same as before.
+          // explicitly locked - or marked unavailable, e.g. an OpenShock control while no valid
+          // API key is configured (see useControls.ts) - is still ignored entirely, same as before.
           const control = getControl(data.message.groupId, data.message.controlId)
           const ip = getStableIp(client.ip)
 
-          if (!control?.locked) {
+          if (!control?.locked && !control?.unavailable) {
             const banned = isBanned(ip, client.user?.discord?.id)
             const clientValid = checkClient(clientType.value, client)
 

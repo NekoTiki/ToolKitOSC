@@ -18,6 +18,11 @@ export interface BaseControl {
   name: string
   icon?: string
   locked?: boolean
+  // Distinct from `locked` (an admin choosing to lock a control): set when the control depends on
+  // an external service (currently only OpenShock) that isn't configured/reachable, so it isn't
+  // usable regardless of any lock group. Computed client-side (see useControls.ts) and enforced
+  // host-side the same way `locked` is (see useWebsocketHost.ts).
+  unavailable?: boolean
   type: ControlTypes
 }
 

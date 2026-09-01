@@ -12,6 +12,17 @@ const shockers = defineModel<OpenShockControl['shockers']>('shockers')
 const intensity = defineModel<OpenShockControl['intensity']>('intensity')
 const duration = defineModel<OpenShockControl['duration']>('duration')
 const cooldown = defineModel<OpenShockControl['cooldown']>('cooldown')
+
+// USlider's own v-model sugar is unreliable for a plain single-value binding here: it always
+// treats its value as a `number[]` internally and is only supposed to unwrap back to a bare
+// number when there's exactly one thumb, but in practice it can hand back the raw array instead
+// (same issue already worked around in OscArgsTable.vue). Since these fields are typed as `number`
+// - `cooldown` is even prop-type-checked as one via defineModel - an array leaking through both
+// throws a Vue prop-type warning and, for `cooldown`, makes its `v-if="typeof cooldown ===
+// 'number'"` wrapper unmount the field entirely. So bind one-way and only accept plain numbers.
+const onSliderUpdate = (value: number | number[] | undefined, apply: (value: number) => void): void => {
+  if (typeof value === 'number') apply(value)
+}
 </script>
 
 <template>
@@ -51,21 +62,21 @@ const cooldown = defineModel<OpenShockControl['cooldown']>('cooldown')
       <div class="flex flex-col gap-2">
         Min: {{ intensity.min }}
         <USlider
-          v-model="intensity.min"
-          type="number"
+          :model-value="intensity.min"
           :min="0"
           :max="100"
           class="w-full"
+          @update:model-value="onSliderUpdate($event, (val) => intensity && (intensity.min = val))"
         />
       </div>
       <div class="flex flex-col gap-2">
         Max: {{ intensity.max }}
         <USlider
-          v-model="intensity.max"
-          type="number"
+          :model-value="intensity.max"
           :min="0"
           :max="100"
           class="w-full"
+          @update:model-value="onSliderUpdate($event, (val) => intensity && (intensity.max = val))"
         />
       </div>
     </div>
@@ -79,23 +90,23 @@ const cooldown = defineModel<OpenShockControl['cooldown']>('cooldown')
       <div class="flex flex-col gap-2">
         Min: {{ duration.min / 1000 }}s
         <USlider
-          v-model="duration.min"
-          type="number"
+          :model-value="duration.min"
           :min="300"
           :max="10000"
           :step="100"
           class="w-full"
+          @update:model-value="onSliderUpdate($event, (val) => duration && (duration.min = val))"
         />
       </div>
       <div class="flex flex-col gap-2">
         Max: {{ duration.max / 1000 }}s
         <USlider
-          v-model="duration.max"
-          type="number"
+          :model-value="duration.max"
           :min="300"
           :max="10000"
           :step="100"
           class="w-full"
+          @update:model-value="onSliderUpdate($event, (val) => duration && (duration.max = val))"
         />
       </div>
     </div>
@@ -109,12 +120,12 @@ const cooldown = defineModel<OpenShockControl['cooldown']>('cooldown')
       <div class="flex flex-col gap-2">
         Min: {{ cooldown / 1000 }}s
         <USlider
-          v-model="cooldown"
-          type="number"
+          :model-value="cooldown"
           :min="0"
           :max="120000"
           :step="100"
           class="w-full"
+          @update:model-value="onSliderUpdate($event, (val) => (cooldown = val))"
         />
       </div>
     </div>
