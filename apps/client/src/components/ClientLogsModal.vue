@@ -74,12 +74,22 @@ const typeColor = (type: string): 'primary' | 'secondary' | 'neutral' => {
 </script>
 
 <template>
-  <UModal
+  <USlideover
     v-model:open="open"
-    :title="client ? `Logs for ${client.displayName}` : 'Client Logs'"
-    class="z-50"
-    :ui="{ overlay: 'z-50', body: 'max-w-lg' }"
+    inset
+    side="right"
+    class="w-full max-w-lg"
   >
+    <template #title>
+      <div class="flex items-center gap-1.5">
+        <UAvatar
+          :src="client?.avatar"
+          size="xs"
+        />
+        {{ client ? `Logs for ${client.displayName}` : 'Client Logs' }}
+      </div>
+    </template>
+
     <template #body>
       <div
         v-if="!logs.length"
@@ -90,7 +100,7 @@ const typeColor = (type: string): 'primary' | 'secondary' | 'neutral' => {
 
       <div
         v-else
-        class="flex max-h-[60vh] flex-col gap-2 overflow-y-auto"
+        class="flex flex-col gap-2 overflow-y-auto"
       >
         <UCard
           v-for="log in logs"
@@ -117,7 +127,7 @@ const typeColor = (type: string): 'primary' | 'secondary' | 'neutral' => {
         </UCard>
       </div>
     </template>
-  </UModal>
+  </USlideover>
 </template>
 
 <style scoped></style>
