@@ -212,18 +212,22 @@ export function useWebsocketHost(): {
                 })
               }
 
+              // For an open-shock-shocker command, the intensity/duration/shockers actually applied
+              // are randomized inside handleCommand and weren't known yet when this message arrived
+              // - run it first and log its result instead of the (always absent) message value.
+              const openShockResult = control ? handleCommand(control, data.message) : undefined
+
               addCommandToDb({
                 groupId: data.message.groupId,
                 controlId: data.message.controlId,
                 controlName: control?.name || data.message.controlName || data.message.controlId,
                 type: data.message.type,
-                value: 'value' in data.message ? data.message.value : undefined,
+                value:
+                  openShockResult ?? ('value' in data.message ? data.message.value : undefined),
                 discordId: client.user?.discord?.id,
                 peerId: client.peerId,
                 ip
               })
-
-              if (control) handleCommand(control, data.message)
             }
           }
         }

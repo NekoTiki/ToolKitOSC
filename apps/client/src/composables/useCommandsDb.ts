@@ -19,7 +19,11 @@ export function useCommandsDb(): {
   add: (command: NewCommand) => void
 } {
   const write = (command: NewCommand): void => {
-    void db.commands.add({ ...command, createdAt: Date.now() })
+    // Fire-and-forget, but don't let a failed write (e.g. a value Dexie's structured-clone can't
+    // store) vanish silently - it used to just drop the log entry with no trace.
+    db.commands
+      .add({ ...command, createdAt: Date.now() })
+      .catch((error) => console.error('Failed to write command log:', error))
   }
 
   const add = (command: NewCommand): void => {

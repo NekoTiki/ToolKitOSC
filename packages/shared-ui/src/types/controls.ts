@@ -4,7 +4,7 @@
 // Bug fix vs. the two previously-duplicated `controls.d.ts` copies: 'boolean-enum' was missing
 // from `ControlTypes`/implied by `ControlType`, even though `BooleanEnumControl` and every
 // dispatcher (`Control.vue`) already handled it at runtime.
-type ControlTypes =
+export type ControlTypes =
   | 'boolean'
   | 'boolean-group'
   | 'boolean-enum'
@@ -12,6 +12,34 @@ type ControlTypes =
   | 'slider'
   | 'step-enum'
   | 'open-shock-shocker'
+
+// Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
+export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
+
+// Single source of truth for how a control type is presented outside its own editor - the type
+// picker (ControlModal's "Type" select) and the client logs viewer (ClientLogsModal) both read
+// from this instead of keeping their own copies, so a badge always matches the name the control
+// was created under. One color per type (all 7 of Nuxt UI's semantic colors are spoken for) so
+// every type badge is distinguishable at a glance, not just the couple that used to be colored.
+export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
+  boolean: 'Toggle',
+  'boolean-group': 'Toggle Group',
+  'boolean-enum': 'Toggle Logic',
+  enum: 'Enum',
+  slider: 'Slider',
+  'step-enum': 'Step Enum',
+  'open-shock-shocker': 'Open Shock'
+}
+
+export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
+  boolean: 'primary',
+  'boolean-group': 'secondary',
+  'boolean-enum': 'info',
+  enum: 'warning',
+  slider: 'success',
+  'step-enum': 'neutral',
+  'open-shock-shocker': 'error'
+}
 
 export interface BaseControl {
   id: string

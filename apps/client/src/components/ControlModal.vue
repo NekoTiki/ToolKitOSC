@@ -20,7 +20,7 @@ import type {
   SliderControl,
   StepEnumControl
 } from '@vrc-osc-toolkit/shared-ui'
-import { Control } from '@vrc-osc-toolkit/shared-ui'
+import { Control, CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
 import { computed, ref, watch } from 'vue'
 
 const { model, open, submit } = useControlModal()
@@ -34,13 +34,13 @@ type SelectMenuItemOpenShockMode = SelectMenuItem & { value: OpenShockControl['m
 // A computed (not a plain ref) so the "Open Shock" option flips back to selectable the moment a
 // valid API key is configured in Settings, without the user needing to reopen this modal.
 const types = computed<SelectMenuItemType[]>(() => [
-  { label: 'Toggle', value: 'boolean' },
-  { label: 'Toggle Group', value: 'boolean-group' },
-  { label: 'Toggle Logic', value: 'boolean-enum' },
-  { label: 'Enum', value: 'enum' },
-  { label: 'Slider', value: 'slider' },
+  { label: CONTROL_TYPE_LABELS.boolean, value: 'boolean' },
+  { label: CONTROL_TYPE_LABELS['boolean-group'], value: 'boolean-group' },
+  { label: CONTROL_TYPE_LABELS['boolean-enum'], value: 'boolean-enum' },
+  { label: CONTROL_TYPE_LABELS.enum, value: 'enum' },
+  { label: CONTROL_TYPE_LABELS.slider, value: 'slider' },
   {
-    label: 'Open Shock',
+    label: CONTROL_TYPE_LABELS['open-shock-shocker'],
     value: 'open-shock-shocker',
     disabled: !openShockAvailable.value
   }
@@ -217,37 +217,17 @@ watch(
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :ui="{ content: 'max-w-4xl' }"
-    :dismissible="false"
-  >
+  <UModal v-model:open="open" :ui="{ content: 'max-w-4xl' }" :dismissible="false">
     <template #content>
       <UCard :ui="{ root: 'overflow-auto', body: 'grid grid-cols-[1fr_220px] gap-4 max-h-full' }">
         <UForm class="flex h-min max-h-full grow flex-col gap-2">
-          <UFormField
-            label="Type"
-            required
-          >
-            <USelect
-              v-model="modelType"
-              :items="types"
-              class="w-full"
-            />
+          <UFormField label="Type" required>
+            <USelect v-model="modelType" :items="types" class="w-full" />
           </UFormField>
-          <UFormField
-            label="Name"
-            required
-          >
-            <UInput
-              v-model="model.name"
-              class="w-full"
-            />
+          <UFormField label="Name" required>
+            <UInput v-model="model.name" class="w-full" />
           </UFormField>
-          <UFormField
-            v-if="model.type !== 'open-shock-shocker'"
-            label="Icon"
-          >
+          <UFormField v-if="model.type !== 'open-shock-shocker'" label="Icon">
             <IconSelectMenu
               v-model="model.icon"
               class="w-full"
@@ -258,9 +238,9 @@ watch(
           <template
             v-if="
               model.type === 'boolean' ||
-                model.type === 'enum' ||
-                model.type === 'slider' ||
-                model.type === 'step-enum'
+              model.type === 'enum' ||
+              model.type === 'slider' ||
+              model.type === 'step-enum'
             "
           >
             <AddressField
@@ -327,16 +307,8 @@ watch(
             @command="handleCommand(model as ControlType, $event)"
           />
           <div class="flex justify-end gap-2">
-            <UButton
-              variant="subtle"
-              color="neutral"
-              @click="open = false"
-            >
-              Cancel
-            </UButton>
-            <UButton @click="submit">
-              Save
-            </UButton>
+            <UButton variant="subtle" color="neutral" @click="open = false"> Cancel </UButton>
+            <UButton @click="submit"> Save </UButton>
           </div>
         </div>
       </UCard>

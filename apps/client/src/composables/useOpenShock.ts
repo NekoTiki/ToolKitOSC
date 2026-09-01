@@ -45,6 +45,12 @@ export type OpenShockStatus = 'unconfigured' | 'checking' | 'valid' | 'invalid'
 const token = ref<string>(localStorage.getItem(TOKEN_STORAGE_KEY) ?? '')
 const status = ref<OpenShockStatus>('unconfigured')
 
+// id -> name, refreshed whenever the token validates (see testConnection - it already fetches the
+// shocker list to validate, so this piggybacks on that instead of firing a second request). Lets
+// useControls' handleCommand resolve a shocker's name synchronously and write it straight into the
+// command log at the moment the command fires, rather than the log viewer resolving ids on read.
+const shockerNames = ref<Map<string, string>>(new Map())
+
 // Guards against a stale, slower request resolving after a newer one and clobbering the status.
 let checkId = 0
 
@@ -57,6 +63,7 @@ export function useOpenShock(): {
   status: Ref<OpenShockStatus>
   isAvailable: ComputedRef<boolean>
   testConnection: () => Promise<boolean>
+  shockerNames: Ref<Map<string, string>>
 } {
   const makeRequest = async <T = void>(
     endpoint: string,
@@ -118,8 +125,19 @@ export function useOpenShock(): {
     status.value = 'checking'
 
     try {
-      await getShockers()
-      if (id === checkId) status.value = 'valid'
+      const hubs = await getShockers()
+
+      if (id === checkId) {
+        status.value = 'valid'
+
+        const names = new Map<string, string>()
+
+        hubs.forEach((hub) =>
+          hub.shockers.forEach((shocker) => names.set(shocker.id, shocker.name))
+        )
+
+        shockerNames.value = names
+      }
       return true
     } catch {
       if (id === checkId) status.value = 'invalid'
@@ -152,7 +170,8 @@ export function useOpenShock(): {
     token,
     status,
     isAvailable,
-    testConnection
+    testConnection,
+    shockerNames
   }
 }
 

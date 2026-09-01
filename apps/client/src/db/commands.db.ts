@@ -1,3 +1,4 @@
+import type { OpenShockCommandResult } from '@vrc-osc-toolkit/shared-ui'
 import type { Table } from 'dexie'
 import Dexie from 'dexie'
 
@@ -10,7 +11,7 @@ export interface Command {
   controlId: string
   controlName: string
   type: string
-  value?: boolean | number | string
+  value?: boolean | number | string | OpenShockCommandResult
   createdAt: number
 }
 

@@ -9,7 +9,8 @@ import type {
   ControlGroup,
   ControlType,
   EnumControl,
-  LastUser
+  LastUser,
+  OpenShockCommandResult
 } from '@vrc-osc-toolkit/shared-ui'
 import { useOpenShockControl } from '@vrc-osc-toolkit/shared-ui'
 import type { ComputedRef } from 'vue'
@@ -33,11 +34,18 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   deleteControl: (groupId: string, controlId: string) => void
   loadControls: (avatarId: string) => void
 
-  handleCommand: (control: ControlType, command: CommandWithoutIds) => void
+  // Returns the resolved OpenShock intensity/duration/shockers for an 'open-shock-shocker' command
+  // (see OpenShockCommandResult) so the caller can log what actually got sent - it isn't known ahead
+  // of time, since it's randomized here. undefined for every other command type, or when the
+  // command didn't actually fire (OpenShock unavailable, or still on cooldown).
+  handleCommand: (
+    control: ControlType,
+    command: CommandWithoutIds
+  ) => OpenShockCommandResult | undefined
 } {
   const { avatarDetails } = useAvatarDetails(() => loadControls())
   const { lockedControls } = useLockedControls()
-  const { command: osCommand, isAvailable: openShockAvailable } = useOpenShock()
+  const { command: osCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
   const { update } = useOscMessages()
 
@@ -172,7 +180,10 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     localStorage.setItem(`controls_${avatarId.value}`, JSON.stringify(controls.value))
   }
 
-  const handleCommand = (control: ControlType, command: CommandWithoutIds): void => {
+  const handleCommand = (
+    control: ControlType,
+    command: CommandWithoutIds
+  ): OpenShockCommandResult | undefined => {
     if (command.type === 'boolean' && control?.type === 'boolean') {
       update({ address: control.inputAddress, args: [command.value] })
     } else if (command.type === 'boolean-group' && control?.type === 'boolean-group') {
@@ -198,10 +209,10 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       // Belt-and-suspenders: the UI already hides/blocks this control while OpenShock isn't
       // configured (see `unavailable` above and useWebsocketHost.ts's enforcement), but guard here
       // too in case handleCommand is ever called directly (e.g. from the authoring preview).
-      if (!openShockAvailable.value) return
+      if (!openShockAvailable.value) return undefined
 
       const piShockValue = controlValue.value.get(control.id)
-      if (piShockValue && piShockValue.cooldownEnd > Date.now()) return
+      if (piShockValue && piShockValue.cooldownEnd > Date.now()) return undefined
 
       const intensity = Math.floor(
         Math.random() * (control.intensity.max - control.intensity.min) + control.intensity.min
@@ -227,7 +238,21 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
         void osCommand(cmd)
       }, control.animationDuration)
+
+      return {
+        intensity: Number(intensity),
+        duration: Number(duration),
+        // Resolved to display names right now, from the cache useOpenShock keeps warm - not the
+        // raw ids (control.shockers), and not left for the log viewer to resolve later: a shocker
+        // could be renamed or removed from the account by the time a log gets read. A name that
+        // isn't cached yet is left out entirely rather than falling back to the id.
+        shockers: control.shockers
+          .map((id) => shockerNames.value.get(id))
+          .filter((name): name is string => !!name)
+      }
     }
+
+    return undefined
   }
 
   watch(
