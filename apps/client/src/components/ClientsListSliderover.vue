@@ -28,9 +28,7 @@ const open = defineModel<boolean>()
 <template>
   <USlideover
     v-model:open="open"
-    :overlay="false"
-    :dismissible="false"
-    :modal="false"
+    inset
     title="Clients List"
     class="w-full max-w-xs"
   >

@@ -152,8 +152,7 @@ onMounted(() => loadTheme())
       </UCard>
 
       <div
-        class="flex flex-wrap gap-4"
-        :class="{ 'justify-center': !open }"
+        class="flex flex-wrap justify-center gap-4"
       >
         <ControlGroup
           v-for="controlGroup in controls"
