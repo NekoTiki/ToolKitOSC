@@ -13,7 +13,8 @@ pub fn send_osc_message(state: State<AppState>, msg: OscCommand) -> Result<(), S
         return Err("OSC sender not ready yet".into());
     };
 
-    let packet = rosc::OscPacket::Message(codec::encode_command(&msg));
+    let avatar_details = state.avatar_details.lock().unwrap().clone();
+    let packet = rosc::OscPacket::Message(codec::encode_command(&msg, avatar_details.as_ref()));
     let bytes = rosc::encoder::encode(&packet).map_err(|e| e.to_string())?;
 
     // send() on a connected UDP socket is a plain non-blocking syscall in practice; spawn it so

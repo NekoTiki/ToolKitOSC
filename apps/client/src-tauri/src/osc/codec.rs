@@ -36,23 +36,47 @@ pub fn decode_message(msg: &rosc::OscMessage) -> crate::types::OscMessage {
     }
 }
 
-pub fn encode_arg(arg: &OscArg) -> rosc::OscType {
+/// `expected_type` is the avatar parameter's declared wire type ("Bool"/"Float"/"Int"), when
+/// known — see `encode_command`. It overrides the whole-number heuristic below, which otherwise
+/// misfires for Float parameters whenever the value happens to land on a whole number (e.g. a
+/// slider at exactly 0% or 100%): sending those as `Int` instead of `Float` desyncs VRChat's
+/// avatar parameter state, since the two wire types aren't interchangeable for a Float parameter.
+pub fn encode_arg(arg: &OscArg, expected_type: Option<&str>) -> rosc::OscType {
     match arg {
         OscArg::Bool(b) => rosc::OscType::Bool(*b),
         OscArg::Str(s) => rosc::OscType::String(s.clone()),
-        OscArg::Number(n) => {
-            if n.fract() == 0.0 {
-                rosc::OscType::Int(*n as i32)
-            } else {
-                rosc::OscType::Float(*n as f32)
+        OscArg::Number(n) => match expected_type {
+            Some("Int") => rosc::OscType::Int(*n as i32),
+            Some("Float") => rosc::OscType::Float(*n as f32),
+            _ => {
+                if n.fract() == 0.0 {
+                    rosc::OscType::Int(*n as i32)
+                } else {
+                    rosc::OscType::Float(*n as f32)
+                }
             }
         }
     }
 }
 
-pub fn encode_command(cmd: &crate::types::OscCommand) -> rosc::OscMessage {
+pub fn encode_command(
+    cmd: &crate::types::OscCommand,
+    avatar_details: Option<&crate::types::AvatarDetails>
+) -> rosc::OscMessage {
+    // Prefer the current avatar's declared parameter type over guessing from the value's shape -
+    // it's ground truth when we have it. Addresses that aren't avatar input parameters (OpenShock,
+    // chatbox, etc.) fall through to the heuristic in `encode_arg`.
+    let expected_type = avatar_details.and_then(|details| {
+        details.parameters.iter().find_map(|p| {
+            p.input
+                .as_ref()
+                .filter(|addr| addr.address == cmd.address)
+                .map(|addr| addr.kind.as_str())
+        })
+    });
+
     rosc::OscMessage {
         addr: cmd.address.clone(),
-        args: cmd.args.iter().map(encode_arg).collect()
+        args: cmd.args.iter().map(|a| encode_arg(a, expected_type)).collect()
     }
 }
