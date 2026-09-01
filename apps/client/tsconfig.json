@@ -4,6 +4,7 @@
     "src/**/*.ts",
     "src/**/*.vue",
     "src/**/*.d.ts",
+    "*.d.ts",
     "vite.config.ts"
   ],
   "compilerOptions": {
