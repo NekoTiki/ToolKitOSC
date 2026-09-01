@@ -1,11 +1,25 @@
 <script setup lang="ts">
 import type { SelectMenuItem } from '@nuxt/ui/components/SelectMenu.vue'
+import AddressField from '@renderer/components/control-modal/AddressField.vue'
+import BooleanEnumFields from '@renderer/components/control-modal/BooleanEnumFields.vue'
+import BooleanGroupFields from '@renderer/components/control-modal/BooleanGroupFields.vue'
+import EnumOptionsField from '@renderer/components/control-modal/EnumOptionsField.vue'
+import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { getUUID, useControlModal } from '@renderer/composables/useControlModal'
 import { useControls } from '@renderer/composables/useControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
-import type { ControlType, OpenShockControl } from '@vrc-osc-toolkit/shared-ui'
+import type {
+  BooleanControl,
+  BooleanEnumControl,
+  BooleanGroupControl,
+  ControlType,
+  EnumControl,
+  OpenShockControl,
+  SliderControl,
+  StepEnumControl
+} from '@vrc-osc-toolkit/shared-ui'
 import { Control } from '@vrc-osc-toolkit/shared-ui'
 import { computed, onMounted, ref } from 'vue'
 
@@ -31,39 +45,76 @@ const openShockMode = ref<SelectMenuItemOpenShockMode[]>([
   { label: 'Vibrate', value: 'Vibrate' }
 ])
 
+// Per-type defaults applied when switching "Type" - keeps the fields each control type needs
+// pre-populated so its editor (and the live preview) has valid data immediately. `model` is
+// `Partial<ControlType>`, a union that only exposes fields common to every variant, so each
+// branch casts to the narrow shape it actually initializes.
+const typeDefaults: Record<ControlType['type'], (m: Partial<ControlType>) => void> = {
+  boolean: (m) => {
+    const booleanModel = m as Partial<BooleanControl>
+
+    booleanModel.inputAddress = ''
+  },
+  slider: (m) => {
+    const sliderModel = m as Partial<SliderControl>
+
+    sliderModel.inputAddress = ''
+  },
+  'step-enum': (m) => {
+    const stepEnumModel = m as Partial<StepEnumControl>
+
+    stepEnumModel.inputAddress = ''
+  },
+  enum: (m) => {
+    const enumModel = m as Partial<EnumControl>
+
+    enumModel.inputAddress = ''
+    enumModel.options = [{ name: '', value: 0, icon: '' }]
+  },
+  'boolean-group': (m) => {
+    const groupModel = m as Partial<BooleanGroupControl>
+
+    groupModel.inputs = [{ inputAddress: '' }]
+  },
+  'boolean-enum': (m) => {
+    const booleanEnumModel = m as Partial<BooleanEnumControl>
+
+    booleanEnumModel.inputs = [
+      { id: getUUID(), name: '', icon: '', inputAddress: { true: [''], false: [''] } }
+    ]
+  },
+  'open-shock-shocker': (m) => {
+    const openShockModel = m as Partial<OpenShockControl>
+
+    openShockModel.mode = 'Shock'
+    openShockModel.shockers = []
+    openShockModel.intensity = { min: 0, max: 100 }
+    openShockModel.duration = { min: 300, max: 1000 }
+    openShockModel.cooldown = 1000
+    openShockModel.animationDuration = 3000
+  }
+}
+
 const modelType = computed({
   get: () => model.value.type,
   set: (val: ControlType['type']) => {
     model.value.type = val
-    if (model.value.type === 'enum') model.value.options = [{ name: '', value: 0, icon: '' }]
-    if (model.value.type === 'boolean-group') model.value.inputs = [{ inputAddress: '' }]
-    if (model.value.type === 'boolean-enum')
-      model.value.inputs = [
-        {
-          id: getUUID(),
-          name: '',
-          icon: '',
-          inputAddress: { true: [''], false: [''] }
-        }
-      ]
-    if (
-      model.value.type === 'boolean' ||
-      model.value.type === 'enum' ||
-      model.value.type === 'slider' ||
-      model.value.type === 'step-enum'
-    ) {
-      model.value.inputAddress = ''
-    }
-    if (model.value.type === 'open-shock-shocker') {
-      model.value.mode = 'Shock'
-      model.value.shockers = []
-      model.value.intensity = { min: 0, max: 100 }
-      model.value.duration = { min: 300, max: 1000 }
-      model.value.cooldown = 1000
-      model.value.animationDuration = 3000
-    }
+    typeDefaults[val]?.(model.value)
   }
 })
+
+const showAllAddresses = ref(false)
+
+const isFilteredAddress = (name: string): boolean => {
+  if (name.startsWith('pcs/')) return true
+  if (name.startsWith('WH Lollipop/')) return true
+  if (name.startsWith('OGB/')) return true
+  if (name.startsWith('Go/')) return true
+  if (name.startsWith('FT/')) return true
+  if (/VF\d+_/.test(name)) return true
+
+  return false
+}
 
 const addresses = computed(() => {
   if (!avatarDetails.value) return []
@@ -83,7 +134,9 @@ const addresses = computed(() => {
         typeCheck = param.input.type === 'Float'
       }
 
-      return !param.name.startsWith('FT/') && typeCheck
+      if (!typeCheck) return false
+
+      return showAllAddresses.value || !isFilteredAddress(param.name)
     })
     .map((param) => ({
       label: param.name,
@@ -91,6 +144,36 @@ const addresses = computed(() => {
       // TODO: UI bugged as of version 2.1.0 of Nuxt UI
       // description: `Current Value: ${get<unknown>(param.input?.address || '', false)}`
     }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+})
+
+// Narrow proxies onto `model` (typed `Partial<ControlType>`) so the field subcomponents get a
+// concrete, single-variant prop type instead of the full control union.
+const booleanGroupInputs = computed<BooleanGroupControl['inputs']>({
+  get: () => (model.value as Partial<BooleanGroupControl>).inputs ?? [],
+  set: (val) => {
+    const groupModel = model.value as Partial<BooleanGroupControl>
+
+    groupModel.inputs = val
+  }
+})
+
+const booleanEnumInputs = computed<BooleanEnumControl['inputs']>({
+  get: () => (model.value as Partial<BooleanEnumControl>).inputs ?? [],
+  set: (val) => {
+    const booleanEnumModel = model.value as Partial<BooleanEnumControl>
+
+    booleanEnumModel.inputs = val
+  }
+})
+
+const enumOptions = computed<EnumControl['options']>({
+  get: () => (model.value as Partial<EnumControl>).options ?? [],
+  set: (val) => {
+    const enumModel = model.value as Partial<EnumControl>
+
+    enumModel.options = val
+  }
 })
 
 const shockerList = ref<SelectMenuItem[]>([])
@@ -146,204 +229,41 @@ onMounted(() => {
               @keyup.backspace="model.icon = ''"
             />
           </UFormField>
-          <UFormField
+
+          <template
             v-if="
               model.type === 'boolean' ||
                 model.type === 'enum' ||
                 model.type === 'slider' ||
                 model.type === 'step-enum'
             "
-            label="Address"
-            required
           >
-            <USelectMenu
-              v-model="model.inputAddress"
-              :items="addresses"
-              placeholder="Select an address"
-              value-key="value"
-              name="Address"
-              class="w-full"
-              virtualize
+            <AddressField
+              v-model:address="model.inputAddress"
+              v-model:show-all="showAllAddresses"
+              :addresses="addresses"
             />
-          </UFormField>
-          <UCheckbox
-            v-if="model.type === 'boolean'"
-            v-model="model.reverse"
-            label="Reverse Mode"
-            description="(On = Off, Off = On)"
+            <UCheckbox
+              v-if="model.type === 'boolean'"
+              v-model="model.reverse"
+              label="Reverse Mode"
+              description="(On = Off, Off = On)"
+            />
+          </template>
+
+          <BooleanGroupFields
+            v-if="model.type === 'boolean-group'"
+            v-model:inputs="booleanGroupInputs"
+            v-model:show-all="showAllAddresses"
+            :addresses="addresses"
           />
 
-          <UFormField
-            v-if="model.type === 'boolean-group'"
-            label="Addresses"
-            :ui="{ container: 'grid gap-2' }"
-            required
-          >
-            <div
-              v-for="option in model.inputs"
-              :key="option.inputAddress"
-              class="flex gap-2"
-            >
-              <USelectMenu
-                v-model="option.inputAddress"
-                :items="addresses"
-                placeholder="Select an address"
-                value-key="value"
-                name="Address"
-                class="w-full"
-                virtualize
-              />
-              <UButton
-                icon="i-lucide:trash-2"
-                color="error"
-                size="sm"
-                variant="outline"
-                class="mt-1 grow-0"
-                @click="
-                  model.inputs = model.inputs?.filter((o) => o.inputAddress !== option.inputAddress)
-                "
-              />
-            </div>
-            <UButton
-              icon="i-lucide:plus"
-              color="primary"
-              size="sm"
-              variant="outline"
-              block
-              class="grow-0"
-              @click="model.inputs?.push({ inputAddress: '' })"
-            />
-          </UFormField>
-
-          <div
+          <BooleanEnumFields
             v-if="model.type === 'boolean-enum'"
-            class="flex flex-col gap-4"
-          >
-            <UFormField
-              v-for="(option, index) in model.inputs"
-              :key="option.id"
-              :ui="{ container: 'flex flex-col gap-2' }"
-              :label="`Option ${index}`"
-              required
-            >
-              <div class="flex gap-2">
-                <IconSelectMenu
-                  v-model="option.icon"
-                  class="min-w-42"
-                  @keyup.backspace="option.icon = ''"
-                />
-                <UInput
-                  v-model="option.name"
-                  class="grow"
-                  placeholder="Name"
-                />
-                <UButton
-                  icon="i-lucide:trash-2"
-                  color="error"
-                  size="sm"
-                  variant="outline"
-                  class="mt-1 grow-0"
-                  @click="
-                    model.inputs = model.inputs?.filter(
-                      (o) => o.inputAddress !== option.inputAddress
-                    )
-                  "
-                />
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <UFormField
-                  :ui="{ container: 'flex flex-col gap-2' }"
-                  label="True"
-                >
-                  <div
-                    v-for="(_optTrue, index) in option.inputAddress.true"
-                    :key="index"
-                    class="flex gap-2"
-                  >
-                    <USelectMenu
-                      v-model="option.inputAddress.true[index]"
-                      :items="addresses"
-                      placeholder="Select an address"
-                      value-key="value"
-                      name="Address"
-                      class="w-full"
-                      virtualize
-                    />
-                    <UButton
-                      icon="i-lucide:trash-2"
-                      color="error"
-                      size="sm"
-                      variant="outline"
-                      class="mt-1 grow-0"
-                      @click="option.inputAddress.true.splice(index, 1)"
-                    />
-                  </div>
-                  <UButton
-                    icon="i-lucide:plus"
-                    color="primary"
-                    size="sm"
-                    variant="outline"
-                    block
-                    class="grow-0"
-                    @click="option.inputAddress.true.push('')"
-                  />
-                </UFormField>
-                <UFormField
-                  :ui="{ container: 'flex flex-col gap-2' }"
-                  label="False"
-                >
-                  <div
-                    v-for="(_optFalse, index) in option.inputAddress.false"
-                    :key="index"
-                    class="flex gap-2"
-                  >
-                    <USelectMenu
-                      v-model="option.inputAddress.false[index]"
-                      :items="addresses"
-                      placeholder="Select an address"
-                      value-key="value"
-                      name="Address"
-                      class="w-full"
-                      virtualize
-                    />
-                    <UButton
-                      icon="i-lucide:trash-2"
-                      color="error"
-                      size="sm"
-                      variant="outline"
-                      class="mt-1 grow-0"
-                      @click="option.inputAddress.false.splice(index, 1)"
-                    />
-                  </div>
-                  <UButton
-                    icon="i-lucide:plus"
-                    color="primary"
-                    size="sm"
-                    variant="outline"
-                    block
-                    class="grow-0"
-                    @click="option.inputAddress.false.push('')"
-                  />
-                </UFormField>
-              </div>
-            </UFormField>
-            <UButton
-              icon="i-lucide:plus"
-              color="primary"
-              size="sm"
-              variant="outline"
-              block
-              class="grow-0"
-              @click="
-                model.inputs?.push({
-                  id: getUUID(),
-                  name: '',
-                  icon: '',
-                  inputAddress: { true: [''], false: [''] }
-                })
-              "
-            />
-          </div>
+            v-model:inputs="booleanEnumInputs"
+            v-model:show-all="showAllAddresses"
+            :addresses="addresses"
+          />
 
           <UFormField
             v-if="model.type === 'enum'"
@@ -351,156 +271,20 @@ onMounted(() => {
             required
             :ui="{ container: 'grid gap-2' }"
           >
-            <div
-              v-for="option in model.options?.sort((a, b) => a.value - b.value)"
-              :key="option.value"
-              class="flex gap-2"
-            >
-              <uCard :ui="{ root: 'w-10 flex justify-center items-center ', body: 'p-0 sm:p-0' }">
-                {{ option.value }}
-              </uCard>
-              <IconSelectMenu
-                v-model="option.icon"
-                class="min-w-42"
-                @keyup.backspace="option.icon = ''"
-              />
-              <UInput
-                v-model="option.name"
-                class="grow"
-                placeholder="Name"
-              />
-              <UButton
-                icon="i-lucide:trash-2"
-                color="error"
-                size="sm"
-                variant="outline"
-                class="grow-0"
-                @click="model.options = model.options?.filter((o) => o.value !== option.value)"
-              />
-            </div>
-            <UButton
-              icon="i-lucide:plus"
-              color="primary"
-              size="sm"
-              variant="outline"
-              block
-              class="grow-0"
-              @click="
-                model.options?.push({
-                  name: '',
-                  value: Math.max(...(model.options?.map((o) => o.value) || [0])) + 1,
-                  icon: ''
-                })
-              "
-            />
+            <EnumOptionsField v-model="enumOptions" />
           </UFormField>
 
-          <UFormField
-            v-if="model.type === 'open-shock-shocker'"
-            label="Shock Mode"
-            required
-          >
-            <USelect
-              v-model="model.mode"
-              :items="openShockMode"
-              placeholder="Select Shockers"
-              value-key="value"
-              class="w-full"
-              virtualize
+          <template v-if="model.type === 'open-shock-shocker'">
+            <OpenShockFields
+              v-model:mode="model.mode"
+              v-model:shockers="model.shockers"
+              v-model:intensity="model.intensity"
+              v-model:duration="model.duration"
+              v-model:cooldown="model.cooldown"
+              :open-shock-mode="openShockMode"
+              :shocker-list="shockerList"
             />
-          </UFormField>
-          <UFormField
-            v-if="model.type === 'open-shock-shocker'"
-            label="Shockers"
-            required
-          >
-            <USelect
-              v-model="model.shockers"
-              :items="shockerList"
-              placeholder="Select Shockers"
-              value-key="value"
-              class="w-full"
-              multiple
-              virtualize
-            />
-          </UFormField>
-          <UFormField
-            v-if="model.type === 'open-shock-shocker' && model.intensity"
-            label="Intensity"
-            required
-          >
-            <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-2">
-                Min: {{ model.intensity.min }}
-                <USlider
-                  v-model="model.intensity.min"
-                  type="number"
-                  :min="0"
-                  :max="100"
-                  class="w-full"
-                />
-              </div>
-              <div class="flex flex-col gap-2">
-                Max: {{ model.intensity.max }}
-                <USlider
-                  v-model="model.intensity.max"
-                  type="number"
-                  :min="0"
-                  :max="100"
-                  class="w-full"
-                />
-              </div>
-            </div>
-          </UFormField>
-          <UFormField
-            v-if="model.type === 'open-shock-shocker' && model.duration"
-            label="Duration"
-            required
-          >
-            <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-2">
-                Min: {{ model.duration.min / 1000 }}s
-                <USlider
-                  v-model="model.duration.min"
-                  type="number"
-                  :min="300"
-                  :max="10000"
-                  :step="100"
-                  class="w-full"
-                />
-              </div>
-              <div class="flex flex-col gap-2">
-                Max: {{ model.duration.max / 1000 }}s
-                <USlider
-                  v-model="model.duration.max"
-                  type="number"
-                  :min="300"
-                  :max="10000"
-                  :step="100"
-                  class="w-full"
-                />
-              </div>
-            </div>
-          </UFormField>
-          <UFormField
-            v-if="model.type === 'open-shock-shocker' && typeof model.cooldown === 'number'"
-            label="CoolDown"
-            required
-          >
-            <div class="grid gap-4">
-              <div class="flex flex-col gap-2">
-                Min: {{ model.cooldown / 1000 }}s
-                <USlider
-                  v-model="model.cooldown"
-                  type="number"
-                  :min="0"
-                  :max="120000"
-                  :step="100"
-                  class="w-full"
-                />
-              </div>
-            </div>
-          </UFormField>
+          </template>
         </UForm>
         <div class="flex flex-col justify-between gap-2">
           <Control
