@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
+import { useClientLogsModal } from '@renderer/composables/useClientLogsModal'
 import type { Client } from '@renderer/db/clients.db'
 import { db } from '@renderer/db/commands.db'
 import { from, useObservable } from '@vueuse/rxjs'
@@ -8,18 +9,34 @@ import { ref } from 'vue'
 
 const props = defineProps<{ client?: Omit<Client, 'createdAt' | 'uniqueKey'> }>()
 
+const { openModal: openLogsModal } = useClientLogsModal()
+
 const items = ref<DropdownMenuItem[]>([
-  { type: 'label', label: 'Ban', icon: 'i-lucide-ban' },
   {
-    label: 'Ban by IP',
-    icon: 'iconoir:ip-address-tag',
-    color: 'error'
+    label: 'See Logs',
+    icon: 'i-lucide-history',
+    onSelect: () => {
+      if (props.client) openLogsModal(props.client)
+    }
   },
+  { type: 'separator' },
   {
-    disabled: !props.client?.discordId,
-    label: 'Ban by Discord ID',
-    icon: 'ic:baseline-discord',
-    color: 'error'
+    label: 'Ban',
+    icon: 'i-lucide-ban',
+    color: 'error',
+    children: [
+      {
+        label: 'Ban by IP',
+        icon: 'iconoir:ip-address-tag',
+        color: 'error'
+      },
+      {
+        disabled: !props.client?.discordId,
+        label: 'Ban by Discord ID',
+        icon: 'ic:baseline-discord',
+        color: 'error'
+      }
+    ]
   }
 ])
 

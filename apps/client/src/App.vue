@@ -171,6 +171,7 @@ onMounted(() => loadTheme())
     <AreYouSureModal />
     <SettingsModal />
     <ClientsListSliderover />
+    <ClientLogsModal />
   </UApp>
 </template>
 

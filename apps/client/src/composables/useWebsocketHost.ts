@@ -165,10 +165,16 @@ export function useWebsocketHost(): {
         const client = clientsMap.value[data.from]
 
         if (client && data.message.groupId && data.message.controlId) {
+          // Controls are avatar-specific, so a control may legitimately fail to resolve here -
+          // e.g. the host hasn't loaded that avatar's controls yet, or the client is a step behind
+          // after an avatar switch. Still log the attempt (using the info the message itself
+          // carries) so it shows up in the client's history; only skip execution, which does need
+          // a resolved control to know the OSC address/type. A control that *does* resolve but is
+          // explicitly locked is still ignored entirely, same as before.
           const control = getControl(data.message.groupId, data.message.controlId)
           const ip = getStableIp(client.ip)
 
-          if (control && !control?.locked) {
+          if (!control?.locked) {
             const clientValid = checkClient(clientType.value, client)
 
             if (!clientValid) {
@@ -181,27 +187,33 @@ export function useWebsocketHost(): {
               increaseIpCount(ip)
               if (client.user?.discord?.id) increaseDiscordIdCount(client.user.discord?.id)
 
-              setControlLastUser(data.message.groupId, data.message.controlId, {
-                avatar:
-                  client.user?.discord?.avatar ||
-                  getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || 'Guest'),
-                displayName:
-                  client.user?.discord?.name ||
-                  client.user?.username ||
-                  client.user?.userDefinedDisplayName ||
-                  'Guest',
-                discordId: client.user?.discord?.id,
-                ip
-              })
+              if (control) {
+                setControlLastUser(data.message.groupId, data.message.controlId, {
+                  avatar:
+                    client.user?.discord?.avatar ||
+                    getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || 'Guest'),
+                  displayName:
+                    client.user?.discord?.name ||
+                    client.user?.username ||
+                    client.user?.userDefinedDisplayName ||
+                    'Guest',
+                  discordId: client.user?.discord?.id,
+                  ip
+                })
+              }
 
               addCommandToDb({
-                controlId: control.id,
+                groupId: data.message.groupId,
+                controlId: data.message.controlId,
+                controlName: control?.name || data.message.controlName || data.message.controlId,
+                type: data.message.type,
+                value: 'value' in data.message ? data.message.value : undefined,
                 discordId: client.user?.discord?.id,
                 peerId: client.peerId,
                 ip
               })
 
-              handleCommand(control, data.message)
+              if (control) handleCommand(control, data.message)
             }
           }
         }

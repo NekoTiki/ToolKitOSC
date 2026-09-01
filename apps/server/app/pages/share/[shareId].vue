@@ -135,6 +135,7 @@ onBeforeUnmount(removeTheme)
                   sendMessage('command', {
                     groupId: controlGroup.id,
                     controlId: control.id,
+                    controlName: control.name,
                     ...$event
                   })
                 "
