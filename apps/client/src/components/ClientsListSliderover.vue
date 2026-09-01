@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
 import { useClientsListDrawer } from '@renderer/composables/useClientsListDrawer'
 import type { Client } from '@renderer/db/clients.db'
@@ -9,18 +10,26 @@ import { computed } from 'vue'
 
 const { open } = useClientsListDrawer()
 const { onlineClients } = useClientsDb()
+const { isBanned } = useBannedClientsDb()
 const clientsObservable = from(liveQuery<Client[]>(() => db.clients.toArray()))
 
 const clientList = useObservable(clientsObservable, { initialValue: [] as Client[] })
 
+const bannedClientsList = computed(() =>
+  clientList.value.filter((client) => isBanned(client.ip, client.discordId))
+)
 const onlineClientsList = computed(() =>
-  clientList.value.filter((client) =>
-    onlineClients.value.includes(formatUniqueKey(client.ip, client.discordId))
+  clientList.value.filter(
+    (client) =>
+      !isBanned(client.ip, client.discordId) &&
+      onlineClients.value.includes(formatUniqueKey(client.ip, client.discordId))
   )
 )
 const offlineClientsList = computed(() =>
   clientList.value.filter(
-    (client) => !onlineClients.value.includes(formatUniqueKey(client.ip, client.discordId))
+    (client) =>
+      !isBanned(client.ip, client.discordId) &&
+      !onlineClients.value.includes(formatUniqueKey(client.ip, client.discordId))
   )
 )
 </script>
@@ -63,6 +72,23 @@ const offlineClientsList = computed(() =>
           </div>
           <ClientDetails
             v-for="client in offlineClientsList"
+            :key="client.id"
+            :client="client"
+          />
+        </div>
+
+        <div
+          v-if="bannedClientsList.length"
+          class="flex flex-col gap-2"
+        >
+          <div class="flex items-center gap-2 text-error">
+            <UIcon name="i-lucide-ban" />
+            <h3 class="font-semibold">
+              Banned Clients
+            </h3>
+          </div>
+          <ClientDetails
+            v-for="client in bannedClientsList"
             :key="client.id"
             :client="client"
           />

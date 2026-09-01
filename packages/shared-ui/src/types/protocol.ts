@@ -35,6 +35,16 @@ export interface ClientInvalidMessage {
   type: ClientType
 }
 
+// Mirrors BanScope in apps/client/src/db/clients.db.ts (duplicated rather than imported, same as
+// ClientType above - the desktop app's local db types aren't shared through this package).
+export type BanScope = 'ip' | 'discord'
+
+export interface ClientBannedMessage {
+  peerId: string
+  scope: BanScope
+  reason?: string
+}
+
 export interface ClientListEntry {
   peerId: string
   ip: string
@@ -58,6 +68,7 @@ export type HostToServerMessage =
   | WsEnvelope<'theme-update', ThemeUpdateMessage>
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
+  | WsEnvelope<'client-banned', ClientBannedMessage>
 
 // Server -> desktop client, over /host. `command`/`update-username` are relays of a viewer's
 // message with a `from` (session id) field appended directly onto the envelope, not nested.
@@ -76,6 +87,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'host-status', 'online' | 'offline'>
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
+  | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>
   | WsEnvelope<'welcome', string>
 

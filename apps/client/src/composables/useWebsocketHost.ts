@@ -1,4 +1,5 @@
 import { useAuth } from '@renderer/composables/useAuth'
+import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
 import { useClientType } from '@renderer/composables/useClientType'
 import { useCommandAnalytics } from '@renderer/composables/useCommandAnalytics'
@@ -103,6 +104,7 @@ export function useWebsocketHost(): {
   })
 
   const { onlineClients, add: addClient } = useClientsDb()
+  const { isBanned } = useBannedClientsDb()
   const { add: addCommandToDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
   const { clientType } = useClientType()
@@ -175,9 +177,16 @@ export function useWebsocketHost(): {
           const ip = getStableIp(client.ip)
 
           if (!control?.locked) {
+            const banned = isBanned(ip, client.user?.discord?.id)
             const clientValid = checkClient(clientType.value, client)
 
-            if (!clientValid) {
+            if (banned) {
+              sendMessage('client-banned', {
+                peerId: client.peerId,
+                scope: banned.scope,
+                reason: banned.reason
+              })
+            } else if (!clientValid) {
               sendMessage('client-invalid', {
                 peerId: client.peerId,
                 reason: 'Client failed validation',

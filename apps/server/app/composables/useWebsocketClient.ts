@@ -22,6 +22,7 @@ export function useWebsocketClient(roomId: string) {
   const controlGroups = ref<ControlGroup[]>([])
   const hostStatus = ref<'online' | 'offline'>('offline')
   const authRequired = ref<'username' | 'discord' | null>(null)
+  const banned = ref<{ scope: 'ip' | 'discord'; reason?: string } | null>(null)
 
   const { status, data, send, open, close } = useWebSocket(`/ws/${roomId}`, {
     heartbeat: {
@@ -61,6 +62,8 @@ export function useWebsocketClient(roomId: string) {
         // the host's policy is 'everyone', so client-invalid.type in practice is always
         // 'username' | 'discord' — the only two AuthModal actually renders a flow for.
         authRequired.value = data.message.type as 'username' | 'discord'
+      } else if (data.type === 'client-banned') {
+        banned.value = { scope: data.message.scope, reason: data.message.reason }
       } else if (data.type === 'theme-update') {
         if (data.message.primary) setTheme('primary', data.message.primary)
         if (data.message.secondary) setTheme('secondary', data.message.secondary)
@@ -68,5 +71,16 @@ export function useWebsocketClient(roomId: string) {
     }
   })
 
-  return { controlGroups, authRequired, status, hostStatus, data, send, sendMessage, open, close }
+  return {
+    controlGroups,
+    authRequired,
+    banned,
+    status,
+    hostStatus,
+    data,
+    send,
+    sendMessage,
+    open,
+    close
+  }
 }

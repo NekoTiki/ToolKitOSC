@@ -15,7 +15,7 @@ useHead({
   ]
 })
 
-const { controlGroups, authRequired, status, hostStatus, open, close, sendMessage } =
+const { controlGroups, authRequired, banned, status, hostStatus, open, close, sendMessage } =
   useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
@@ -25,6 +25,13 @@ const authRequiredOpen = computed({
   get: () => authRequired.value !== null,
   set: (value) => {
     if (!value) authRequired.value = null
+  }
+})
+
+const bannedOpen = computed({
+  get: () => banned.value !== null,
+  set: (value) => {
+    if (!value) banned.value = null
   }
 })
 
@@ -149,6 +156,11 @@ onBeforeUnmount(removeTheme)
       v-model:open="authRequiredOpen"
       :method="authRequired"
       @update:username="handleChangeUsername"
+    />
+    <BannedModal
+      v-model:open="bannedOpen"
+      :scope="banned?.scope ?? null"
+      :reason="banned?.reason"
     />
   </UMain>
 </template>

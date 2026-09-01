@@ -1,17 +1,63 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
+import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
+import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { useClientLogsModal } from '@renderer/composables/useClientLogsModal'
 import type { Client } from '@renderer/db/clients.db'
 import { db } from '@renderer/db/commands.db'
 import { from, useObservable } from '@vueuse/rxjs'
 import { liveQuery } from 'dexie'
-import { ref } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps<{ client?: Omit<Client, 'createdAt' | 'uniqueKey'> }>()
 
 const { openModal: openLogsModal } = useClientLogsModal()
+const { openModal: openAreYouSure } = useAreYouSureModal()
+const { ban, unban, isBanned } = useBannedClientsDb()
 
-const items = ref<DropdownMenuItem[]>([
+const banStatus = computed(() =>
+  props.client ? isBanned(props.client.ip, props.client.discordId) : undefined
+)
+
+const banByIp = async (): Promise<void> => {
+  if (!props.client) return
+
+  const confirmed = await openAreYouSure({
+    title: 'Ban by IP',
+    message: `This will ban **${props.client.displayName}**'s **IP address** (\`${props.client.ip}\`). Anyone connecting from this IP will no longer be able to use controls, until unbanned.`,
+    confirmText: 'Ban'
+  })
+
+  if (confirmed) ban('ip', props.client.ip)
+}
+
+const banByDiscord = async (): Promise<void> => {
+  if (!props.client?.discordId) return
+
+  const confirmed = await openAreYouSure({
+    title: 'Ban by Discord ID',
+    message: `This will ban **${props.client.displayName}**'s **Discord account**. They will no longer be able to use controls from any IP, until unbanned.`,
+    confirmText: 'Ban'
+  })
+
+  if (confirmed) ban('discord', props.client.discordId)
+}
+
+const handleUnban = async (): Promise<void> => {
+  if (banStatus.value?.id === undefined) return
+
+  const modeLabel = banStatus.value.scope === 'discord' ? 'Discord account' : 'IP address'
+
+  const confirmed = await openAreYouSure({
+    title: 'Unban',
+    message: `This will unban **${props.client?.displayName}**'s **${modeLabel}**. They will be able to use controls again.`,
+    confirmText: 'Unban'
+  })
+
+  if (confirmed) unban(banStatus.value.id)
+}
+
+const items = computed<DropdownMenuItem[]>(() => [
   {
     label: 'See Logs',
     icon: 'i-lucide-history',
@@ -20,24 +66,36 @@ const items = ref<DropdownMenuItem[]>([
     }
   },
   { type: 'separator' },
-  {
-    label: 'Ban',
-    icon: 'i-lucide-ban',
-    color: 'error',
-    children: [
-      {
-        label: 'Ban by IP',
-        icon: 'iconoir:ip-address-tag',
-        color: 'error'
-      },
-      {
-        disabled: !props.client?.discordId,
-        label: 'Ban by Discord ID',
-        icon: 'ic:baseline-discord',
-        color: 'error'
+  banStatus.value
+    ? {
+        label: 'Unban',
+        icon: 'i-lucide-shield-check',
+        color: 'success',
+        onSelect: handleUnban
       }
-    ]
-  }
+    : {
+        label: 'Ban',
+        icon: 'i-lucide-ban',
+        color: 'error',
+        children: [
+          {
+            label: 'IP',
+            icon: 'iconoir:ip-address-tag',
+            color: 'error',
+            onSelect: banByIp
+          },
+          ...(props.client?.discordId
+            ? [
+                {
+                  label: 'Discord ID',
+                  icon: 'ic:baseline-discord',
+                  color: 'error' as const,
+                  onSelect: banByDiscord
+                }
+              ]
+            : [])
+        ]
+      }
 ])
 
 const commandsByIpObservable = from(
@@ -74,7 +132,7 @@ const formatNumber = (num: number): string => num.toLocaleString('en-US')
     <UAvatar :src="client.avatar" />
     <div class="flex grow items-center justify-between gap-1">
       <div class="flex items-center gap-1">
-        <span>{{ client.displayName }}</span>
+        <span :class="{ 'text-error': banStatus }">{{ client.displayName }}</span>
         <UPopover
           mode="hover"
           :content="{ align: 'center', side: 'bottom', sideOffset: 8 }"
