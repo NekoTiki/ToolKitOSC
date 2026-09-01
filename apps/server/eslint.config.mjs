@@ -9,4 +9,13 @@ export default withNuxt(...rootConfig, {
   rules: {
     '@typescript-eslint/unified-signatures': 'off'
   }
+}, {
+  // typescript-eslint's parser can't infer a single tsconfigRootDir when a monorepo-wide
+  // lint run (e.g. the root `lint` script) touches this app alongside others — pin it
+  // explicitly. See https://tseslint.com/parser-tsconfigrootdir
+  languageOptions: {
+    parserOptions: {
+      tsconfigRootDir: import.meta.dirname
+    }
+  }
 })

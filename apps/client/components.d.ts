@@ -12,7 +12,6 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    __minitest: typeof import('./src/components/__minitest.vue')['default']
     AreYouSureModal: typeof import('./src/components/AreYouSureModal.vue')['default']
     ClientDetails: typeof import('./src/components/ClientDetails.vue')['default']
     ClientsListSliderover: typeof import('./src/components/ClientsListSliderover.vue')['default']
@@ -29,7 +28,6 @@ declare module 'vue' {
     SettingsModal: typeof import('./src/components/SettingsModal.vue')['default']
     UApp: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
     UAvatar: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Avatar.vue')['default']
-    UBadge: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Badge.vue')['default']
     UButton: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Button.vue')['default']
     UCard: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Card.vue')['default']
     UCheckbox: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Checkbox.vue')['default']
@@ -53,7 +51,6 @@ declare module 'vue' {
 
 // For TSX support
 declare global {
-  const __minitest: typeof import('./src/components/__minitest.vue')['default']
   const AreYouSureModal: typeof import('./src/components/AreYouSureModal.vue')['default']
   const ClientDetails: typeof import('./src/components/ClientDetails.vue')['default']
   const ClientsListSliderover: typeof import('./src/components/ClientsListSliderover.vue')['default']
@@ -70,7 +67,6 @@ declare global {
   const SettingsModal: typeof import('./src/components/SettingsModal.vue')['default']
   const UApp: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
   const UAvatar: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Avatar.vue')['default']
-  const UBadge: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Badge.vue')['default']
   const UButton: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Button.vue')['default']
   const UCard: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Card.vue')['default']
   const UCheckbox: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Checkbox.vue')['default']
