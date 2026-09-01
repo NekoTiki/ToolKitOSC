@@ -83,7 +83,7 @@ const updateSliderValue = (event: MouseEvent): void => {
 <template>
   <div
     ref="sliderRef"
-    class="bg-default ring-default relative aspect-square cursor-pointer overflow-hidden rounded-lg ring select-none"
+    class="bg-default ring-default relative isolate aspect-square cursor-pointer overflow-hidden rounded-lg ring select-none"
     @mousedown="handleMouseDown"
   >
     <svg

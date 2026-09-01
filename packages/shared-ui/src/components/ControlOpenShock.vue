@@ -104,7 +104,7 @@ watch(
 
 <template>
   <UCard
-    :ui="{ root: 'h-[180px] sm:h-[220px]', body: 'h-full relative p-2 sm:p-2' }"
+    :ui="{ root: 'h-[180px] sm:h-[220px]', body: 'h-full relative isolate p-2 sm:p-2' }"
     @click="$emit('run')"
   >
     <div class="flex h-full flex-col items-center justify-center gap-2 select-none">

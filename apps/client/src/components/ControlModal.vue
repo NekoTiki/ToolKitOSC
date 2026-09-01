@@ -6,6 +6,7 @@ import { getUUID, useControlModal } from '@renderer/composables/useControlModal'
 import { useControls } from '@renderer/composables/useControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import type { ControlType, OpenShockControl } from '@vrc-osc-toolkit/shared-ui'
+import { Control } from '@vrc-osc-toolkit/shared-ui'
 import { computed, onMounted, ref } from 'vue'
 
 const { model, open, submit } = useControlModal()

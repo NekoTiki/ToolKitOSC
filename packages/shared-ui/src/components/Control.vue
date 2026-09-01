@@ -25,7 +25,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="relative">
+  <div class="relative isolate">
     <control-boolean
       v-if="control.type === 'boolean'"
       :icon="control.icon"
