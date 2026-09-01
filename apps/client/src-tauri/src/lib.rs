@@ -1,5 +1,6 @@
 mod avatar;
 mod commands;
+mod logging;
 mod osc;
 mod state;
 mod types;
@@ -8,6 +9,8 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    logging::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // A second launch attempt focuses the existing window instead of opening a new one —
@@ -27,7 +30,7 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(err) = osc::udp::run(handle).await {
-                    eprintln!("OSC bridge stopped with an error: {err:?}");
+                    tracing::error!("OSC bridge stopped with an error: {err:?}");
                 }
             });
 

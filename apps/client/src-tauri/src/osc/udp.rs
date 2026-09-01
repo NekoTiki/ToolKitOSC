@@ -22,10 +22,10 @@ pub async fn run(app: AppHandle) -> anyhow::Result<()> {
         *state.sender_socket.lock().unwrap() = Some(sender.clone());
     }
 
-    println!("OSC sender ready — VRChat at {VRCHAT_IP}:{VRCHAT_IN_PORT}");
+    tracing::info!("OSC sender ready — VRChat at {VRCHAT_IP}:{VRCHAT_IN_PORT}");
 
     let receiver = UdpSocket::bind((VRCHAT_IP, VRCHAT_OUT_PORT)).await?;
-    println!("OSC receiver listening on {VRCHAT_IP}:{VRCHAT_OUT_PORT}");
+    tracing::info!("OSC receiver listening on {VRCHAT_IP}:{VRCHAT_OUT_PORT}");
 
     let mut buf = [0u8; 8192];
 
@@ -35,7 +35,7 @@ pub async fn run(app: AppHandle) -> anyhow::Result<()> {
         let packet = match rosc::decoder::decode_udp(&buf[..len]) {
             Ok((_, packet)) => packet,
             Err(err) => {
-                eprintln!("Failed to decode incoming OSC packet: {err:?}");
+                tracing::warn!("Failed to decode incoming OSC packet: {err:?}");
                 continue;
             }
         };
@@ -69,7 +69,7 @@ fn handle_message(app: &AppHandle, raw: rosc::OscMessage) {
 
     if osc_msg.address == "/avatar/change" {
         if let Some(crate::types::OscArg::Str(avatar_id)) = osc_msg.args.first() {
-            println!("Avatar changed: {avatar_id}");
+            tracing::info!("Avatar changed: {avatar_id}");
             on_avatar_change(app, avatar_id);
         }
     }

@@ -70,12 +70,12 @@ pub fn save_throttled(
         match serde_json::to_string(&entries) {
             Ok(json) => {
                 if let Err(err) = std::fs::write(&path, json) {
-                    eprintln!("Failed to save avatar args cache to {path:?}: {err}");
+                    tracing::error!("Failed to save avatar args cache to {path:?}: {err}");
                 } else {
-                    println!("Saved avatar args cache to \"{}\"", path.display());
+                    tracing::info!("Saved avatar args cache to \"{}\"", path.display());
                 }
             }
-            Err(err) => eprintln!("Failed to serialize avatar args cache: {err}")
+            Err(err) => tracing::error!("Failed to serialize avatar args cache: {err}")
         }
     });
 }

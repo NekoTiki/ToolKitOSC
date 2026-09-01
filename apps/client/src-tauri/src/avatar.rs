@@ -40,7 +40,7 @@ pub fn get_avatar_details(avatar_id: &str) -> Option<AvatarDetails> {
         let data = match std::fs::read_to_string(&candidate) {
             Ok(data) => data,
             Err(err) => {
-                eprintln!("Failed to read avatar config at {candidate:?}: {err}");
+                tracing::warn!("Failed to read avatar config at {candidate:?}: {err}");
                 continue;
             }
         };
@@ -55,7 +55,7 @@ pub fn get_avatar_details(avatar_id: &str) -> Option<AvatarDetails> {
         match serde_json::from_str::<AvatarDetails>(trimmed) {
             Ok(details) => return Some(details),
             Err(err) => {
-                eprintln!("Failed to parse avatar config at {candidate:?}: {err}");
+                tracing::warn!("Failed to parse avatar config at {candidate:?}: {err}");
                 continue;
             }
         }

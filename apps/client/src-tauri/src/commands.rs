@@ -20,7 +20,7 @@ pub fn send_osc_message(state: State<AppState>, msg: OscCommand) -> Result<(), S
     // this command handler never has to be async just to satisfy the socket API.
     tauri::async_runtime::spawn(async move {
         if let Err(err) = socket.send(&bytes).await {
-            eprintln!("Failed to send OSC message: {err}");
+            tracing::warn!("Failed to send OSC message: {err}");
         }
     });
 

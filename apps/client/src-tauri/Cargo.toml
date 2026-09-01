@@ -23,6 +23,9 @@ rosc = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros"] }
 directories = "5"
 anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [profile.release]
 panic = "abort"
