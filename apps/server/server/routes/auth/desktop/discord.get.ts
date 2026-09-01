@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
 
   await setUserSession(event, {
     secure: {
-      desktopAuthRequestId: peerId
+      desktopAuthRequestId: peerId as string
     }
   })
 

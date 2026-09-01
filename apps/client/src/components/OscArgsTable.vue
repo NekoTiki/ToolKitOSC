@@ -3,7 +3,7 @@ import type { TableColumn } from '@nuxt/ui/components/Table.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
 import type { OSCArg } from '@renderer/env'
-import { getPaginationRowModel } from '@tanstack/vue-table'
+import { type Column, getPaginationRowModel } from '@tanstack/vue-table'
 import { computed, h, ref, useTemplateRef } from 'vue'
 
 type OscData = {
@@ -22,7 +22,7 @@ const sorting = ref([{ id: 'name', desc: false }])
 
 const getSortableHeader =
   (label: string) =>
-  ({ column }): object => {
+  ({ column }: { column: Column<OscData> }): object => {
     const isSorted = column.getIsSorted()
 
     return h(UButton, {
@@ -135,7 +135,7 @@ const oscRows = computed<OscData[]>(() => {
         />
         <USlider
           v-if="row.original.inputType === 'Float'"
-          v-model="getCurrentValue(row.original)[0]"
+          :model-value="getCurrentValue(row.original)[0] as number"
           :min="0"
           :max="1"
           :step="0.01"

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
+
 const { loggedIn, user, clear } = useUserSession()
 
 useHead({ title: 'VRC OSC Toolkit' })
@@ -7,7 +9,7 @@ const { refresh } = useFetch('/auth/refresh', { immediate: false })
 
 onMounted(() => refresh())
 
-const items = ref([
+const items = ref<DropdownMenuItem[][]>([
   [
     {
       label: user.value?.discord?.name,

@@ -29,7 +29,7 @@ const getRoomId = (url: string): string | null => {
   const pathParts = path.split('/')
 
   if (pathParts.length >= 3) {
-    return pathParts[2]
+    return pathParts[2] ?? null
   }
 
   return null

@@ -33,7 +33,7 @@ const openUrl = (url: string): void => {
 }
 
 const open = ref(false)
-const items = computed<DropdownMenuItem[]>(() => [
+const items = computed(() => [
   { type: 'label', label: 'Divers', icon: 'lucide:ellipsis-vertical', ui: { label: 'text-muted' } },
   {
     label: 'Client List',
@@ -60,7 +60,9 @@ const items = computed<DropdownMenuItem[]>(() => [
     icon: 'i-lucide-pen',
     onSelect: () => (listOpen.value = true)
   }
-])
+  // Cast needed because @nuxt/ui's generated `ui` slot type (Pick<DropdownMenu['slots'], ...>)
+  // requires every picked slot key, not just the ones we actually set (e.g. `label`).
+] as DropdownMenuItem[])
 
 onMounted(() => api.ready())
 onMounted(() => loadTheme())

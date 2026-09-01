@@ -15,7 +15,8 @@ declare module '#auth-utils' {
   interface UserSession {}
 
   interface SecureSessionData {
-    desktopAuthRequestId: string
+    // Optional: only set while a desktop OAuth handoff is in flight, cleared once it completes.
+    desktopAuthRequestId?: string
   }
 }
 
