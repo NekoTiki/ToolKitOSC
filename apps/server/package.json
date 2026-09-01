@@ -1,0 +1,34 @@
+{
+  "name": "@vrc-osc-toolkit/server",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "lint": "eslint --cache .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@nuxt/eslint": "^1.10.0",
+    "@nuxt/ui": "^4.1.0",
+    "@vrc-osc-toolkit/shared-ui": "*",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@vueuse/nuxt": "^14.0.0",
+    "crossws": "^0.4.1",
+    "eslint": "^9.39.0",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "nuxt": "^4.2.0",
+    "nuxt-auth-utils": "^0.5.25",
+    "vue": "^3.5.22",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.17.20",
+    "prettier": "^3.6.2"
+  }
+}

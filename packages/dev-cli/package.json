@@ -1,0 +1,14 @@
+{
+  "name": "@vrc-osc-toolkit/dev-cli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive dev launcher for the server and client, with split log panes",
+  "type": "module",
+  "bin": {
+    "vot-dev": "./index.js"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "tree-kill": "^1.2.2"
+  }
+}

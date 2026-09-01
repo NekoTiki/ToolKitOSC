@@ -1,0 +1,26 @@
+node_modules
+dist
+out
+.eslintcache
+*.log*
+
+# Electron (legacy, kept in case any app still uses it)
+build/Output
+
+# Nuxt
+.output
+.data
+.nuxt
+.nitro
+.cache
+
+# Tauri
+apps/client/src-tauri/target
+apps/client/src-tauri/gen
+
+.DS_Store
+.idea
+.vscode
+.env
+.env.*
+!.env.example

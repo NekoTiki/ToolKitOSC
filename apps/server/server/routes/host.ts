@@ -1,0 +1,152 @@
+import type { Peer } from 'crossws'
+import jwt from 'jsonwebtoken'
+
+import type { User } from '#auth-utils'
+import type { ControlGroup, HostToServerMessage, OSCArg } from '#shared/types/protocol'
+import { clientList, sendToClient, sendToEveryoneInRoom } from '~~/server/routes/ws/[ws]'
+import { useWsIp } from '~~/server/utils/useWsIp'
+
+type RoomId = string
+type PeerId = string
+
+const authenticateHost = new Map<PeerId, User>()
+export const hostList = new Map<RoomId, Host>()
+// Note: this stores whole ControlGroup[] trees (each with a nested `controls: ControlType[]`),
+// not a flat ControlType[] — the old untyped `Map<RoomId, ControlType[]>` annotation was wrong
+// and only went unnoticed because this file had no real type checking on the WS payloads before.
+export const hostControls = new Map<RoomId, ControlGroup[]>()
+export const hostArgs = new Map<RoomId, Record<string, OSCArg[]>>()
+export const hostTheme = new Map<RoomId, { primary: string | null; secondary: string | null }>()
+
+interface Host {
+  peer: Peer
+  user: User
+  ip: string
+}
+
+const getRoomId = (peerId: string): string | null => {
+  const user = authenticateHost.get(peerId)
+
+  if (user) return user.discord?.id || null
+
+  return null
+}
+
+const addClient = (roomId: string, peerId: string, data: Host) => {
+  authenticateHost.set(peerId, data.user!)
+  hostList.get(roomId)?.peer.close()
+  hostList.set(roomId, data)
+}
+
+const removeClient = (roomId: string) => {
+  authenticateHost.delete(hostList.get(roomId)?.peer.id || '')
+  hostList?.delete(roomId)
+}
+
+export const sendClientListToHost = (roomId: RoomId) => {
+  const host = hostList.get(roomId)
+
+  if (!host) return
+
+  host.peer.send({
+    type: 'client-list',
+    message: Array.from(clientList.get(roomId!)?.values() || []).map((client) => ({
+      user: client.user,
+      ip: client.ip,
+      // `peerId` here must match `from`/the clientList map key, which is the session id
+      // (see ws/[ws].ts addClient), not crossws' own ephemeral client.peer.id.
+      peerId: client.sessionId
+    }))
+  })
+}
+
+export const sendMessageToHost = (
+  roomId: RoomId,
+  type: string,
+  command: unknown,
+  opts?: unknown
+) => {
+  const host = hostList.get(roomId)
+
+  if (!host) return
+
+  host.peer.send({
+    type,
+    message: command,
+    ...opts!
+  })
+}
+
+export default defineWebSocketHandler({
+  message(_peer, message) {
+    const peer: Peer = _peer as unknown as Peer
+
+    if (message.text().includes('ping')) {
+      peer.send('pong')
+      return
+    }
+
+    const roomId = getRoomId(peer.id)
+    const data = JSON.parse(message.text()) as HostToServerMessage
+
+    if (data.type === 'auth-token') {
+      const runtimeConfig = useRuntimeConfig()
+
+      try {
+        const { user } = jwt.verify(
+          data.message.token,
+          runtimeConfig.session.password
+        ) as jwt.JwtPayload & { sub: string; user: User }
+
+        peer.send({ type: 'auth-success', message: 'Authentication successful' })
+
+        const roomId = user.discord?.id
+        const userIp = useWsIp(peer)
+
+        addClient(roomId!, peer.id, { peer, user, ip: userIp })
+
+        sendClientListToHost(roomId!)
+        sendToEveryoneInRoom(roomId!, { type: 'host-status', message: 'online' })
+      } catch (error) {
+        console.error('Authentication failed:', error)
+        peer.send({ type: 'auth-error', message: 'Invalid authentication token' })
+
+        peer.close()
+      }
+    } else if (data.type === 'controls-update') {
+      hostControls.set(roomId!, data.message)
+
+      sendToEveryoneInRoom(roomId!, message.text())
+    } else if (data.type === 'args-initial') {
+      hostArgs.set(roomId!, data.message)
+
+      sendToEveryoneInRoom(roomId!, message.text())
+    } else if (data.type === 'args-update') {
+      const args = hostArgs.get(roomId!)
+
+      if (!args) {
+        hostArgs.set(roomId!, {
+          [data.message.address]: data.message.args
+        })
+      } else args[data.message.address] = data.message.args
+
+      sendToEveryoneInRoom(roomId!, message.text())
+    } else if (data.type === 'open-shock-value-update') {
+      sendToEveryoneInRoom(roomId!, message.text())
+    } else if (data.type === 'client-invalid') {
+      sendToClient(roomId!, data.message.peerId, message.text())
+    } else if (data.type === 'theme-update') {
+      hostTheme.set(roomId!, data.message)
+      sendToEveryoneInRoom(roomId!, message.text())
+    }
+  },
+  close(peer) {
+    const roomId = getRoomId(peer.id)
+
+    removeClient(roomId!)
+    sendToEveryoneInRoom(roomId!, { type: 'host-status', message: 'offline' })
+  },
+  error(peer, error) {
+    console.error('[ws] error', peer, error)
+  }
+})
