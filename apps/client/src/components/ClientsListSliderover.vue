@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
+import { useClientsListDrawer } from '@renderer/composables/useClientsListDrawer'
 import type { Client } from '@renderer/db/clients.db'
 import { db } from '@renderer/db/clients.db'
 import { from, useObservable } from '@vueuse/rxjs'
 import { liveQuery } from 'dexie'
 import { computed } from 'vue'
 
+const { open } = useClientsListDrawer()
 const { onlineClients } = useClientsDb()
 const clientsObservable = from(liveQuery<Client[]>(() => db.clients.toArray()))
 
@@ -21,8 +23,6 @@ const offlineClientsList = computed(() =>
     (client) => !onlineClients.value.includes(formatUniqueKey(client.ip, client.discordId))
   )
 )
-
-const open = defineModel<boolean>()
 </script>
 
 <template>

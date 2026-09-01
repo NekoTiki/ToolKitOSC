@@ -5,6 +5,7 @@ import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
 import SettingsModal from '@renderer/components/SettingsModal.vue'
 import WebSocket from '@renderer/components/WebSocket.vue'
 import { useAuth } from '@renderer/composables/useAuth'
+import { useClientsListDrawer } from '@renderer/composables/useClientsListDrawer'
 import { useControls } from '@renderer/composables/useControls'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useLockedControlsModal } from '@renderer/composables/useLockedControlsModal'
@@ -12,7 +13,7 @@ import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useTheme } from '@renderer/composables/useTheme'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { api } from '@renderer/lib/tauri-bridge'
-import { computed, onMounted, ref, resolveComponent } from 'vue'
+import { computed, onMounted, resolveComponent } from 'vue'
 
 import { useAvatarDetails } from './composables/useAvatarDetails'
 
@@ -21,6 +22,7 @@ const UButton = resolveComponent('UButton')
 const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
 const { openModal, listOpen } = useLockedControlsModal()
 const { openModal: openSettingsModal } = useSettingsModal()
+const { openDrawer: openClientsListDrawer } = useClientsListDrawer()
 const { avatarDetails } = useAvatarDetails()
 const { controls, addGroup } = useControls()
 const { authUrl } = useWebsocketAuth()
@@ -32,13 +34,12 @@ const openUrl = (url: string): void => {
   api.openUrl(url)
 }
 
-const open = ref(false)
 const items = computed(() => [
   { type: 'label', label: 'Divers', icon: 'lucide:ellipsis-vertical', ui: { label: 'text-muted' } },
   {
     label: 'Client List',
     icon: 'i-lucide-users',
-    onSelect: () => (open.value = true)
+    onSelect: () => openClientsListDrawer()
   },
   { type: 'label', label: 'Control Group', icon: 'lucide:list-tree', ui: { label: 'text-muted' } },
   {
@@ -169,7 +170,7 @@ onMounted(() => loadTheme())
     <LockedControlGroupListModal />
     <AreYouSureModal />
     <SettingsModal />
-    <ClientsListSliderover v-model:open="open" />
+    <ClientsListSliderover />
   </UApp>
 </template>
 
