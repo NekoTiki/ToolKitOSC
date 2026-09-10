@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import type { CommandWithoutIds, ControlType, LastUser } from '../types/controls'
 import ControlBoolean from './ControlBoolean.vue'
 import ControlBooleanEnum from './ControlBooleanEnum.vue'
@@ -19,12 +21,24 @@ type Props = {
   unavailableIndicator?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 defineEmits<{
   (e: 'edit', id: string): void
   (e: 'delete', id: string): void
   (e: 'command', command: CommandWithoutIds): void
 }>()
+
+// The unavailable-indicator tooltip used to always say "OpenShock isn't configured", which was
+// wrong for any other control type that can go unavailable (currently also Intiface, which can be
+// unreachable for two different reasons of its own).
+const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
+  'open-shock-shocker': "OpenShock isn't configured",
+  'intiface-toy': "Intiface isn't connected, or every toy this control targets is offline"
+}
+
+const unavailableReason = computed(
+  () => UNAVAILABLE_REASON[props.control.type] ?? "Something this control depends on isn't available"
+)
 </script>
 
 <template>
@@ -192,7 +206,7 @@ defineEmits<{
       />
 
       <template #content>
-        OpenShock isn't configured - this control is unavailable to everyone
+        {{ unavailableReason }} - this control is unavailable to everyone
       </template>
     </UTooltip>
   </div>
