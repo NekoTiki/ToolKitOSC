@@ -12,7 +12,13 @@ const { open } = useSettingsModal()
 const { selectedPrimary, setTheme } = useTheme()
 const { clientType, setClient } = useClientType()
 const { serverWsUrl, defaultServerWsUrl, isCustom, setServerWsUrl } = useWebsocketSettings()
-const { token: openShockToken, status: openShockStatus, setToken: setOpenShockToken } = useOpenShock()
+const {
+  token: openShockToken,
+  status: openShockStatus,
+  setToken: setOpenShockToken,
+  enabled: openShockEnabled,
+  setEnabled: setOpenShockEnabled
+} = useOpenShock()
 const {
   url: intifaceUrl,
   defaultUrl: defaultIntifaceUrl,
@@ -55,6 +61,8 @@ const openShockStatusInfo = computed(() => {
       return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Connected' }
     case 'invalid':
       return { icon: 'i-lucide-circle-x', class: 'text-error', label: 'Invalid key' }
+    case 'disabled':
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Disabled' }
     default:
       return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Not configured' }
   }
@@ -85,6 +93,14 @@ const intifaceStatusInfo = computed(() => {
   }
 })
 
+// Config (external connections) vs. preferences (styling/who's allowed to connect) don't have much
+// to do with each other and were just piling up as one long scroll - splitting them into tabs
+// keeps each one short enough to see at a glance.
+const settingsTabs = [
+  { label: 'Connections', icon: 'i-lucide-plug', slot: 'connections' },
+  { label: 'Preferences', icon: 'i-lucide-sliders-horizontal', slot: 'preferences' }
+]
+
 const clientTypeOptions: { value: ClientType; label: string; description: string; icon: string }[] = [
   {
     value: 'everyone',
@@ -112,186 +128,205 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
     v-model:open="open"
     title="Settings"
     class="z-50"
-    :ui="{ overlay: 'z-50', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4 flex flex-col gap-6' }"
+    :ui="{ overlay: 'z-50', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
   >
     <template #body>
-      <div class="flex flex-col gap-2">
-        <h3 class="text-xs font-semibold text-highlighted">
-          Connection
-        </h3>
-        <UFormField
-          label="Server URL"
-          :description="isCustom ? undefined : `Using the default (${defaultServerWsUrl})`"
-        >
-          <div class="flex gap-2">
-            <UInput
-              v-model="wsUrlDraft"
-              :placeholder="defaultServerWsUrl"
-              class="w-full"
-              @change="commitWsUrl"
-              @keyup.enter="commitWsUrl"
-              @blur="commitWsUrl"
-            />
-            <UButton
-              v-if="isCustom"
-              icon="i-lucide-rotate-ccw"
-              color="neutral"
-              variant="outline"
-              aria-label="Reset to default"
-              @click="resetWsUrl"
-            />
-          </div>
-        </UFormField>
-      </div>
-
-      <div class="flex flex-col gap-2">
-        <h3 class="text-xs font-semibold text-highlighted">
-          OpenShock
-        </h3>
-        <UFormField
-          label="API Key"
-          description="Required to use Open Shock controls. Generate one from your OpenShock account settings."
-        >
-          <div class="flex gap-2">
-            <UInput
-              v-model="openShockTokenDraft"
-              :type="openShockTokenVisible ? 'text' : 'password'"
-              placeholder="Paste your OpenShock API key"
-              class="w-full"
-              autocomplete="off"
-              @change="commitOpenShockToken"
-              @keyup.enter="commitOpenShockToken"
-              @blur="commitOpenShockToken"
+      <UTabs
+        :items="settingsTabs"
+        :ui="{ content: 'flex flex-col gap-6 pt-4' }"
+      >
+        <template #connections>
+          <div class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold text-highlighted">
+              Connection
+            </h3>
+            <UFormField
+              label="Server URL"
+              :description="isCustom ? undefined : `Using the default (${defaultServerWsUrl})`"
             >
-              <template #trailing>
-                <UButton
-                  :icon="openShockTokenVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                  color="neutral"
-                  variant="link"
-                  size="xs"
-                  :aria-label="openShockTokenVisible ? 'Hide API key' : 'Show API key'"
-                  @click="openShockTokenVisible = !openShockTokenVisible"
+              <div class="flex gap-2">
+                <UInput
+                  v-model="wsUrlDraft"
+                  :placeholder="defaultServerWsUrl"
+                  class="w-full"
+                  @change="commitWsUrl"
+                  @keyup.enter="commitWsUrl"
+                  @blur="commitWsUrl"
                 />
-              </template>
-            </UInput>
+                <UButton
+                  v-if="isCustom"
+                  icon="i-lucide-rotate-ccw"
+                  color="neutral"
+                  variant="outline"
+                  aria-label="Reset to default"
+                  @click="resetWsUrl"
+                />
+              </div>
+            </UFormField>
           </div>
-          <div class="mt-1.5 flex items-center gap-1.5 text-xs">
-            <UIcon
-              :name="openShockStatusInfo.icon"
-              class="size-3.5"
-              :class="openShockStatusInfo.class"
-            />
-            <span :class="openShockStatusInfo.class">{{ openShockStatusInfo.label }}</span>
-          </div>
-        </UFormField>
-      </div>
 
-      <div class="flex flex-col gap-2">
-        <h3 class="text-xs font-semibold text-highlighted">
-          Intiface
-        </h3>
-        <UFormField
-          label="Enable Intiface"
-          description="Connects to a running Intiface Central/Engine to control toys."
-        >
-          <USwitch
-            :model-value="intifaceEnabled"
-            @update:model-value="setIntifaceEnabled(!!$event)"
-          />
-        </UFormField>
-        <UFormField
-          v-if="intifaceEnabled"
-          label="Server URL"
-          :description="isCustomIntifaceUrl ? undefined : `Using the default (${defaultIntifaceUrl})`"
-        >
-          <div class="flex gap-2">
-            <UInput
-              v-model="intifaceUrlDraft"
-              :placeholder="defaultIntifaceUrl"
-              class="w-full"
-              autocomplete="off"
-              @change="commitIntifaceUrl"
-              @keyup.enter="commitIntifaceUrl"
-              @blur="commitIntifaceUrl"
-            />
-            <UButton
-              v-if="isCustomIntifaceUrl"
-              icon="i-lucide-rotate-ccw"
-              color="neutral"
-              variant="outline"
-              aria-label="Reset to default"
-              @click="resetIntifaceUrl"
-            />
+          <div class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold text-highlighted">
+              OpenShock
+            </h3>
+            <UFormField
+              label="Enable OpenShock"
+              description="Lets OpenShock controls be created and used."
+            >
+              <USwitch
+                :model-value="openShockEnabled"
+                @update:model-value="setOpenShockEnabled(!!$event)"
+              />
+            </UFormField>
+            <UFormField
+              v-if="openShockEnabled"
+              label="API Key"
+              description="Generate one from your OpenShock account settings."
+            >
+              <div class="flex gap-2">
+                <UInput
+                  v-model="openShockTokenDraft"
+                  :type="openShockTokenVisible ? 'text' : 'password'"
+                  placeholder="Paste your OpenShock API key"
+                  class="w-full"
+                  autocomplete="off"
+                  @change="commitOpenShockToken"
+                  @keyup.enter="commitOpenShockToken"
+                  @blur="commitOpenShockToken"
+                >
+                  <template #trailing>
+                    <UButton
+                      :icon="openShockTokenVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                      color="neutral"
+                      variant="link"
+                      size="xs"
+                      :aria-label="openShockTokenVisible ? 'Hide API key' : 'Show API key'"
+                      @click="openShockTokenVisible = !openShockTokenVisible"
+                    />
+                  </template>
+                </UInput>
+              </div>
+              <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+                <UIcon
+                  :name="openShockStatusInfo.icon"
+                  class="size-3.5"
+                  :class="openShockStatusInfo.class"
+                />
+                <span :class="openShockStatusInfo.class">{{ openShockStatusInfo.label }}</span>
+              </div>
+            </UFormField>
           </div>
-          <div class="mt-1.5 flex items-center gap-1.5 text-xs">
-            <UIcon
-              :name="intifaceStatusInfo.icon"
-              class="size-3.5"
-              :class="intifaceStatusInfo.class"
-            />
-            <span :class="intifaceStatusInfo.class">{{ intifaceStatusInfo.label }}</span>
+
+          <div class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold text-highlighted">
+              Intiface
+            </h3>
+            <UFormField
+              label="Enable Intiface"
+              description="Connects to a running Intiface Central/Engine to control toys."
+            >
+              <USwitch
+                :model-value="intifaceEnabled"
+                @update:model-value="setIntifaceEnabled(!!$event)"
+              />
+            </UFormField>
+            <UFormField
+              v-if="intifaceEnabled"
+              label="Server URL"
+              :description="isCustomIntifaceUrl ? undefined : `Using the default (${defaultIntifaceUrl})`"
+            >
+              <div class="flex gap-2">
+                <UInput
+                  v-model="intifaceUrlDraft"
+                  :placeholder="defaultIntifaceUrl"
+                  class="w-full"
+                  autocomplete="off"
+                  @change="commitIntifaceUrl"
+                  @keyup.enter="commitIntifaceUrl"
+                  @blur="commitIntifaceUrl"
+                />
+                <UButton
+                  v-if="isCustomIntifaceUrl"
+                  icon="i-lucide-rotate-ccw"
+                  color="neutral"
+                  variant="outline"
+                  aria-label="Reset to default"
+                  @click="resetIntifaceUrl"
+                />
+              </div>
+              <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+                <UIcon
+                  :name="intifaceStatusInfo.icon"
+                  class="size-3.5"
+                  :class="intifaceStatusInfo.class"
+                />
+                <span :class="intifaceStatusInfo.class">{{ intifaceStatusInfo.label }}</span>
+              </div>
+            </UFormField>
           </div>
-        </UFormField>
-      </div>
+        </template>
 
-      <div class="flex flex-col gap-2">
-        <h3 class="text-xs font-semibold text-highlighted">
-          Style
-        </h3>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="family in COLOR_FAMILIES"
-            :key="family"
-            type="button"
-            class="relative size-8 shrink-0 rounded-full transition hover:scale-110"
-            :style="{ backgroundColor: `var(--color-${family}-500)` }"
-            :aria-label="family"
-            :aria-pressed="selectedPrimary === family"
-            @click="setTheme('primary', family)"
-          >
-            <UIcon
-              v-if="selectedPrimary === family"
-              name="i-lucide-check"
-              class="absolute inset-0 m-auto text-white"
-            />
-          </button>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-2">
-        <h3 class="text-xs font-semibold text-highlighted">
-          Authorized Clients
-        </h3>
-        <div class="flex flex-col gap-2">
-          <button
-            v-for="option in clientTypeOptions"
-            :key="option.value"
-            type="button"
-            class="flex items-center gap-3 rounded-lg border border-default p-3 text-left transition hover:bg-elevated"
-            :class="clientType === option.value ? 'border-primary bg-primary/10' : ''"
-            @click="setClient(option.value)"
-          >
-            <UIcon
-              :name="option.icon"
-              class="size-5 shrink-0"
-              :class="clientType === option.value ? 'text-primary' : 'text-muted'"
-            />
-            <div class="flex-1">
-              <p class="text-sm font-medium">
-                {{ option.label }}
-              </p>
-              <p class="text-xs text-muted">
-                {{ option.description }}
-              </p>
+        <template #preferences>
+          <div class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold text-highlighted">
+              Style
+            </h3>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="family in COLOR_FAMILIES"
+                :key="family"
+                type="button"
+                class="relative size-8 shrink-0 rounded-full transition hover:scale-110"
+                :style="{ backgroundColor: `var(--color-${family}-500)` }"
+                :aria-label="family"
+                :aria-pressed="selectedPrimary === family"
+                @click="setTheme('primary', family)"
+              >
+                <UIcon
+                  v-if="selectedPrimary === family"
+                  name="i-lucide-check"
+                  class="absolute inset-0 m-auto text-white"
+                />
+              </button>
             </div>
-            <UIcon
-              v-if="clientType === option.value"
-              name="i-lucide-check"
-              class="text-primary"
-            />
-          </button>
-        </div>
-      </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold text-highlighted">
+              Authorized Clients
+            </h3>
+            <div class="flex flex-col gap-2">
+              <button
+                v-for="option in clientTypeOptions"
+                :key="option.value"
+                type="button"
+                class="flex items-center gap-3 rounded-lg border border-default p-3 text-left transition hover:bg-elevated"
+                :class="clientType === option.value ? 'border-primary bg-primary/10' : ''"
+                @click="setClient(option.value)"
+              >
+                <UIcon
+                  :name="option.icon"
+                  class="size-5 shrink-0"
+                  :class="clientType === option.value ? 'text-primary' : 'text-muted'"
+                />
+                <div class="flex-1">
+                  <p class="text-sm font-medium">
+                    {{ option.label }}
+                  </p>
+                  <p class="text-xs text-muted">
+                    {{ option.description }}
+                  </p>
+                </div>
+                <UIcon
+                  v-if="clientType === option.value"
+                  name="i-lucide-check"
+                  class="text-primary"
+                />
+              </button>
+            </div>
+          </div>
+        </template>
+      </UTabs>
     </template>
   </UModal>
 </template>

@@ -57,6 +57,7 @@ declare module 'vue' {
     USlideover: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slideover.vue')['default']
     USlider: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slider.vue')['default']
     USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
+    UTabs: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tabs.vue')['default']
     UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
     WebSocket: typeof import('./src/components/WebSocket.vue')['default']
   }
@@ -109,6 +110,7 @@ declare global {
   const USlideover: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slideover.vue')['default']
   const USlider: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slider.vue')['default']
   const USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
+  const UTabs: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tabs.vue')['default']
   const UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
   const WebSocket: typeof import('./src/components/WebSocket.vue')['default']
 }
