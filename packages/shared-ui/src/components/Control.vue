@@ -4,6 +4,7 @@ import ControlBoolean from './ControlBoolean.vue'
 import ControlBooleanEnum from './ControlBooleanEnum.vue'
 import ControlBooleanGroup from './ControlBooleanGroup.vue'
 import ControlEnum from './ControlEnum.vue'
+import ControlIntifaceVibrator from './ControlIntifaceVibrator.vue'
 import ControlOpenShock from './ControlOpenShock.vue'
 import ControlSlider from './ControlSlider.vue'
 
@@ -73,6 +74,13 @@ defineEmits<{
       :intensity="control.intensity"
       :duration="control.duration"
       @run="$emit('command', { type: 'open-shock-shocker' })"
+    />
+    <control-intiface-vibrator
+      v-else-if="control.type === 'intiface-vibrator'"
+      :control-id="control.id"
+      :title="control.name"
+      :icon="control.icon"
+      @update:value="$emit('command', { type: 'intiface-vibrator', value: $event })"
     />
     <UPopover
       v-if="lastUser"

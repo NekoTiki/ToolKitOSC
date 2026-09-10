@@ -29,6 +29,14 @@ export interface OpenShockValueUpdateMessage {
   value: OpenShockControlValue
 }
 
+// Broadcasts the value last sent to an 'intiface-vibrator' control's actuators, purely so every
+// viewer's slider (and the host's own) shows the same position - mirrors OpenShockValueUpdateMessage,
+// but the value itself is just the raw slider value (0-1), not a struct to animate.
+export interface IntifaceValueUpdateMessage {
+  controlId: string
+  value: number
+}
+
 export interface ClientInvalidMessage {
   peerId: string
   reason: string
@@ -67,6 +75,7 @@ export type HostToServerMessage =
   | WsEnvelope<'args-update', ArgUpdateMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
+  | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
 
@@ -86,6 +95,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'args-update', ArgUpdateMessage>
   | WsEnvelope<'host-status', 'online' | 'offline'>
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
+  | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>

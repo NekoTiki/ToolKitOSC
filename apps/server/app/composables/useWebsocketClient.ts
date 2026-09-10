@@ -1,6 +1,7 @@
 import type { ControlGroup, ServerToViewerMessage } from '@vrc-osc-toolkit/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
+import { useIntifaceControl } from '~/composables/useIntifaceControl'
 import { useOpenShockControl } from '~/composables/useOpenShockControl'
 
 export function useWebsocketClient(roomId: string) {
@@ -18,6 +19,7 @@ export function useWebsocketClient(roomId: string) {
 
   const { args } = useOscMessages()
   const { setValue } = useOpenShockControl()
+  const { setValue: setIntifaceValue } = useIntifaceControl()
   const { setTheme } = useClientTheme()
   const controlGroups = ref<ControlGroup[]>([])
   const hostStatus = ref<'online' | 'offline'>('offline')
@@ -56,6 +58,8 @@ export function useWebsocketClient(roomId: string) {
         hostStatus.value = data.message
       } else if (data.type === 'open-shock-value-update') {
         setValue(data.message.controlId, data.message.value)
+      } else if (data.type === 'intiface-value-update') {
+        setIntifaceValue(data.message.controlId, data.message.value)
       } else if (data.type === 'client-invalid') {
         // The wire type is the full ClientType union ('everyone' | 'username' | 'discord'), but
         // checkClient() (see apps/client/src/utils/checkClient.ts) never fails validation when

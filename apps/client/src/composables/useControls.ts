@@ -1,5 +1,6 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { useIntiface } from '@renderer/composables/useIntiface'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -12,7 +13,7 @@ import type {
   LastUser,
   OpenShockCommandResult
 } from '@vrc-osc-toolkit/shared-ui'
-import { useOpenShockControl } from '@vrc-osc-toolkit/shared-ui'
+import { useIntifaceControl, useOpenShockControl } from '@vrc-osc-toolkit/shared-ui'
 import type { ComputedRef } from 'vue'
 import { computed, ref, watch } from 'vue'
 
@@ -47,6 +48,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { lockedControls } = useLockedControls()
   const { command: osCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
+  const { setVibratorIntensity, isAvailable: intifaceAvailable } = useIntiface()
+  const { setValue: setIntifaceValue } = useIntifaceControl()
   const { update } = useOscMessages()
 
   const controls = computed((): ControlGroup[] => {
@@ -55,10 +58,15 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       controls: controlGroup.controls.map((control) => ({
         ...control,
         locked: lockedControls.value[control.id] ?? false,
-        // OpenShock controls are unavailable to everyone - same as a locked control - unless a
-        // valid API key is configured (see useOpenShock.ts). Other control types never depend on
-        // an external service, so they're always available.
-        unavailable: control.type === 'open-shock-shocker' ? !openShockAvailable.value : false
+        // OpenShock/Intiface controls are unavailable to everyone - same as a locked control -
+        // unless the service is actually reachable (see useOpenShock.ts/useIntiface.ts). Other
+        // control types never depend on an external service, so they're always available.
+        unavailable:
+          control.type === 'open-shock-shocker'
+            ? !openShockAvailable.value
+            : control.type === 'intiface-vibrator'
+              ? !intifaceAvailable.value
+              : false
       }))
     }))
   })
@@ -250,6 +258,12 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
           .map((id) => shockerNames.value.get(id))
           .filter((name): name is string => !!name)
       }
+    } else if (command.type === 'intiface-vibrator' && control?.type === 'intiface-vibrator') {
+      // Same belt-and-suspenders guard as OpenShock above.
+      if (!intifaceAvailable.value) return undefined
+
+      setIntifaceValue(control.id, command.value)
+      setVibratorIntensity(control.vibrators, command.value)
     }
 
     return undefined

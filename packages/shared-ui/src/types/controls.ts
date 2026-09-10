@@ -12,6 +12,7 @@ export type ControlTypes =
   | 'slider'
   | 'step-enum'
   | 'open-shock-shocker'
+  | 'intiface-vibrator'
 
 // Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
 export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -19,8 +20,10 @@ export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' |
 // Single source of truth for how a control type is presented outside its own editor - the type
 // picker (ControlModal's "Type" select) and the client logs viewer (ClientLogsModal) both read
 // from this instead of keeping their own copies, so a badge always matches the name the control
-// was created under. One color per type (all 7 of Nuxt UI's semantic colors are spoken for) so
-// every type badge is distinguishable at a glance, not just the couple that used to be colored.
+// was created under. One color per type used to mean every badge was distinguishable at a glance,
+// but all 7 of Nuxt UI's semantic colors are already spoken for - 'intiface-vibrator' reuses
+// 'slider''s 'success' since it's functionally a slider under the hood, rather than adding a
+// non-semantic color just to stay unique.
 export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   boolean: 'Toggle',
   'boolean-group': 'Toggle Group',
@@ -28,7 +31,8 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   enum: 'Enum',
   slider: 'Slider',
   'step-enum': 'Step Enum',
-  'open-shock-shocker': 'Open Shock'
+  'open-shock-shocker': 'Open Shock',
+  'intiface-vibrator': 'Intiface'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
@@ -38,7 +42,8 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   enum: 'warning',
   slider: 'success',
   'step-enum': 'neutral',
-  'open-shock-shocker': 'error'
+  'open-shock-shocker': 'error',
+  'intiface-vibrator': 'success'
 }
 
 export interface BaseControl {
@@ -122,6 +127,24 @@ export interface OpenShockControl extends BaseControl {
   animationDuration: 3000
 }
 
+// One entry per selected Buttplug actuator, not per toy - a toy with more than one vibration
+// motor is asked about independently (see IntifaceFields.vue), so the same control can drive
+// several actuators across several toys with a single value. `deviceName`/`actuatorDescription`
+// are display names captured at selection time (mirrors OpenShockControl's use of ids alone,
+// resolved to a name at command time instead - here there's no equivalent lookup available once
+// a toy is unplugged, so the label is kept on the control itself).
+export interface IntifaceVibratorRef {
+  deviceIndex: number
+  deviceName: string
+  actuatorIndex: number
+  actuatorDescription: string
+}
+
+export interface IntifaceVibratorControl extends BaseControl {
+  type: 'intiface-vibrator'
+  vibrators: IntifaceVibratorRef[]
+}
+
 export type ControlType =
   | BooleanControl
   | BooleanGroupControl
@@ -130,6 +153,7 @@ export type ControlType =
   | SliderControl
   | StepEnumControl
   | OpenShockControl
+  | IntifaceVibratorControl
 
 export interface BaseControlCommand {
   groupId: string
@@ -171,6 +195,11 @@ export interface OpenShockControlCommand extends BaseControlCommand {
   type: 'open-shock-shocker'
 }
 
+export interface IntifaceVibratorControlCommand extends BaseControlCommand {
+  type: 'intiface-vibrator'
+  value: number
+}
+
 export type ControlCommand =
   | BooleanControlCommand
   | BooleanGroupControlCommand
@@ -179,6 +208,7 @@ export type ControlCommand =
   | SliderControlCommand
   | StepEnumControlCommand
   | OpenShockControlCommand
+  | IntifaceVibratorControlCommand
 
 export type CommandWithoutIds =
   | Omit<BooleanControlCommand, 'groupId' | 'controlId'>
@@ -188,6 +218,7 @@ export type CommandWithoutIds =
   | Omit<SliderControlCommand, 'groupId' | 'controlId'>
   | Omit<StepEnumControlCommand, 'groupId' | 'controlId'>
   | Omit<OpenShockControlCommand, 'groupId' | 'controlId'>
+  | Omit<IntifaceVibratorControlCommand, 'groupId' | 'controlId'>
 
 export interface ControlGroup {
   id: string

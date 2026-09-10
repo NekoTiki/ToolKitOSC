@@ -4,11 +4,13 @@ import AddressField from '@renderer/components/control-modal/AddressField.vue'
 import BooleanEnumFields from '@renderer/components/control-modal/BooleanEnumFields.vue'
 import BooleanGroupFields from '@renderer/components/control-modal/BooleanGroupFields.vue'
 import EnumOptionsField from '@renderer/components/control-modal/EnumOptionsField.vue'
+import IntifaceFields from '@renderer/components/control-modal/IntifaceFields.vue'
 import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { getUUID, useControlModal } from '@renderer/composables/useControlModal'
 import { useControls } from '@renderer/composables/useControls'
+import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import type {
   BooleanControl,
@@ -16,6 +18,7 @@ import type {
   BooleanGroupControl,
   ControlType,
   EnumControl,
+  IntifaceVibratorControl,
   OpenShockControl,
   SliderControl,
   StepEnumControl
@@ -27,6 +30,7 @@ const { model, open, submit } = useControlModal()
 const { avatarDetails } = useAvatarDetails()
 const { handleCommand } = useControls()
 const { getShockers, isAvailable: openShockAvailable } = useOpenShock()
+const { devices: intifaceDevices, isAvailable: intifaceAvailable } = useIntiface()
 
 type SelectMenuItemType = SelectMenuItem & { value: ControlType['type']; disabled?: boolean }
 type SelectMenuItemOpenShockMode = SelectMenuItem & { value: OpenShockControl['mode'] }
@@ -43,6 +47,11 @@ const types = computed<SelectMenuItemType[]>(() => [
     label: CONTROL_TYPE_LABELS['open-shock-shocker'],
     value: 'open-shock-shocker',
     disabled: !openShockAvailable.value
+  },
+  {
+    label: CONTROL_TYPE_LABELS['intiface-vibrator'],
+    value: 'intiface-vibrator',
+    disabled: !intifaceAvailable.value
   }
 ])
 
@@ -98,6 +107,11 @@ const typeDefaults: Record<ControlType['type'], (m: Partial<ControlType>) => voi
     openShockModel.duration = { min: 300, max: 1000 }
     openShockModel.cooldown = 1000
     openShockModel.animationDuration = 3000
+  },
+  'intiface-vibrator': (m) => {
+    const intifaceModel = m as Partial<IntifaceVibratorControl>
+
+    intifaceModel.vibrators = []
   }
 }
 
@@ -182,6 +196,15 @@ const enumOptions = computed<EnumControl['options']>({
   }
 })
 
+const intifaceVibrators = computed<IntifaceVibratorControl['vibrators']>({
+  get: () => (model.value as Partial<IntifaceVibratorControl>).vibrators ?? [],
+  set: (val) => {
+    const intifaceModel = model.value as Partial<IntifaceVibratorControl>
+
+    intifaceModel.vibrators = val
+  }
+})
+
 const shockerList = ref<SelectMenuItem[]>([])
 
 // `openShockAvailable` starts out false and only flips true once the token check (an async
@@ -217,17 +240,37 @@ watch(
 </script>
 
 <template>
-  <UModal v-model:open="open" :ui="{ content: 'max-w-4xl' }" :dismissible="false">
+  <UModal
+    v-model:open="open"
+    :ui="{ content: 'max-w-4xl' }"
+    :dismissible="false"
+  >
     <template #content>
       <UCard :ui="{ root: 'overflow-auto', body: 'grid grid-cols-[1fr_220px] gap-4 max-h-full' }">
         <UForm class="flex h-min max-h-full grow flex-col gap-2">
-          <UFormField label="Type" required>
-            <USelect v-model="modelType" :items="types" class="w-full" />
+          <UFormField
+            label="Type"
+            required
+          >
+            <USelect
+              v-model="modelType"
+              :items="types"
+              class="w-full"
+            />
           </UFormField>
-          <UFormField label="Name" required>
-            <UInput v-model="model.name" class="w-full" />
+          <UFormField
+            label="Name"
+            required
+          >
+            <UInput
+              v-model="model.name"
+              class="w-full"
+            />
           </UFormField>
-          <UFormField v-if="model.type !== 'open-shock-shocker'" label="Icon">
+          <UFormField
+            v-if="model.type !== 'open-shock-shocker'"
+            label="Icon"
+          >
             <IconSelectMenu
               v-model="model.icon"
               class="w-full"
@@ -238,9 +281,9 @@ watch(
           <template
             v-if="
               model.type === 'boolean' ||
-              model.type === 'enum' ||
-              model.type === 'slider' ||
-              model.type === 'step-enum'
+                model.type === 'enum' ||
+                model.type === 'slider' ||
+                model.type === 'step-enum'
             "
           >
             <AddressField
@@ -298,17 +341,43 @@ watch(
               :shocker-list="shockerList"
             />
           </template>
+
+          <template v-if="model.type === 'intiface-vibrator'">
+            <UAlert
+              v-if="!intifaceAvailable"
+              color="warning"
+              variant="subtle"
+              icon="lucide:shield-off"
+              title="Intiface unavailable"
+              description="Not connected to an Intiface Engine. Enable and configure it in Settings - until then this control shows as unavailable to everyone, including you."
+            />
+            <IntifaceFields
+              v-model:vibrators="intifaceVibrators"
+              :devices="intifaceDevices"
+            />
+          </template>
         </UForm>
         <div class="flex flex-col justify-between gap-2">
           <Control
             class="w-55"
             :control="model as ControlType"
-            :unavailable="model.type === 'open-shock-shocker' && !openShockAvailable"
+            :unavailable="
+              (model.type === 'open-shock-shocker' && !openShockAvailable) ||
+                (model.type === 'intiface-vibrator' && !intifaceAvailable)
+            "
             @command="handleCommand(model as ControlType, $event)"
           />
           <div class="flex justify-end gap-2">
-            <UButton variant="subtle" color="neutral" @click="open = false"> Cancel </UButton>
-            <UButton @click="submit"> Save </UButton>
+            <UButton
+              variant="subtle"
+              color="neutral"
+              @click="open = false"
+            >
+              Cancel
+            </UButton>
+            <UButton @click="submit">
+              Save
+            </UButton>
           </div>
         </div>
       </UCard>

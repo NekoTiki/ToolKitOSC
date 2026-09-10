@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
+import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { COLOR_FAMILIES, useTheme } from '@renderer/composables/useTheme'
@@ -12,6 +13,15 @@ const { selectedPrimary, setTheme } = useTheme()
 const { clientType, setClient } = useClientType()
 const { serverWsUrl, defaultServerWsUrl, isCustom, setServerWsUrl } = useWebsocketSettings()
 const { token: openShockToken, status: openShockStatus, setToken: setOpenShockToken } = useOpenShock()
+const {
+  url: intifaceUrl,
+  defaultUrl: defaultIntifaceUrl,
+  isCustomUrl: isCustomIntifaceUrl,
+  setUrl: setIntifaceUrl,
+  enabled: intifaceEnabled,
+  setEnabled: setIntifaceEnabled,
+  status: intifaceStatus
+} = useIntiface()
 
 // Editable draft of the WS URL: mirrors the effective URL, but only commits (and reconnects) on
 // blur/enter rather than on every keystroke.
@@ -47,6 +57,31 @@ const openShockStatusInfo = computed(() => {
       return { icon: 'i-lucide-circle-x', class: 'text-error', label: 'Invalid key' }
     default:
       return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Not configured' }
+  }
+})
+
+// Same draft-then-commit pattern as the WS/OpenShock fields above.
+const intifaceUrlDraft = ref(intifaceUrl.value)
+
+watch(intifaceUrl, (value) => (intifaceUrlDraft.value = value))
+
+const commitIntifaceUrl = (): void => setIntifaceUrl(intifaceUrlDraft.value)
+
+const resetIntifaceUrl = (): void => {
+  setIntifaceUrl(undefined)
+  intifaceUrlDraft.value = ''
+}
+
+const intifaceStatusInfo = computed(() => {
+  switch (intifaceStatus.value) {
+    case 'connecting':
+      return { icon: 'i-lucide-loader-2', class: 'text-muted animate-spin', label: 'Connecting…' }
+    case 'connected':
+      return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Connected' }
+    case 'error':
+      return { icon: 'i-lucide-circle-x', class: 'text-error', label: 'Connection failed' }
+    default:
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Disabled' }
   }
 })
 
@@ -147,6 +182,54 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
               :class="openShockStatusInfo.class"
             />
             <span :class="openShockStatusInfo.class">{{ openShockStatusInfo.label }}</span>
+          </div>
+        </UFormField>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <h3 class="text-xs font-semibold text-highlighted">
+          Intiface
+        </h3>
+        <UFormField
+          label="Enable Intiface"
+          description="Connects to a running Intiface Central/Engine to control toys."
+        >
+          <USwitch
+            :model-value="intifaceEnabled"
+            @update:model-value="setIntifaceEnabled(!!$event)"
+          />
+        </UFormField>
+        <UFormField
+          v-if="intifaceEnabled"
+          label="Server URL"
+          :description="isCustomIntifaceUrl ? undefined : `Using the default (${defaultIntifaceUrl})`"
+        >
+          <div class="flex gap-2">
+            <UInput
+              v-model="intifaceUrlDraft"
+              :placeholder="defaultIntifaceUrl"
+              class="w-full"
+              autocomplete="off"
+              @change="commitIntifaceUrl"
+              @keyup.enter="commitIntifaceUrl"
+              @blur="commitIntifaceUrl"
+            />
+            <UButton
+              v-if="isCustomIntifaceUrl"
+              icon="i-lucide-rotate-ccw"
+              color="neutral"
+              variant="outline"
+              aria-label="Reset to default"
+              @click="resetIntifaceUrl"
+            />
+          </div>
+          <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+            <UIcon
+              :name="intifaceStatusInfo.icon"
+              class="size-3.5"
+              :class="intifaceStatusInfo.class"
+            />
+            <span :class="intifaceStatusInfo.class">{{ intifaceStatusInfo.label }}</span>
           </div>
         </UFormField>
       </div>
