@@ -96,9 +96,12 @@ const intifaceStatusInfo = computed(() => {
 // Config (external connections) vs. preferences (styling/who's allowed to connect) don't have much
 // to do with each other and were just piling up as one long scroll - splitting them into tabs
 // keeps each one short enough to see at a glance.
+// Preferences listed (and selected by default - UTabs defaults to its first item) before
+// Connections: most visits to Settings are to tweak style/client access, not touch a service
+// connection.
 const settingsTabs = [
-  { label: 'Connections', icon: 'i-lucide-plug', slot: 'connections' },
-  { label: 'Preferences', icon: 'i-lucide-sliders-horizontal', slot: 'preferences' }
+  { label: 'Preferences', icon: 'i-lucide-sliders-horizontal', slot: 'preferences' },
+  { label: 'Connections', icon: 'i-lucide-plug', slot: 'connections' }
 ]
 
 const clientTypeOptions: { value: ClientType; label: string; description: string; icon: string }[] = [
