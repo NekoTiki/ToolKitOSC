@@ -132,6 +132,9 @@ export function useIntifacePatterns(): {
     stopPattern(controlId)
 
     if (patternId === INTIFACE_PATTERN_OFF_ID) {
+      // Stopping the interval alone leaves the toy sitting at whatever value the last tick before
+      // this happened to land on - explicitly zero it out so switching to Off actually stops it.
+      setActuatorIntensity(actuators, 0)
       setPatternValue(controlId, INTIFACE_PATTERN_OFF_ID)
       return
     }
