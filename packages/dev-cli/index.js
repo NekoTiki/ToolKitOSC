@@ -130,7 +130,7 @@ function renderFooter() {
 
   footer.setContent(
     ` {bold}[1]{/bold} restart server   {bold}[2]{/bold} restart client   {bold}[a]{/bold} restart all   ` +
-      `{bold}[tab]{/bold} switch focus   {bold}[↑↓ / PgUp PgDn]{/bold} scroll   {bold}[q]{/bold} quit\n` +
+      `{bold}[←→]{/bold} switch focus   {bold}[↑↓ / PgUp PgDn]{/bold} scroll   {bold}[q]{/bold} quit\n` +
       ` ${statusLine}`
   )
   screen.render()
@@ -254,7 +254,7 @@ screen.key(['a'], () => {
   restartService('server')
   restartService('client')
 })
-screen.key(['tab'], () => focus(focused === 'server' ? 'client' : 'server'))
+screen.key(['left', 'right'], () => focus(focused === 'server' ? 'client' : 'server'))
 screen.key(['q', 'C-c'], () => quit())
 
 process.on('SIGINT', quit)
