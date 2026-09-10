@@ -155,8 +155,10 @@ const updateSliderValue = (event: MouseEvent): void => {
       />
     </div>
 
+    <!-- A light fill with a thick primary ring, not a solid primary fill: matching the arc's own
+    color made the knob blend straight into it wherever it sat on top of the colored portion. -->
     <div
-      class="bg-primary pointer-events-none absolute h-12 w-12 rounded-full shadow-xl/50"
+      class="bg-default ring-primary pointer-events-none absolute h-12 w-12 rounded-full shadow-xl/50 ring-4"
       :style="{
         left: `${50 + 35 * Math.cos(((rotationAngle + 0) * Math.PI) / 180)}%`,
         top: `${50 + 35 * Math.sin(((rotationAngle + 0) * Math.PI) / 180)}%`,
