@@ -33,12 +33,12 @@ const sliderValue = computed({
 const isDragging = ref(false)
 const sliderRef = ref<HTMLElement>()
 
-// A dead zone straddling the top of the dial: the 15deg either side of straight up don't move the
-// thumb away from 0%/100% (see updateSliderValue below), so overshooting slightly while aiming for
-// either end still lands exactly on it, instead of needing to hit a single-degree-wide point. The
-// track itself is drawn with a matching gap (see the SVG below) so the dead zone is visible, not
-// just a full circle that quietly stops responding near the top.
-const DEAD_ZONE_DEG = 15
+// A dead zone straddling the top of the dial: the 35deg either side of straight up (70deg total)
+// don't move the thumb away from 0%/100% (see updateSliderValue below), so overshooting slightly
+// while aiming for either end still lands exactly on it, instead of needing to hit a single-
+// degree-wide point. The track itself is drawn with a matching gap (see the SVG below) so the dead
+// zone is visible, not just a full circle that quietly stops responding near the top.
+const DEAD_ZONE_DEG = 35
 const ACTIVE_RANGE_DEG = 360 - DEAD_ZONE_DEG * 2
 
 // Rotation that puts the SVG circle's dash-pattern start point (normally 3 o'clock) at the start
