@@ -194,9 +194,18 @@ const handleCommandEvent = (controlId: string, command: CommandWithoutIds): void
         shows the browser's own "not a valid drop target" (no-entry) cursor the moment its
         dragover/drop handlers don't fire the way it expects to somewhere in this DOM - which is
         what was actually happening, not a broken handle selector. Forcing its JS/CSS-based
-        fallback (a floating clone that tracks the pointer) sidesteps native DnD entirely. -->
+        fallback (a floating clone that tracks the pointer) sidesteps native DnD entirely.
+
+        group: every ControlGroup instance renders its own separate VueDraggable, each bound only
+        to its own controlGroup.controls - giving them all the same Sortable group name is what
+        lets a drag started in one accept a drop into another. vue-draggable-plus handles syncing
+        both sides' v-model (removing from the source group, inserting into the destination one)
+        on its own; nothing else here needs to change for that. The destination group doesn't need
+        to be in edit mode itself to receive a drop - handle only gates starting a drag, not
+        accepting one - it just needs to be expanded (open) to have a visible drop target at all. -->
         <VueDraggable
           v-model.lazy="controls"
+          group="control-groups"
           handle=".handle"
           easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
           :animation="200"
