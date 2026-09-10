@@ -29,11 +29,20 @@ interface ButtplugDeviceMessageAttributes {
   StepCount?: number
 }
 
+// Same "no Index field, position is the index" rule as ButtplugDeviceMessageAttributes above -
+// SensorReadCmd's own attribute descriptors don't carry one either.
+interface ButtplugSensorAttributes {
+  FeatureDescriptor?: string
+  SensorType?: string
+  SensorRange?: number[][]
+}
+
 interface ButtplugDeviceInfo {
   DeviceName: string
   DeviceIndex: number
   DeviceMessages: {
     ScalarCmd?: ButtplugDeviceMessageAttributes[]
+    SensorReadCmd?: ButtplugSensorAttributes[]
     [key: string]: unknown
   }
 }
@@ -43,6 +52,15 @@ type ButtplugServerMessage =
   | { DeviceList: { Id: number; Devices: ButtplugDeviceInfo[] } }
   | { DeviceAdded: ButtplugDeviceInfo & { Id: number } }
   | { DeviceRemoved: { Id: number; DeviceIndex: number } }
+  | {
+      SensorReading: {
+        Id: number
+        DeviceIndex: number
+        SensorIndex: number
+        SensorType: string
+        Data: number[]
+      }
+    }
   | { Ok: { Id: number } }
   | { Error: { Id: number; ErrorMessage: string; ErrorCode: number } }
 
@@ -56,6 +74,15 @@ export interface IntifaceDevice {
   index: number
   name: string
   actuators: IntifaceActuator[]
+  // Position of this device's "Battery" entry in its own SensorReadCmd attribute list (see
+  // toDevice() below), or null if it doesn't report one at all - most BLE toys don't. Used to ask
+  // for a reading (see requestBatteryReadings()); consumers that just want to display the level
+  // can ignore this and read `battery` alone.
+  batterySensorIndex: number | null
+  // null until a reading actually comes back (or forever, if batterySensorIndex is null) - not
+  // distinguished from "still loading" here, since in practice a reading arrives moments after
+  // requestBatteryReadings() fires and the difference isn't worth surfacing to the UI.
+  battery: number | null
 }
 
 // 'disabled': the user hasn't turned the integration on in Settings. This is the default and,
@@ -76,9 +103,12 @@ const enabled = ref<boolean>(localStorage.getItem(ENABLED_STORAGE_KEY) === 'true
 const status = ref<IntifaceStatus>('disabled')
 const devices = ref<Map<number, IntifaceDevice>>(new Map())
 
+const BATTERY_POLL_INTERVAL = 30000
+
 let socket: WebSocket | null = null
 let messageId = 1
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let batteryPollTimer: ReturnType<typeof setInterval> | null = null
 
 const nextId = (): number => messageId++
 
@@ -86,28 +116,63 @@ const nextId = (): number => messageId++
 // given toy exposes - not just vibration-capable ones, so the toy picker can offer all of them.
 // The index is each entry's position in this array (a ScalarCmd targeting this device addresses
 // actuators by that position, regardless of type).
-const toDevice = (info: ButtplugDeviceInfo): IntifaceDevice => ({
-  index: info.DeviceIndex,
-  name: info.DeviceName,
-  actuators: (info.DeviceMessages.ScalarCmd ?? []).map((actuator, index) => {
-    const actuatorType = actuator.ActuatorType ?? 'Vibrate'
+const toDevice = (info: ButtplugDeviceInfo): IntifaceDevice => {
+  const batterySensorIndex = (info.DeviceMessages.SensorReadCmd ?? []).findIndex(
+    (sensor) => sensor.SensorType === 'Battery'
+  )
 
-    return {
-      index,
-      actuatorType,
-      description: actuator.FeatureDescriptor || actuatorType
-    }
-  })
-})
+  return {
+    index: info.DeviceIndex,
+    name: info.DeviceName,
+    actuators: (info.DeviceMessages.ScalarCmd ?? []).map((actuator, index) => {
+      const actuatorType = actuator.ActuatorType ?? 'Vibrate'
+
+      return {
+        index,
+        actuatorType,
+        description: actuator.FeatureDescriptor || actuatorType
+      }
+    }),
+    batterySensorIndex: batterySensorIndex === -1 ? null : batterySensorIndex,
+    battery: null
+  }
+}
 
 const send = (messages: unknown[]): void => {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(messages))
+}
+
+// Fired right after the device list changes and on a timer while connected (see connect()/
+// disconnect() below) - a toy's reported charge isn't pushed by the server on its own, so this is
+// the only way the popover's battery reading stays anywhere close to current.
+const requestBatteryReadings = (): void => {
+  devices.value.forEach((device) => {
+    if (device.batterySensorIndex === null) return
+
+    send([
+      {
+        SensorReadCmd: {
+          Id: nextId(),
+          DeviceIndex: device.index,
+          SensorIndex: device.batterySensorIndex,
+          SensorType: 'Battery'
+        }
+      }
+    ])
+  })
 }
 
 const clearReconnectTimer = (): void => {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
+  }
+}
+
+const stopBatteryPolling = (): void => {
+  if (batteryPollTimer) {
+    clearInterval(batteryPollTimer)
+    batteryPollTimer = null
   }
 }
 
@@ -124,6 +189,8 @@ const handleServerMessage = (raw: string): void => {
     if ('ServerInfo' in message) {
       status.value = 'connected'
       send([{ RequestDeviceList: { Id: nextId() } }])
+      stopBatteryPolling()
+      batteryPollTimer = setInterval(requestBatteryReadings, BATTERY_POLL_INTERVAL)
     } else if ('DeviceList' in message) {
       const map = new Map<number, IntifaceDevice>()
 
@@ -134,6 +201,7 @@ const handleServerMessage = (raw: string): void => {
       })
 
       devices.value = map
+      requestBatteryReadings()
     } else if ('DeviceAdded' in message) {
       const device = toDevice(message.DeviceAdded)
 
@@ -142,11 +210,25 @@ const handleServerMessage = (raw: string): void => {
 
         next.set(device.index, device)
         devices.value = next
+        requestBatteryReadings()
       }
     } else if ('DeviceRemoved' in message) {
       const next = new Map(devices.value)
 
       next.delete(message.DeviceRemoved.DeviceIndex)
+      devices.value = next
+    } else if ('SensorReading' in message) {
+      const { DeviceIndex, SensorType, Data } = message.SensorReading
+
+      if (SensorType !== 'Battery') return
+
+      const device = devices.value.get(DeviceIndex)
+
+      if (!device || Data[0] === undefined) return
+
+      const next = new Map(devices.value)
+
+      next.set(DeviceIndex, { ...device, battery: Data[0] })
       devices.value = next
     } else if ('Error' in message) {
       console.error('Intiface error:', message.Error.ErrorMessage)
@@ -183,6 +265,7 @@ const connect = (): void => {
   ws.onclose = () => {
     devices.value = new Map()
     socket = null
+    stopBatteryPolling()
 
     if (enabled.value) {
       status.value = 'error'
@@ -193,6 +276,7 @@ const connect = (): void => {
 
 const disconnect = (): void => {
   clearReconnectTimer()
+  stopBatteryPolling()
   devices.value = new Map()
   status.value = 'disabled'
 

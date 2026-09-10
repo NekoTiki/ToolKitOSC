@@ -26,8 +26,17 @@ onBeforeUnmount(close)
 
 <template>
   <div class="flex items-center justify-center gap-4">
-    <ConnectionStatus icon="i-lucide-server" label="Server" :state="serverState" />
-    <ConnectionStatus icon="i-lucide-radio-tower" label="OSC" :state="oscState" />
+    <ConnectionStatus
+      icon="i-lucide-server"
+      label="Server"
+      :state="serverState"
+    />
+    <ConnectionStatus
+      icon="i-lucide-radio-tower"
+      label="OSC"
+      :state="oscState"
+    />
+    <IntifaceStatus />
     <UButton
       icon="solar:users-group-rounded-bold"
       variant="ghost"
