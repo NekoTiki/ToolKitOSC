@@ -190,11 +190,17 @@ const handleCommandEvent = (controlId: string, command: CommandWithoutIds): void
       :ui="{ content: 'overflow-visible' }"
     >
       <template #content>
+        <!-- forceFallback: Sortable's default drag uses the native HTML5 Drag and Drop API, which
+        shows the browser's own "not a valid drop target" (no-entry) cursor the moment its
+        dragover/drop handlers don't fire the way it expects to somewhere in this DOM - which is
+        what was actually happening, not a broken handle selector. Forcing its JS/CSS-based
+        fallback (a floating clone that tracks the pointer) sidesteps native DnD entirely. -->
         <VueDraggable
           v-model.lazy="controls"
           handle=".handle"
           easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
           :animation="200"
+          :force-fallback="true"
           class="grid grid-cols-[repeat(2,minmax(0,180px))] items-center justify-center-safe gap-4 sm:grid-cols-[repeat(2,minmax(0,220px))] md:grid-cols-[repeat(3,minmax(0,220px))]"
         >
           <Control
