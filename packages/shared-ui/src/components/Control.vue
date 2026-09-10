@@ -133,11 +133,18 @@ const unavailableReason = computed(
         />
       </div>
 
-      <UTooltip class="handle absolute top-3 left-3 cursor-grab rounded-lg">
-        <UIcon
-          name="iconamoon:menu-burger-horizontal-light"
-          class="size-6"
-        />
+      <UTooltip>
+        <!-- The `.handle` class used to sit on UTooltip itself, forwarded onto its slotted child
+        via Reka UI's `as-child` prop-merging - fragile, since that merge target is an
+        asynchronously-rendered UIcon rather than an element guaranteed to exist as soon as this
+        renders. vue-draggable-plus's `handle: '.handle'` selector needs a real, always-present
+        node to grab, so it's now a plain span we render ourselves instead. -->
+        <span class="handle absolute top-3 left-3 cursor-grab rounded-lg">
+          <UIcon
+            name="iconamoon:menu-burger-horizontal-light"
+            class="size-6"
+          />
+        </span>
 
         <template #content>
           Drag to Reorder
