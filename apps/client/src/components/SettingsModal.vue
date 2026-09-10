@@ -56,7 +56,10 @@ const commitOpenShockToken = (): void => {
 const openShockStatusInfo = computed(() => {
   switch (openShockStatus.value) {
     case 'checking':
-      return { icon: 'i-lucide-loader-2', class: 'text-muted animate-spin', label: 'Checking key…' }
+      // A spinning icon (animate-spin) swapping out for a static one mid-rotation looked like a
+      // glitch - it could land at any angle when the icon changed. animate-pulse is a plain
+      // opacity fade, so there's no rotation to freeze awkwardly when the status resolves.
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted animate-pulse', label: 'Checking key…' }
     case 'valid':
       return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Connected' }
     case 'invalid':
@@ -83,7 +86,8 @@ const resetIntifaceUrl = (): void => {
 const intifaceStatusInfo = computed(() => {
   switch (intifaceStatus.value) {
     case 'connecting':
-      return { icon: 'i-lucide-loader-2', class: 'text-muted animate-spin', label: 'Connecting…' }
+      // Same reasoning as openShockStatusInfo's 'checking' case above - animate-pulse, not spin.
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted animate-pulse', label: 'Connecting…' }
     case 'connected':
       return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Connected' }
     case 'error':
