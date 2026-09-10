@@ -49,13 +49,20 @@ onBeforeUnmount(close)
       label="OSC"
       :state="oscState"
     >
-      <div
-        v-if="avatarDetails"
-        class="flex items-center justify-between gap-3 text-sm"
-      >
-        <span class="text-muted">Avatar</span>
-        <span class="truncate">{{ avatarDetails.name }}</span>
-      </div>
+      <template v-if="avatarDetails">
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <span class="text-muted">Name</span>
+          <span class="truncate">{{ avatarDetails.name }}</span>
+        </div>
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <span class="text-muted">ID</span>
+          <span class="truncate">{{ avatarDetails.id }}</span>
+        </div>
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <span class="text-muted">Hash</span>
+          <span class="truncate">{{ avatarDetails.hash }}</span>
+        </div>
+      </template>
       <div
         v-else
         class="text-xs text-muted"

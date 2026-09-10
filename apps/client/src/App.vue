@@ -79,29 +79,8 @@ onMounted(() => loadTheme())
         }"
       >
         <div class="flex items-center justify-between px-4 py-3.5">
-          <div class="flex items-center gap-4">
-            <UPopover
-              mode="hover"
-              :content="{ align: 'center', side: 'right', sideOffset: 8 }"
-            >
-              <UIcon
-                name="i-lucide-info"
-                class="cursor-pointer text-neutral-500"
-              />
-
-              <template #content>
-                <UCard v-if="avatarDetails">
-                  <h2 class="pb-2 text-xl font-bold">
-                    Avatar Details
-                  </h2>
-                  <p><strong>Name:</strong> {{ avatarDetails.name }}</p>
-                  <p><strong>ID:</strong> {{ avatarDetails.id }}</p>
-                  <p><strong>Hash:</strong> {{ avatarDetails.hash }}</p>
-                </UCard>
-              </template>
-            </UPopover>
-          </div>
-
+          <!-- Avatar details (name/id/hash) moved into WebSocket.vue's OSC status popover - this
+          header used to have its own separate info icon/popover for the same data. -->
           <WebSocket
             v-if="loggedIn"
             class="col-span-2"
