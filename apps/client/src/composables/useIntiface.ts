@@ -95,7 +95,7 @@ const toDevice = (info: ButtplugDeviceInfo): IntifaceDevice => ({
     return {
       index,
       actuatorType,
-      description: actuator.FeatureDescriptor || `${actuatorType} ${index + 1}`
+      description: actuator.FeatureDescriptor || actuatorType
     }
   })
 })
