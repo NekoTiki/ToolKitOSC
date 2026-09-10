@@ -117,6 +117,14 @@ export function useWebsocketHost(): {
       interval: 5000,
       pongTimeout: 5000
     },
+    // vueuse's useWebSocket does NOT retry on its own unless this is set - without it, a dropped
+    // connection (server restart, network blip) just sits disconnected forever until the app is
+    // restarted. Unlimited retries: this is the host's only link to the relay server, so there's
+    // no point giving up.
+    autoReconnect: {
+      retries: -1,
+      delay: 3000
+    },
     immediate: false,
     onConnected: () => initMessages(),
     onMessage: (_ws, ev) => {
