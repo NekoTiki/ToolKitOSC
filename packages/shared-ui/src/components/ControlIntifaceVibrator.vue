@@ -33,11 +33,20 @@ const sliderValue = computed({
 const isDragging = ref(false)
 const sliderRef = ref<HTMLElement>()
 
-// A dead zone straddling the top of the dial: the 10deg either side of straight up don't move the
+// A dead zone straddling the top of the dial: the 15deg either side of straight up don't move the
 // thumb away from 0%/100% (see updateSliderValue below), so overshooting slightly while aiming for
-// either end still lands exactly on it, instead of needing to hit a single-degree-wide point.
-const DEAD_ZONE_DEG = 10
+// either end still lands exactly on it, instead of needing to hit a single-degree-wide point. The
+// track itself is drawn with a matching gap (see the SVG below) so the dead zone is visible, not
+// just a full circle that quietly stops responding near the top.
+const DEAD_ZONE_DEG = 15
 const ACTIVE_RANGE_DEG = 360 - DEAD_ZONE_DEG * 2
+
+// Rotation that puts the SVG circle's dash-pattern start point (normally 3 o'clock) at the start
+// of the active zone (DEAD_ZONE_DEG clockwise of straight up), and the arc length that covers just
+// that active zone - drawing DEAD_ZONE_DEG*2 less than the full circumference leaves the gap.
+const CIRCUMFERENCE = 2 * Math.PI * 35
+const TRACK_ROTATION = DEAD_ZONE_DEG - 90
+const ACTIVE_ARC_LENGTH = CIRCUMFERENCE * (ACTIVE_RANGE_DEG / 360)
 
 const rotationAngle = computed(() => {
   return DEAD_ZONE_DEG + (sliderValue.value / 100) * ACTIVE_RANGE_DEG - 90
@@ -101,7 +110,7 @@ const updateSliderValue = (event: MouseEvent): void => {
       class="absolute inset-0 z-10 h-full w-full"
       viewBox="0 0 100 100"
     >
-      <!-- Progress track background (gray, full circle) -->
+      <!-- Progress track background (gray, gapped at the dead zone) -->
       <circle
         cx="50"
         cy="50"
@@ -111,9 +120,9 @@ const updateSliderValue = (event: MouseEvent): void => {
         stroke-width="10"
         class="text-primary/20"
         stroke-linecap="round"
-        stroke-dasharray="219.9 219.9"
+        :stroke-dasharray="`${ACTIVE_ARC_LENGTH} ${CIRCUMFERENCE}`"
         stroke-dashoffset="0"
-        transform="rotate(-90 50 50)"
+        :transform="`rotate(${TRACK_ROTATION} 50 50)`"
       />
 
       <!-- Progress track (colored, value) -->
@@ -126,9 +135,9 @@ const updateSliderValue = (event: MouseEvent): void => {
         stroke-width="12"
         class="text-primary"
         stroke-linecap="round"
-        :stroke-dasharray="`${(sliderValue / 100) * 219.9} 219.9`"
+        :stroke-dasharray="`${(sliderValue / 100) * ACTIVE_ARC_LENGTH} ${CIRCUMFERENCE}`"
         stroke-dashoffset="0"
-        transform="rotate(-90 50 50)"
+        :transform="`rotate(${TRACK_ROTATION} 50 50)`"
       />
     </svg>
 
