@@ -88,7 +88,16 @@ const typeColor = (type: string): UiColor => CONTROL_TYPE_COLORS[type as Control
 </script>
 
 <template>
-  <USlideover v-model:open="open" inset side="right" class="w-full max-w-lg">
+  <!-- z-50: see the identical comment in ClientsListSliderover.vue - AppHeader.vue's sticky bar
+  has an explicit z-10 that otherwise wins over this slideover's implicit one regardless of DOM
+  order. -->
+  <USlideover
+    v-model:open="open"
+    inset
+    side="right"
+    class="z-50 w-full max-w-lg"
+    :ui="{ overlay: 'z-50' }"
+  >
     <template #title>
       <div class="flex items-center gap-1.5">
         <UAvatar :src="client?.avatar" size="xs" />
