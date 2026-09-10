@@ -133,9 +133,14 @@ const formatNumber = (num: number): string => num.toLocaleString('en-US')
     <div class="flex grow items-center justify-between gap-1">
       <div class="flex items-center gap-1">
         <span :class="{ 'text-error': banStatus }">{{ client.displayName }}</span>
+        <!-- z-[60]: this renders inside ClientsListSliderover.vue, which had to bump its own
+        z-index to z-50 to stay above AppHeader.vue's sticky bar - without its own explicit
+        z-index above that, this (like every Nuxt UI overlay, none of which set one by default)
+        would now render behind the slideover it's floating over. -->
         <UPopover
           mode="hover"
           :content="{ align: 'center', side: 'bottom', sideOffset: 8 }"
+          :ui="{ content: 'z-[60]' }"
         >
           <UIcon
             name="iconoir:ip-address-tag"
@@ -168,10 +173,11 @@ const formatNumber = (num: number): string => num.toLocaleString('en-US')
           </span>
         </slot>
       </div>
+      <!-- z-[60]: same reasoning as the UPopover above. -->
       <UDropdownMenu
         :items="items"
         :content="{ align: 'end', side: 'bottom', sideOffset: 8 }"
-        :ui="{ content: 'w-48' }"
+        :ui="{ content: 'w-48 z-[60]' }"
         class="justify-self-end"
       >
         <UButton
