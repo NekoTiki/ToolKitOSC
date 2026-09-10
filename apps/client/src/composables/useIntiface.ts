@@ -8,9 +8,18 @@ const CLIENT_NAME = 'VRC OSC Toolkit'
 const RECONNECT_DELAY = 3000
 
 // Buttplug protocol (raw JSON messages exchanged with an Intiface Engine over WebSocket) - only
-// the subset needed to enumerate vibration-capable actuators and send ScalarCmd. No client
+// the subset needed to enumerate ScalarCmd-capable actuators and send ScalarCmd. No client
 // library is installed anywhere in this repo (same call as OpenShock - see useOpenShock.ts):
 // hand-rolled request/response shapes, no SDK. Spec: https://buttplug-spec.docs.buttplug.io
+//
+// Buttplug v3 unified vibration/rotation/oscillation/etc. into a single ScalarCmd message - the
+// only thing that varies per actuator is its `ActuatorType` (known values include "Vibrate",
+// "Rotate", "Oscillate", "Constrict", "Inflate", "Position"). Kept as a plain string rather than a
+// union here since new actuator types can show up without this app needing a code change to at
+// least send them through - only the label falls back to the raw string it doesn't recognize.
+// Devices whose rotation/linear motion is only exposed via the older, separate RotateCmd/LinearCmd
+// messages (not ScalarCmd) aren't covered - those need per-message direction/duration handling
+// this composable doesn't implement.
 // Note: no `Index` field here - unlike the Scalars entries in an actual ScalarCmd command, a
 // device's attribute descriptors don't carry one. An actuator's index is implicit: its position
 // in this array (see toDevice() below, which is why that has to capture it before filtering).
@@ -40,6 +49,7 @@ type ButtplugServerMessage =
 export interface IntifaceActuator {
   index: number
   description: string
+  actuatorType: string
 }
 
 export interface IntifaceDevice {
@@ -72,22 +82,22 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 const nextId = (): number => messageId++
 
-// Buttplug lists every actuator a device has (vibrate, oscillate, rotate, ...) under ScalarCmd -
-// only the vibration-capable ones are relevant here, per the task's "controls the intensity of
-// all the vibrators". The index has to be captured from each entry's position in the *unfiltered*
-// array (a ScalarCmd targeting this device addresses actuators by that position, regardless of
-// type) - filtering first would renumber e.g. a device with [Vibrate, Oscillate, Vibrate] down to
-// [0, 1], silently aiming commands at the wrong motor.
+// Every ScalarCmd-capable actuator a device has - vibrate, rotate, oscillate, and whatever else a
+// given toy exposes - not just vibration-capable ones, so the toy picker can offer all of them.
+// The index is each entry's position in this array (a ScalarCmd targeting this device addresses
+// actuators by that position, regardless of type).
 const toDevice = (info: ButtplugDeviceInfo): IntifaceDevice => ({
   index: info.DeviceIndex,
   name: info.DeviceName,
-  actuators: (info.DeviceMessages.ScalarCmd ?? [])
-    .map((actuator, index) => ({ actuator, index }))
-    .filter(({ actuator }) => (actuator.ActuatorType ?? 'Vibrate') === 'Vibrate')
-    .map(({ actuator, index }) => ({
+  actuators: (info.DeviceMessages.ScalarCmd ?? []).map((actuator, index) => {
+    const actuatorType = actuator.ActuatorType ?? 'Vibrate'
+
+    return {
       index,
-      description: actuator.FeatureDescriptor || `Vibrator ${index + 1}`
-    }))
+      actuatorType,
+      description: actuator.FeatureDescriptor || `${actuatorType} ${index + 1}`
+    }
+  })
 })
 
 const send = (messages: unknown[]): void => {
@@ -200,8 +210,8 @@ export function useIntiface(): {
   status: Ref<IntifaceStatus>
   isAvailable: ComputedRef<boolean>
   devices: Ref<Map<number, IntifaceDevice>>
-  setVibratorIntensity: (
-    vibrators: { deviceIndex: number; actuatorIndex: number }[],
+  setActuatorIntensity: (
+    actuators: { deviceIndex: number; actuatorIndex: number; actuatorType: string }[],
     value: number
   ) => void
 } {
@@ -237,30 +247,36 @@ export function useIntiface(): {
 
   // Batches per device (a single ScalarCmd targets one DeviceIndex but can carry several
   // Scalars), so a control spanning multiple toys sends one message per toy, not per actuator.
-  const setVibratorIntensity = (
-    vibrators: { deviceIndex: number; actuatorIndex: number }[],
+  // Each actuator carries its own ActuatorType (vibrate/rotate/oscillate/...), captured at
+  // selection time on the control itself (see IntifaceVibratorRef) - it has to match what the
+  // device actually reports for that index, or the Buttplug server rejects the whole command.
+  const setActuatorIntensity = (
+    actuators: { deviceIndex: number; actuatorIndex: number; actuatorType: string }[],
     value: number
   ): void => {
     if (status.value !== 'connected') return
 
-    const byDevice = new Map<number, number[]>()
+    const byDevice = new Map<number, { index: number; actuatorType: string }[]>()
 
-    vibrators.forEach((vibrator) => {
-      if (!byDevice.has(vibrator.deviceIndex)) byDevice.set(vibrator.deviceIndex, [])
+    actuators.forEach((actuator) => {
+      if (!byDevice.has(actuator.deviceIndex)) byDevice.set(actuator.deviceIndex, [])
 
-      byDevice.get(vibrator.deviceIndex)!.push(vibrator.actuatorIndex)
+      byDevice.get(actuator.deviceIndex)!.push({
+        index: actuator.actuatorIndex,
+        actuatorType: actuator.actuatorType
+      })
     })
 
-    byDevice.forEach((actuatorIndexes, deviceIndex) => {
+    byDevice.forEach((deviceActuators, deviceIndex) => {
       send([
         {
           ScalarCmd: {
             Id: nextId(),
             DeviceIndex: deviceIndex,
-            Scalars: actuatorIndexes.map((index) => ({
+            Scalars: deviceActuators.map(({ index, actuatorType }) => ({
               Index: index,
               Scalar: value,
-              ActuatorType: 'Vibrate'
+              ActuatorType: actuatorType
             }))
           }
         }
@@ -278,7 +294,7 @@ export function useIntiface(): {
     status,
     isAvailable,
     devices,
-    setVibratorIntensity
+    setActuatorIntensity
   }
 }
 

@@ -12,9 +12,10 @@ const deviceList = computed(() => Array.from(props.devices.values()))
 const isSelected = (deviceIndex: number, actuatorIndex: number): boolean =>
   vibrators.value.some((v) => v.deviceIndex === deviceIndex && v.actuatorIndex === actuatorIndex)
 
-// Toys are listed one per group with a checkbox per vibration actuator - a toy with a single
-// motor is effectively "select this toy", a toy with several asks about each one independently,
-// per the task's requirement, rather than only letting the whole toy be selected as one unit.
+// Toys are listed one per group with a checkbox per actuator (vibrate, rotate, oscillate, ...) -
+// a toy with a single motor is effectively "select this toy", a toy with several asks about each
+// one independently, per the task's requirement, rather than only letting the whole toy be
+// selected as one unit.
 const toggle = (
   device: IntifaceDevice,
   actuator: IntifaceDevice['actuators'][number],
@@ -29,7 +30,8 @@ const toggle = (
         deviceIndex: device.index,
         deviceName: device.name,
         actuatorIndex: actuator.index,
-        actuatorDescription: actuator.description
+        actuatorDescription: actuator.description,
+        actuatorType: actuator.actuatorType
       }
     ]
   } else {
@@ -44,7 +46,7 @@ const toggle = (
   <UFormField
     label="Toys"
     required
-    description="Pick which vibrators this slider controls. Toys with more than one motor list each vibrator separately."
+    description="Pick which actuators this slider controls. Toys with more than one motor (vibrate, rotate, oscillate, ...) list each one separately."
   >
     <div
       v-if="deviceList.length === 0"
@@ -67,10 +69,10 @@ const toggle = (
         <!-- Explicit, per-checkbox id: without one, Nuxt UI's useFormField() has every checkbox
         here inherit the *same* id from the single enclosing UFormField, so their <label for>
         all point at the first checkbox's input - clicking any row's label text then toggles
-        only the first vibrator, not the one actually clicked. -->
+        only the first actuator, not the one actually clicked. -->
         <UCheckbox
           v-for="actuator in device.actuators"
-          :id="`intiface-vibrator-${device.index}-${actuator.index}`"
+          :id="`intiface-actuator-${device.index}-${actuator.index}`"
           :key="actuator.index"
           :model-value="isSelected(device.index, actuator.index)"
           :label="actuator.description"

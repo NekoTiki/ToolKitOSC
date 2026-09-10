@@ -48,7 +48,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { lockedControls } = useLockedControls()
   const { command: osCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
-  const { setVibratorIntensity, isAvailable: intifaceAvailable } = useIntiface()
+  const { setActuatorIntensity, isAvailable: intifaceAvailable } = useIntiface()
   const { setValue: setIntifaceValue } = useIntifaceControl()
   const { update } = useOscMessages()
 
@@ -263,7 +263,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       if (!intifaceAvailable.value) return undefined
 
       setIntifaceValue(control.id, command.value)
-      setVibratorIntensity(control.vibrators, command.value)
+      setActuatorIntensity(control.vibrators, command.value)
     }
 
     return undefined

@@ -127,17 +127,20 @@ export interface OpenShockControl extends BaseControl {
   animationDuration: 3000
 }
 
-// One entry per selected Buttplug actuator, not per toy - a toy with more than one vibration
-// motor is asked about independently (see IntifaceFields.vue), so the same control can drive
-// several actuators across several toys with a single value. `deviceName`/`actuatorDescription`
-// are display names captured at selection time (mirrors OpenShockControl's use of ids alone,
-// resolved to a name at command time instead - here there's no equivalent lookup available once
-// a toy is unplugged, so the label is kept on the control itself).
+// One entry per selected Buttplug actuator, not per toy - a toy with more than one motor is asked
+// about independently (see IntifaceFields.vue), so the same control can drive several actuators
+// - of any kind (vibrate, rotate, oscillate, ...), not just vibration - across several toys with
+// a single value. `deviceName`/`actuatorDescription` are display names captured at selection time
+// (mirrors OpenShockControl's use of ids alone, resolved to a name at command time instead - here
+// there's no equivalent lookup available once a toy is unplugged, so the label is kept on the
+// control itself). `actuatorType` (Buttplug's "Vibrate"/"Rotate"/"Oscillate"/...) is likewise kept
+// on the control - it has to be sent back verbatim in the ScalarCmd for this actuator.
 export interface IntifaceVibratorRef {
   deviceIndex: number
   deviceName: string
   actuatorIndex: number
   actuatorDescription: string
+  actuatorType: string
 }
 
 export interface IntifaceVibratorControl extends BaseControl {
