@@ -13,28 +13,40 @@ defineProps<{ title: string; icon?: string }>()
     :active="state"
     @click="state = !state"
   >
-    <!-- Full custom, not a UI-kit switch: a big, unambiguous pill-and-knob shape - track color and
-    knob position both flip, and the icon repeats the state a third way - so the toggle reads at a
-    glance from across a room, which matters more here than it would in a mouse-driven form. The
-    whole card is already the click target (see @click above), so nothing here needs its own
-    listener - the knob's width is exactly half the track's inner width (see w-1/2/translate-x-full
-    below), which is what makes it a circle and what makes sliding it by its own width land it
-    exactly on the other side, at any size this ends up rendered at. -->
-    <div class="flex items-center justify-center">
+    <!-- Full custom, not a UI-kit switch: a full-width Off/On capsule, not a small centered knob -
+    both labels are always on screen (so there's no ambiguity about which state means what), and a
+    solid color panel slides to sit behind whichever one is active. Reads at a glance from across a
+    room, which matters more here than it would in a mouse-driven form. The whole card is already
+    the click target (see @click above), so nothing in here needs its own listener. The sliding
+    panel's width/offset are both expressed as this element's own padding (0.25rem, i.e. p-1) plus
+    a percentage, not a value tied to any assumed container size, so it lines up correctly at
+    whatever width this ends up rendered at. -->
+    <div
+      class="ring-default relative flex h-11 w-full items-center overflow-hidden rounded-full p-1 ring"
+    >
       <div
-        class="ring-default flex h-10 w-20 items-center rounded-full p-1 ring transition-colors"
-        :class="state ? 'bg-primary' : 'bg-elevated'"
+        class="bg-primary absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full shadow-md transition-transform"
+        :class="{ 'translate-x-[calc(100%+0.25rem)]': state }"
+      />
+      <div
+        class="relative z-10 flex flex-1 items-center justify-center gap-1.5 text-sm font-bold transition-colors"
+        :class="state ? 'text-muted' : 'text-inverted'"
       >
-        <div
-          class="bg-default flex h-full w-1/2 items-center justify-center rounded-full shadow-md transition-transform"
-          :class="{ 'translate-x-full': state }"
-        >
-          <UIcon
-            :name="state ? 'i-lucide-check' : 'i-lucide-x'"
-            class="size-5"
-            :class="state ? 'text-primary' : 'text-muted'"
-          />
-        </div>
+        <UIcon
+          name="i-lucide-x"
+          class="size-4"
+        />
+        Off
+      </div>
+      <div
+        class="relative z-10 flex flex-1 items-center justify-center gap-1.5 text-sm font-bold transition-colors"
+        :class="state ? 'text-inverted' : 'text-muted'"
+      >
+        <UIcon
+          name="i-lucide-check"
+          class="size-4"
+        />
+        On
       </div>
     </div>
   </control-base>
