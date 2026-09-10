@@ -135,7 +135,7 @@ const updateSliderValue = (event: MouseEvent): void => {
         fill="none"
         stroke="currentColor"
         stroke-width="12"
-        class="text-primary-700"
+        class="text-primary-300"
         stroke-linecap="round"
         :stroke-dasharray="`${(sliderValue / 100) * ACTIVE_ARC_LENGTH} ${CIRCUMFERENCE}`"
         stroke-dashoffset="0"
