@@ -1,6 +1,7 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useIntiface } from '@renderer/composables/useIntiface'
+import { useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -73,6 +74,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     devices: intifaceDevices
   } = useIntiface()
   const { setValue: setIntifaceValue } = useIntifaceControl()
+  const { playPattern, releaseActuators } = useIntifacePatterns()
   const { update } = useOscMessages()
 
   const controls = computed((): ControlGroup[] => {
@@ -83,15 +85,15 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         locked: lockedControls.value[control.id] ?? false,
         // OpenShock/Intiface controls are unavailable to everyone - same as a locked control -
         // unless the service is actually reachable (see useOpenShock.ts/useIntiface.ts). An
-        // Intiface toy control is additionally unavailable when every toy it targets has been
-        // unplugged/disconnected - even while Intiface itself is still connected - since there's
-        // nothing left for it to actuate; a control spanning several toys stays available as long
-        // as at least one of them is still present. Other control types never depend on an
+        // Intiface toy/pattern control is additionally unavailable when every toy it targets has
+        // been unplugged/disconnected - even while Intiface itself is still connected - since
+        // there's nothing left for it to actuate; a control spanning several toys stays available
+        // as long as at least one of them is still present. Other control types never depend on an
         // external service, so they're always available.
         unavailable:
           control.type === 'open-shock-shocker'
             ? !openShockAvailable.value
-            : control.type === 'intiface-toy'
+            : control.type === 'intiface-toy' || control.type === 'intiface-pattern'
               ? !intifaceAvailable.value ||
                 control.actuators.every(
                   (actuator) => !intifaceDevices.value.has(actuator.deviceIndex)
@@ -294,6 +296,15 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
       setIntifaceValue(control.id, command.value)
       setActuatorIntensity(control.actuators, command.value)
+      // Driving these actuators directly wins over anything currently animating them - stop any
+      // pattern control that was still running against one of them (see the task's requirement
+      // that manually controlling a toy from elsewhere turns its pattern off).
+      releaseActuators(control.actuators)
+    } else if (command.type === 'intiface-pattern' && control?.type === 'intiface-pattern') {
+      // Same belt-and-suspenders guard as OpenShock above.
+      if (!intifaceAvailable.value) return undefined
+
+      playPattern(control.id, command.value, control.actuators)
     }
 
     return undefined

@@ -13,6 +13,7 @@ export type ControlTypes =
   | 'step-enum'
   | 'open-shock-shocker'
   | 'intiface-toy'
+  | 'intiface-pattern'
 
 // Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
 export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -32,7 +33,8 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   slider: 'Slider',
   'step-enum': 'Step Enum',
   'open-shock-shocker': 'Open Shock',
-  'intiface-toy': 'Intiface'
+  'intiface-toy': 'Intiface',
+  'intiface-pattern': 'Intiface Pattern'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
@@ -43,7 +45,10 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   slider: 'success',
   'step-enum': 'neutral',
   'open-shock-shocker': 'error',
-  'intiface-toy': 'success'
+  'intiface-toy': 'success',
+  // Reuses 'enum''s 'warning' - it's a chip-picker built on the exact same UX, and we're already
+  // out of unique semantic colors (see the comment above).
+  'intiface-pattern': 'warning'
 }
 
 export interface BaseControl {
@@ -151,6 +156,34 @@ export interface IntifaceToyControl extends BaseControl {
   actuators: IntifaceActuatorRef[]
 }
 
+// The implicit pattern-command value meaning "stop playing, drive nothing" - never itself one of a
+// control's configurable `allowedPatterns` (see below), always available regardless of them.
+export const INTIFACE_PATTERN_OFF_ID = 'off'
+
+// One entry per pattern the control's author has chosen to allow, in the order they should be
+// offered. `name`/`icon` are captured at authoring time from whatever pattern registry defines
+// them (currently only apps/client's built-in one - see useIntifacePatterns.ts) rather than
+// looked up live by `id`, the same denormalization IntifaceActuatorRef above already does for a
+// toy's name - this control's data stays fully self-describing even if the registry entry it came
+// from is later renamed or removed. A future custom/user-authored pattern only needs to add itself
+// to that registry and it can be picked the same way as any built-in one; nothing here has to
+// change to accommodate it.
+export interface IntifacePatternRef {
+  id: string
+  name: string
+  icon?: string
+}
+
+// A chip-picker (see ControlIntifacePattern.vue), same shape of UI as EnumControl, but playing a
+// named, time-varying pattern against a set of Intiface actuators instead of setting one static
+// OSC value - always includes an implicit "Off" choice on top of `allowedPatterns` (stopping
+// playback), which isn't itself one of the configurable patterns.
+export interface IntifacePatternControl extends BaseControl {
+  type: 'intiface-pattern'
+  actuators: IntifaceActuatorRef[]
+  allowedPatterns: IntifacePatternRef[]
+}
+
 export type ControlType =
   | BooleanControl
   | BooleanGroupControl
@@ -160,6 +193,7 @@ export type ControlType =
   | StepEnumControl
   | OpenShockControl
   | IntifaceToyControl
+  | IntifacePatternControl
 
 export interface BaseControlCommand {
   groupId: string
@@ -206,6 +240,12 @@ export interface IntifaceToyControlCommand extends BaseControlCommand {
   value: number
 }
 
+// `value` is a pattern id from the control's own `allowedPatterns`, or the implicit 'off'.
+export interface IntifacePatternControlCommand extends BaseControlCommand {
+  type: 'intiface-pattern'
+  value: string
+}
+
 export type ControlCommand =
   | BooleanControlCommand
   | BooleanGroupControlCommand
@@ -215,6 +255,7 @@ export type ControlCommand =
   | StepEnumControlCommand
   | OpenShockControlCommand
   | IntifaceToyControlCommand
+  | IntifacePatternControlCommand
 
 export type CommandWithoutIds =
   | Omit<BooleanControlCommand, 'groupId' | 'controlId'>
@@ -225,6 +266,7 @@ export type CommandWithoutIds =
   | Omit<StepEnumControlCommand, 'groupId' | 'controlId'>
   | Omit<OpenShockControlCommand, 'groupId' | 'controlId'>
   | Omit<IntifaceToyControlCommand, 'groupId' | 'controlId'>
+  | Omit<IntifacePatternControlCommand, 'groupId' | 'controlId'>
 
 export interface ControlGroup {
   id: string

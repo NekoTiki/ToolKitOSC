@@ -37,6 +37,14 @@ export interface IntifaceValueUpdateMessage {
   value: number
 }
 
+// Broadcasts the pattern id (or 'off') currently playing for an 'intiface-pattern' control, purely
+// so every viewer's chip picker (and the host's own) highlights the same choice - mirrors
+// IntifaceValueUpdateMessage, but the value is a pattern id string instead of a raw slider value.
+export interface IntifacePatternValueUpdateMessage {
+  controlId: string
+  value: string
+}
+
 export interface ClientInvalidMessage {
   peerId: string
   reason: string
@@ -76,6 +84,7 @@ export type HostToServerMessage =
   | WsEnvelope<'theme-update', ThemeUpdateMessage>
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
   | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
+  | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
 
@@ -96,6 +105,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'host-status', 'online' | 'offline'>
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
   | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
+  | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>

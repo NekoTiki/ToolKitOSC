@@ -135,6 +135,8 @@ export default defineWebSocketHandler({
       sendToEveryoneInRoom(roomId!, message.text())
     } else if (data.type === 'intiface-value-update') {
       sendToEveryoneInRoom(roomId!, message.text())
+    } else if (data.type === 'intiface-pattern-value-update') {
+      sendToEveryoneInRoom(roomId!, message.text())
     } else if (data.type === 'client-invalid') {
       sendToClient(roomId!, data.message.peerId, message.text())
     } else if (data.type === 'client-banned') {

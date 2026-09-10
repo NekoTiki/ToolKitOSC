@@ -6,6 +6,7 @@ import ControlBoolean from './ControlBoolean.vue'
 import ControlBooleanEnum from './ControlBooleanEnum.vue'
 import ControlBooleanGroup from './ControlBooleanGroup.vue'
 import ControlEnum from './ControlEnum.vue'
+import ControlIntifacePattern from './ControlIntifacePattern.vue'
 import ControlIntifaceToy from './ControlIntifaceToy.vue'
 import ControlOpenShock from './ControlOpenShock.vue'
 import ControlSlider from './ControlSlider.vue'
@@ -33,7 +34,8 @@ defineEmits<{
 // unreachable for two different reasons of its own).
 const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
   'open-shock-shocker': "OpenShock isn't configured",
-  'intiface-toy': "Intiface isn't connected, or every toy this control targets is offline"
+  'intiface-toy': "Intiface isn't connected, or every toy this control targets is offline",
+  'intiface-pattern': "Intiface isn't connected, or every toy this control targets is offline"
 }
 
 const unavailableReason = computed(
@@ -95,6 +97,14 @@ const unavailableReason = computed(
       :title="control.name"
       :icon="control.icon"
       @update:value="$emit('command', { type: 'intiface-toy', value: $event })"
+    />
+    <control-intiface-pattern
+      v-else-if="control.type === 'intiface-pattern'"
+      :control-id="control.id"
+      :title="control.name"
+      :icon="control.icon"
+      :patterns="control.allowedPatterns"
+      @update:value="$emit('command', { type: 'intiface-pattern', value: $event })"
     />
     <UPopover
       v-if="lastUser"

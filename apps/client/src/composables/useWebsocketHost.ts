@@ -10,7 +10,11 @@ import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
 import { getStableIp } from '@renderer/utils/stableIp'
-import { useIntifaceControl, useOpenShockControl } from '@vrc-osc-toolkit/shared-ui'
+import {
+  useIntifaceControl,
+  useIntifacePatternControl,
+  useOpenShockControl
+} from '@vrc-osc-toolkit/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import { useWebSocket } from '@vueuse/core'
 import type { Ref, ShallowRef } from 'vue'
@@ -108,6 +112,7 @@ export function useWebsocketHost(): {
   const { add: addCommandToDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
   const { lastUpdate: intifaceLastUpdate } = useIntifaceControl()
+  const { lastUpdate: intifacePatternLastUpdate } = useIntifacePatternControl()
   const { clientType } = useClientType()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
@@ -318,6 +323,15 @@ export function useWebsocketHost(): {
       if (!newUpdate) return
 
       sendMessage('intiface-value-update', newUpdate)
+    }
+  )
+
+  watch(
+    () => intifacePatternLastUpdate.value,
+    (newUpdate) => {
+      if (!newUpdate) return
+
+      sendMessage('intiface-pattern-value-update', newUpdate)
     }
   )
 

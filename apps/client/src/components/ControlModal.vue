@@ -5,6 +5,7 @@ import BooleanEnumFields from '@renderer/components/control-modal/BooleanEnumFie
 import BooleanGroupFields from '@renderer/components/control-modal/BooleanGroupFields.vue'
 import EnumOptionsField from '@renderer/components/control-modal/EnumOptionsField.vue'
 import IntifaceFields from '@renderer/components/control-modal/IntifaceFields.vue'
+import IntifacePatternFields from '@renderer/components/control-modal/IntifacePatternFields.vue'
 import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
@@ -18,6 +19,7 @@ import type {
   BooleanGroupControl,
   ControlType,
   EnumControl,
+  IntifacePatternControl,
   IntifaceToyControl,
   OpenShockControl,
   SliderControl,
@@ -51,6 +53,11 @@ const types = computed<SelectMenuItemType[]>(() => [
   {
     label: CONTROL_TYPE_LABELS['intiface-toy'],
     value: 'intiface-toy',
+    disabled: !intifaceAvailable.value
+  },
+  {
+    label: CONTROL_TYPE_LABELS['intiface-pattern'],
+    value: 'intiface-pattern',
     disabled: !intifaceAvailable.value
   }
 ])
@@ -112,6 +119,12 @@ const typeDefaults: Record<ControlType['type'], (m: Partial<ControlType>) => voi
     const intifaceModel = m as Partial<IntifaceToyControl>
 
     intifaceModel.actuators = []
+  },
+  'intiface-pattern': (m) => {
+    const intifacePatternModel = m as Partial<IntifacePatternControl>
+
+    intifacePatternModel.actuators = []
+    intifacePatternModel.allowedPatterns = []
   }
 }
 
@@ -205,13 +218,36 @@ const intifaceActuators = computed<IntifaceToyControl['actuators']>({
   }
 })
 
-// Mirrors useControls.ts's real unavailable-gating for this type, so the live preview shows the
-// same state a viewer would actually see: unavailable while Intiface itself isn't connected, or
-// once every toy this control targets has been unplugged/disconnected.
+// IntifacePatternControl's `actuators` field is the exact same shape as IntifaceToyControl's - a
+// separate proxy only so each field subcomponent still gets a single, concrete variant type to
+// work with (matching every other proxy here), not because the underlying data differs.
+const intifacePatternActuators = computed<IntifacePatternControl['actuators']>({
+  get: () => (model.value as Partial<IntifacePatternControl>).actuators ?? [],
+  set: (val) => {
+    const intifacePatternModel = model.value as Partial<IntifacePatternControl>
+
+    intifacePatternModel.actuators = val
+  }
+})
+
+const intifaceAllowedPatterns = computed<IntifacePatternControl['allowedPatterns']>({
+  get: () => (model.value as Partial<IntifacePatternControl>).allowedPatterns ?? [],
+  set: (val) => {
+    const intifacePatternModel = model.value as Partial<IntifacePatternControl>
+
+    intifacePatternModel.allowedPatterns = val
+  }
+})
+
+// Mirrors useControls.ts's real unavailable-gating for 'intiface-toy'/'intiface-pattern' (both
+// share the exact same `actuators` shape), so the live preview shows the same state a viewer would
+// actually see: unavailable while Intiface itself isn't connected, or once every toy this control
+// targets has been unplugged/disconnected.
 const intifaceControlUnavailable = computed(() => {
   if (!intifaceAvailable.value) return true
 
-  const actuators = (model.value as Partial<IntifaceToyControl>).actuators ?? []
+  const actuators =
+    (model.value as Partial<IntifaceToyControl> & Partial<IntifacePatternControl>).actuators ?? []
 
   return actuators.every((actuator) => !intifaceDevices.value.has(actuator.deviceIndex))
 })
@@ -367,6 +403,22 @@ watch(
               :devices="intifaceDevices"
             />
           </template>
+
+          <template v-if="model.type === 'intiface-pattern'">
+            <UAlert
+              v-if="!intifaceAvailable"
+              color="warning"
+              variant="subtle"
+              icon="lucide:shield-off"
+              title="Intiface unavailable"
+              description="Not connected to an Intiface Engine. Enable and configure it in Settings - until then this control shows as unavailable to everyone, including you."
+            />
+            <IntifaceFields
+              v-model:actuators="intifacePatternActuators"
+              :devices="intifaceDevices"
+            />
+            <IntifacePatternFields v-model:allowed-patterns="intifaceAllowedPatterns" />
+          </template>
         </UForm>
         <div class="flex flex-col justify-between gap-2">
           <Control
@@ -374,7 +426,8 @@ watch(
             :control="model as ControlType"
             :unavailable="
               (model.type === 'open-shock-shocker' && !openShockAvailable) ||
-                (model.type === 'intiface-toy' && intifaceControlUnavailable)
+                ((model.type === 'intiface-toy' || model.type === 'intiface-pattern') &&
+                  intifaceControlUnavailable)
             "
             @command="handleCommand(model as ControlType, $event)"
           />
