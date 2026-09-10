@@ -125,7 +125,9 @@ const updateSliderValue = (event: MouseEvent): void => {
         :transform="`rotate(${TRACK_ROTATION} 50 50)`"
       />
 
-      <!-- Progress track (colored, value) -->
+      <!-- Progress track (colored, value) - a darker shade of the theme's primary color, not the
+      plain 'text-primary' the knob and background track already use, so the filled arc reads as
+      its own element rather than the same flat color repeated three times. -->
       <circle
         cx="50"
         cy="50"
@@ -133,7 +135,7 @@ const updateSliderValue = (event: MouseEvent): void => {
         fill="none"
         stroke="currentColor"
         stroke-width="12"
-        class="text-primary"
+        class="text-primary-700"
         stroke-linecap="round"
         :stroke-dasharray="`${(sliderValue / 100) * ACTIVE_ARC_LENGTH} ${CIRCUMFERENCE}`"
         stroke-dashoffset="0"
