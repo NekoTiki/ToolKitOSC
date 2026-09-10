@@ -159,11 +159,11 @@ const updateSliderValue = (event: MouseEvent): void => {
 
     <!-- A light fill with a thick primary ring plus a smaller primary dot in the center, not a
     solid primary fill: matching the arc's own color made the knob blend straight into it wherever
-    it sat on top of the colored portion. The ring currently paints under the SVG (which has its
-    own stacking context above this) wherever the arc crosses it - only the inner dot is guaranteed
-    to stay visible against the arc. -->
+    it sat on top of the colored portion. z-20 (above the SVG's z-10) so the whole knob - the knob
+    sits exactly on the arc's own radius, overlapping its stroke band - always paints on top of the
+    arc instead of mostly disappearing under it. -->
     <div
-      class="bg-default ring-primary pointer-events-none absolute flex h-12 w-12 items-center justify-center rounded-full shadow-xl/50 ring-4"
+      class="bg-default ring-primary pointer-events-none absolute z-20 flex h-12 w-12 items-center justify-center rounded-full shadow-xl/50 ring-4"
       :style="{
         left: `${50 + 35 * Math.cos(((rotationAngle + 0) * Math.PI) / 180)}%`,
         top: `${50 + 35 * Math.sin(((rotationAngle + 0) * Math.PI) / 180)}%`,
