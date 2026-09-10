@@ -70,6 +70,7 @@ onBeforeUnmount(close)
         No avatar detected yet
       </div>
     </ConnectionStatus>
+    <OpenShockStatus />
     <IntifaceStatus />
     <UButton
       icon="solar:users-group-rounded-bold"
