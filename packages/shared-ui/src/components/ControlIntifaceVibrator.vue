@@ -33,8 +33,14 @@ const sliderValue = computed({
 const isDragging = ref(false)
 const sliderRef = ref<HTMLElement>()
 
+// A dead zone straddling the top of the dial: the 10deg either side of straight up don't move the
+// thumb away from 0%/100% (see updateSliderValue below), so overshooting slightly while aiming for
+// either end still lands exactly on it, instead of needing to hit a single-degree-wide point.
+const DEAD_ZONE_DEG = 10
+const ACTIVE_RANGE_DEG = 360 - DEAD_ZONE_DEG * 2
+
 const rotationAngle = computed(() => {
-  return (sliderValue.value / 100) * 360 - 90
+  return DEAD_ZONE_DEG + (sliderValue.value / 100) * ACTIVE_RANGE_DEG - 90
 })
 
 const handleMouseDown = (event: MouseEvent): void => {
@@ -75,7 +81,11 @@ const updateSliderValue = (event: MouseEvent): void => {
   if (angle < 0) angle += 360
   if (angle >= 360) angle -= 360
 
-  const percentage = (angle / 360) * 100
+  let percentage: number
+
+  if (angle <= DEAD_ZONE_DEG) percentage = 0
+  else if (angle >= 360 - DEAD_ZONE_DEG) percentage = 100
+  else percentage = ((angle - DEAD_ZONE_DEG) / ACTIVE_RANGE_DEG) * 100
 
   sliderValue.value = Math.round(Math.max(0, Math.min(100, percentage)))
 }
