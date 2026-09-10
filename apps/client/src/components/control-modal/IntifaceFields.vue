@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import type { IntifaceDevice } from '@renderer/composables/useIntiface'
-import type { IntifaceVibratorControl } from '@vrc-osc-toolkit/shared-ui'
+import type { IntifaceToyControl } from '@vrc-osc-toolkit/shared-ui'
 import { computed } from 'vue'
 
 const props = defineProps<{ devices: Map<number, IntifaceDevice> }>()
 
-const vibrators = defineModel<IntifaceVibratorControl['vibrators']>('vibrators', { required: true })
+const actuators = defineModel<IntifaceToyControl['actuators']>('actuators', { required: true })
 
 const deviceList = computed(() => Array.from(props.devices.values()))
 
 const isSelected = (deviceIndex: number, actuatorIndex: number): boolean =>
-  vibrators.value.some((v) => v.deviceIndex === deviceIndex && v.actuatorIndex === actuatorIndex)
+  actuators.value.some((a) => a.deviceIndex === deviceIndex && a.actuatorIndex === actuatorIndex)
 
 // Toys are listed one per group with a checkbox per actuator (vibrate, rotate, oscillate, ...) -
 // a toy with a single motor is effectively "select this toy", a toy with several asks about each
@@ -24,8 +24,8 @@ const toggle = (
   if (checked) {
     if (isSelected(device.index, actuator.index)) return
 
-    vibrators.value = [
-      ...vibrators.value,
+    actuators.value = [
+      ...actuators.value,
       {
         deviceIndex: device.index,
         deviceName: device.name,
@@ -35,8 +35,8 @@ const toggle = (
       }
     ]
   } else {
-    vibrators.value = vibrators.value.filter(
-      (v) => !(v.deviceIndex === device.index && v.actuatorIndex === actuator.index)
+    actuators.value = actuators.value.filter(
+      (a) => !(a.deviceIndex === device.index && a.actuatorIndex === actuator.index)
     )
   }
 }

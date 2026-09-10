@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-// The raw slider value (0-1) last sent to an 'intiface-vibrator' control's actuators. Unlike
+// The raw slider value (0-1) last sent to an 'intiface-toy' control's actuators. Unlike
 // OpenShockControlValue there's nothing to animate here - it's just the live position - so this
 // is a plain number alias, not a struct.
 export type IntifaceControlValue = number

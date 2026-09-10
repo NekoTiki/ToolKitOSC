@@ -29,7 +29,7 @@ export interface OpenShockValueUpdateMessage {
   value: OpenShockControlValue
 }
 
-// Broadcasts the value last sent to an 'intiface-vibrator' control's actuators, purely so every
+// Broadcasts the value last sent to an 'intiface-toy' control's actuators, purely so every
 // viewer's slider (and the host's own) shows the same position - mirrors OpenShockValueUpdateMessage,
 // but the value itself is just the raw slider value (0-1), not a struct to animate.
 export interface IntifaceValueUpdateMessage {

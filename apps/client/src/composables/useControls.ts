@@ -48,7 +48,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { lockedControls } = useLockedControls()
   const { command: osCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
-  const { setActuatorIntensity, isAvailable: intifaceAvailable } = useIntiface()
+  const {
+    setActuatorIntensity,
+    isAvailable: intifaceAvailable,
+    devices: intifaceDevices
+  } = useIntiface()
   const { setValue: setIntifaceValue } = useIntifaceControl()
   const { update } = useOscMessages()
 
@@ -59,13 +63,20 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         ...control,
         locked: lockedControls.value[control.id] ?? false,
         // OpenShock/Intiface controls are unavailable to everyone - same as a locked control -
-        // unless the service is actually reachable (see useOpenShock.ts/useIntiface.ts). Other
-        // control types never depend on an external service, so they're always available.
+        // unless the service is actually reachable (see useOpenShock.ts/useIntiface.ts). An
+        // Intiface toy control is additionally unavailable when every toy it targets has been
+        // unplugged/disconnected - even while Intiface itself is still connected - since there's
+        // nothing left for it to actuate; a control spanning several toys stays available as long
+        // as at least one of them is still present. Other control types never depend on an
+        // external service, so they're always available.
         unavailable:
           control.type === 'open-shock-shocker'
             ? !openShockAvailable.value
-            : control.type === 'intiface-vibrator'
-              ? !intifaceAvailable.value
+            : control.type === 'intiface-toy'
+              ? !intifaceAvailable.value ||
+                control.actuators.every(
+                  (actuator) => !intifaceDevices.value.has(actuator.deviceIndex)
+                )
               : false
       }))
     }))
@@ -258,12 +269,12 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
           .map((id) => shockerNames.value.get(id))
           .filter((name): name is string => !!name)
       }
-    } else if (command.type === 'intiface-vibrator' && control?.type === 'intiface-vibrator') {
+    } else if (command.type === 'intiface-toy' && control?.type === 'intiface-toy') {
       // Same belt-and-suspenders guard as OpenShock above.
       if (!intifaceAvailable.value) return undefined
 
       setIntifaceValue(control.id, command.value)
-      setActuatorIntensity(control.vibrators, command.value)
+      setActuatorIntensity(control.actuators, command.value)
     }
 
     return undefined

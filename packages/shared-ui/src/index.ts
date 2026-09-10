@@ -7,7 +7,7 @@ export { default as ControlBooleanBase } from './components/ControlBooleanBase.v
 export { default as ControlBooleanEnum } from './components/ControlBooleanEnum.vue'
 export { default as ControlBooleanGroup } from './components/ControlBooleanGroup.vue'
 export { default as ControlEnum } from './components/ControlEnum.vue'
-export { default as ControlIntifaceVibrator } from './components/ControlIntifaceVibrator.vue'
+export { default as ControlIntifaceToy } from './components/ControlIntifaceToy.vue'
 export { default as ControlOpenShock } from './components/ControlOpenShock.vue'
 export { default as ControlSlider } from './components/ControlSlider.vue'
 export type { IntifaceControlValue } from './composables/useIntifaceControl'

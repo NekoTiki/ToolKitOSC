@@ -18,7 +18,7 @@ import type {
   BooleanGroupControl,
   ControlType,
   EnumControl,
-  IntifaceVibratorControl,
+  IntifaceToyControl,
   OpenShockControl,
   SliderControl,
   StepEnumControl
@@ -49,8 +49,8 @@ const types = computed<SelectMenuItemType[]>(() => [
     disabled: !openShockAvailable.value
   },
   {
-    label: CONTROL_TYPE_LABELS['intiface-vibrator'],
-    value: 'intiface-vibrator',
+    label: CONTROL_TYPE_LABELS['intiface-toy'],
+    value: 'intiface-toy',
     disabled: !intifaceAvailable.value
   }
 ])
@@ -108,10 +108,10 @@ const typeDefaults: Record<ControlType['type'], (m: Partial<ControlType>) => voi
     openShockModel.cooldown = 1000
     openShockModel.animationDuration = 3000
   },
-  'intiface-vibrator': (m) => {
-    const intifaceModel = m as Partial<IntifaceVibratorControl>
+  'intiface-toy': (m) => {
+    const intifaceModel = m as Partial<IntifaceToyControl>
 
-    intifaceModel.vibrators = []
+    intifaceModel.actuators = []
   }
 }
 
@@ -196,13 +196,24 @@ const enumOptions = computed<EnumControl['options']>({
   }
 })
 
-const intifaceVibrators = computed<IntifaceVibratorControl['vibrators']>({
-  get: () => (model.value as Partial<IntifaceVibratorControl>).vibrators ?? [],
+const intifaceActuators = computed<IntifaceToyControl['actuators']>({
+  get: () => (model.value as Partial<IntifaceToyControl>).actuators ?? [],
   set: (val) => {
-    const intifaceModel = model.value as Partial<IntifaceVibratorControl>
+    const intifaceModel = model.value as Partial<IntifaceToyControl>
 
-    intifaceModel.vibrators = val
+    intifaceModel.actuators = val
   }
+})
+
+// Mirrors useControls.ts's real unavailable-gating for this type, so the live preview shows the
+// same state a viewer would actually see: unavailable while Intiface itself isn't connected, or
+// once every toy this control targets has been unplugged/disconnected.
+const intifaceControlUnavailable = computed(() => {
+  if (!intifaceAvailable.value) return true
+
+  const actuators = (model.value as Partial<IntifaceToyControl>).actuators ?? []
+
+  return actuators.every((actuator) => !intifaceDevices.value.has(actuator.deviceIndex))
 })
 
 const shockerList = ref<SelectMenuItem[]>([])
@@ -342,7 +353,7 @@ watch(
             />
           </template>
 
-          <template v-if="model.type === 'intiface-vibrator'">
+          <template v-if="model.type === 'intiface-toy'">
             <UAlert
               v-if="!intifaceAvailable"
               color="warning"
@@ -352,7 +363,7 @@ watch(
               description="Not connected to an Intiface Engine. Enable and configure it in Settings - until then this control shows as unavailable to everyone, including you."
             />
             <IntifaceFields
-              v-model:vibrators="intifaceVibrators"
+              v-model:actuators="intifaceActuators"
               :devices="intifaceDevices"
             />
           </template>
@@ -363,7 +374,7 @@ watch(
             :control="model as ControlType"
             :unavailable="
               (model.type === 'open-shock-shocker' && !openShockAvailable) ||
-                (model.type === 'intiface-vibrator' && !intifaceAvailable)
+                (model.type === 'intiface-toy' && intifaceControlUnavailable)
             "
             @command="handleCommand(model as ControlType, $event)"
           />

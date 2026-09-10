@@ -12,7 +12,7 @@ export type ControlTypes =
   | 'slider'
   | 'step-enum'
   | 'open-shock-shocker'
-  | 'intiface-vibrator'
+  | 'intiface-toy'
 
 // Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
 export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -21,9 +21,9 @@ export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' |
 // picker (ControlModal's "Type" select) and the client logs viewer (ClientLogsModal) both read
 // from this instead of keeping their own copies, so a badge always matches the name the control
 // was created under. One color per type used to mean every badge was distinguishable at a glance,
-// but all 7 of Nuxt UI's semantic colors are already spoken for - 'intiface-vibrator' reuses
-// 'slider''s 'success' since it's functionally a slider under the hood, rather than adding a
-// non-semantic color just to stay unique.
+// but all 7 of Nuxt UI's semantic colors are already spoken for - 'intiface-toy' reuses 'slider''s
+// 'success' since it's functionally a slider under the hood, rather than adding a non-semantic
+// color just to stay unique.
 export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   boolean: 'Toggle',
   'boolean-group': 'Toggle Group',
@@ -32,7 +32,7 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   slider: 'Slider',
   'step-enum': 'Step Enum',
   'open-shock-shocker': 'Open Shock',
-  'intiface-vibrator': 'Intiface'
+  'intiface-toy': 'Intiface'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
@@ -43,7 +43,7 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   slider: 'success',
   'step-enum': 'neutral',
   'open-shock-shocker': 'error',
-  'intiface-vibrator': 'success'
+  'intiface-toy': 'success'
 }
 
 export interface BaseControl {
@@ -135,7 +135,7 @@ export interface OpenShockControl extends BaseControl {
 // there's no equivalent lookup available once a toy is unplugged, so the label is kept on the
 // control itself). `actuatorType` (Buttplug's "Vibrate"/"Rotate"/"Oscillate"/...) is likewise kept
 // on the control - it has to be sent back verbatim in the ScalarCmd for this actuator.
-export interface IntifaceVibratorRef {
+export interface IntifaceActuatorRef {
   deviceIndex: number
   deviceName: string
   actuatorIndex: number
@@ -143,9 +143,12 @@ export interface IntifaceVibratorRef {
   actuatorType: string
 }
 
-export interface IntifaceVibratorControl extends BaseControl {
-  type: 'intiface-vibrator'
-  vibrators: IntifaceVibratorRef[]
+// Named 'intiface-toy' (not '...vibrator') and `actuators` (not `vibrators`) since a control can
+// target any mix of actuator types across one or more toys, not just vibration motors - see
+// IntifaceActuatorRef above.
+export interface IntifaceToyControl extends BaseControl {
+  type: 'intiface-toy'
+  actuators: IntifaceActuatorRef[]
 }
 
 export type ControlType =
@@ -156,7 +159,7 @@ export type ControlType =
   | SliderControl
   | StepEnumControl
   | OpenShockControl
-  | IntifaceVibratorControl
+  | IntifaceToyControl
 
 export interface BaseControlCommand {
   groupId: string
@@ -198,8 +201,8 @@ export interface OpenShockControlCommand extends BaseControlCommand {
   type: 'open-shock-shocker'
 }
 
-export interface IntifaceVibratorControlCommand extends BaseControlCommand {
-  type: 'intiface-vibrator'
+export interface IntifaceToyControlCommand extends BaseControlCommand {
+  type: 'intiface-toy'
   value: number
 }
 
@@ -211,7 +214,7 @@ export type ControlCommand =
   | SliderControlCommand
   | StepEnumControlCommand
   | OpenShockControlCommand
-  | IntifaceVibratorControlCommand
+  | IntifaceToyControlCommand
 
 export type CommandWithoutIds =
   | Omit<BooleanControlCommand, 'groupId' | 'controlId'>
@@ -221,7 +224,7 @@ export type CommandWithoutIds =
   | Omit<SliderControlCommand, 'groupId' | 'controlId'>
   | Omit<StepEnumControlCommand, 'groupId' | 'controlId'>
   | Omit<OpenShockControlCommand, 'groupId' | 'controlId'>
-  | Omit<IntifaceVibratorControlCommand, 'groupId' | 'controlId'>
+  | Omit<IntifaceToyControlCommand, 'groupId' | 'controlId'>
 
 export interface ControlGroup {
   id: string

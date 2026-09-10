@@ -332,7 +332,7 @@ export function useIntiface(): {
   // Batches per device (a single ScalarCmd targets one DeviceIndex but can carry several
   // Scalars), so a control spanning multiple toys sends one message per toy, not per actuator.
   // Each actuator carries its own ActuatorType (vibrate/rotate/oscillate/...), captured at
-  // selection time on the control itself (see IntifaceVibratorRef) - it has to match what the
+  // selection time on the control itself (see IntifaceActuatorRef) - it has to match what the
   // device actually reports for that index, or the Buttplug server rejects the whole command.
   const setActuatorIntensity = (
     actuators: { deviceIndex: number; actuatorIndex: number; actuatorType: string }[],
