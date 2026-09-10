@@ -10,15 +10,19 @@ defineProps<{ title: string; icon?: string }>()
   <control-base
     :title="title"
     :icon="icon"
+    :active="state"
     @click="state = !state"
   >
-    <div class="ring-default rounded-md p-2 ring">
-      <div
-        class="h-6 w-1/2 rounded-md transition-all"
-        :class="{
-          'bg-primary translate-x-full': state,
-          'bg-inverted': !state
-        }"
+    <!-- The whole card is the click target (see @click above) - a real USwitch here would toggle
+    itself independently and double up with that, so it's pointer-events-none and purely a themed,
+    on/off-labeled visual readout of `state`, consistent with the rest of the app's switches. -->
+    <div class="flex items-center justify-center">
+      <USwitch
+        :model-value="state"
+        size="xl"
+        checked-icon="i-lucide-check"
+        unchecked-icon="i-lucide-x"
+        class="pointer-events-none"
       />
     </div>
   </control-base>
