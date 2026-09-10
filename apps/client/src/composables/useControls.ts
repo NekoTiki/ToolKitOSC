@@ -20,6 +20,25 @@ import { computed, ref, watch } from 'vue'
 const controlsList = ref<ControlGroup[]>([])
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
 
+// One-off migration: 'intiface-vibrator' (with a `vibrators` field) was renamed to 'intiface-toy'
+// (with `actuators`) - a control saved locally under the old shape doesn't just look different,
+// Control.vue's dispatcher only recognizes the current type string, so it silently renders nothing
+// at all. Straightens any such control back into the current shape instead of leaving it invisible.
+const migrateControlGroups = (groups: ControlGroup[]): ControlGroup[] => {
+  return groups.map((group) => ({
+    ...group,
+    controls: group.controls.map((control) => {
+      const legacy = control as unknown as { type: string; vibrators?: unknown }
+
+      if (legacy.type !== 'intiface-vibrator') return control
+
+      const { vibrators, ...rest } = legacy
+
+      return { ...rest, type: 'intiface-toy', actuators: vibrators } as ControlType
+    })
+  }))
+}
+
 export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) => void): {
   controls: ComputedRef<ControlGroup[]>
   controlLastUser: typeof controlLastUser
@@ -191,7 +210,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     } else {
       const storedControls = localStorage.getItem(`controls_${avatarId.value}`)
 
-      controlsList.value = storedControls ? JSON.parse(storedControls) : []
+      controlsList.value = storedControls ? migrateControlGroups(JSON.parse(storedControls)) : []
     }
   }
 
