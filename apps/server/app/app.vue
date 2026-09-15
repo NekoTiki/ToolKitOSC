@@ -21,6 +21,13 @@ const items = ref<DropdownMenuItem[][]>([
   ],
   [
     {
+      label: 'Connect Desktop App',
+      icon: 'i-lucide-link',
+      to: '/profile'
+    }
+  ],
+  [
+    {
       label: 'Logout',
       icon: 'i-lucide-log-out',
       color: 'error',
