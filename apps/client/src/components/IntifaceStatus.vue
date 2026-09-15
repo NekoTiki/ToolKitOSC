@@ -44,13 +44,11 @@ const batteryIcon = (level: number): string => {
 
 <template>
   <!-- A popover, not a plain tooltip like ConnectionStatus - there's a variable-length device (and
-  battery) list to show once connected, which doesn't fit a one-line hover label.
-  z-20: same reasoning as ConnectionStatus.vue - this renders inside AppHeader.vue's sticky z-10
-  bar and needs its own explicit z-index to float above it. -->
+  battery) list to show once connected, which doesn't fit a one-line hover label. No z-index
+  override needed - see ConnectionStatus.vue's comment; it's set globally in vite.config.ts. -->
   <UPopover
     mode="hover"
     :content="{ align: 'center', side: 'bottom' }"
-    :ui="{ content: 'z-20' }"
   >
     <UIcon
       name="mdi:vibrate"

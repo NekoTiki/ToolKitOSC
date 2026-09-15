@@ -58,8 +58,8 @@ const items = computed(() => [
 
 <template>
   <!-- sticky: stays in view while the control groups below scroll underneath it. z-10 keeps it
-  above that scrolling content but well under any modal/dropdown's own layer (those sit much
-  higher, e.g. UModal's z-50). -->
+  above that scrolling content - every overlay that can render inside it (or anywhere else in the
+  app) is set well above this globally in vite.config.ts, so nothing here needs its own override. -->
   <UCard
     class="sticky top-0 z-10"
     :ui="{
@@ -83,9 +83,6 @@ const items = computed(() => [
         Sign In
       </UButton>
 
-      <!-- z-20: Nuxt UI overlays don't set their own z-index by default, so without this they'd
-      render behind this header's own z-10 (its portaled content is a sibling of the header in the
-      DOM, not a descendant, so it doesn't just inherit/exceed the header's stacking level). -->
       <div class="flex items-center gap-2">
         <USelect
           v-model="currentLockedControlsGroup"
@@ -97,7 +94,6 @@ const items = computed(() => [
           :disabled="!avatarDetails?.id"
           icon="i-lucide-lock"
           class="min-w-52"
-          :ui="{ content: 'z-20' }"
         />
 
         <UDropdownMenu
@@ -107,7 +103,6 @@ const items = computed(() => [
             side: 'bottom',
             sideOffset: 8
           }"
-          :ui="{ content: 'z-20' }"
         >
           <UButton
             icon="i-lucide-lock"

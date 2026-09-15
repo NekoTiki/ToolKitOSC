@@ -219,13 +219,12 @@ watch(open, (value) => {
         </template>
       </UTooltip>
 
-      <!-- z-20: this control group can scroll up under AppHeader.vue's sticky z-10 bar - without
-      its own explicit z-index above that, this (like every Nuxt UI overlay, none of which set one
-      by default) would render behind it instead of floating over it. -->
+      <!-- This control group can scroll up under AppHeader.vue's sticky bar - no z-index override
+      needed for that though, it's set globally (above the header) in vite.config.ts. -->
       <UDropdownMenu
         :items="items"
         :content="{ align: 'end', side: 'bottom', sideOffset: 8 }"
-        :ui="{ content: 'w-48 z-20' }"
+        :ui="{ content: 'w-48' }"
       >
         <UButton
           icon="i-lucide-menu"

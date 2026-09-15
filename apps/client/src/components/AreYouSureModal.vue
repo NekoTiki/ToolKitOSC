@@ -21,13 +21,17 @@ const messageParts = computed<{ text: string; bold: boolean }[]>(() =>
 </script>
 
 <template>
-  <!-- z-[60]: App.vue mounts this before ClientsListSliderover, so at equal z-50 the slideover
-  (e.g. the ban confirmation triggered from ClientDetails.vue) would paint on top of this modal -
-  same reasoning as the z-[60] popovers in ClientDetails.vue. -->
+  <!-- Every Modal/Slideover in this app defaults to the same z-30 (set globally in
+  vite.config.ts), which is normally fine since they don't overlap - but this one is a
+  confirmation dialog that's routinely opened from INSIDE another already-open one (e.g. the ban
+  confirmation triggered from ClientDetails.vue, itself inside ClientsListSliderover). Two equal
+  z-30 overlays would fall back to DOM/mount order (App.vue mounts this one first, so it would
+  lose), so this is deliberately bumped above that shared tier - and above the z-40 tooltip/
+  popover/dropdown/select tier too, so it wins even if something like that is still open. -->
   <UModal
     v-model:open="open"
-    class="z-[60]"
-    :ui="{ overlay: 'z-[60]', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
+    class="z-50"
+    :ui="{ overlay: 'z-50', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
     @after:leave="cancel"
   >
     <template #header>

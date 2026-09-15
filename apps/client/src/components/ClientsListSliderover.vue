@@ -35,17 +35,11 @@ const offlineClientsList = computed(() =>
 </script>
 
 <template>
-  <!-- z-50: USlideover's own default has no explicit z-index (just DOM/portal order), which used
-  to be enough since nothing else in this app had one either - now that AppHeader.vue's sticky bar
-  does (z-10, needed to stay above the scrolling controls under it), an explicit positive z-index
-  always wins over an implicit one regardless of DOM order, so without this the header rendered on
-  top of the slideover. Same fix already applied to AreYouSureModal.vue/SettingsModal.vue. -->
   <USlideover
     v-model:open="open"
     inset
     title="Clients List"
-    class="z-50 w-full max-w-xs"
-    :ui="{ overlay: 'z-50' }"
+    class="w-full max-w-xs"
   >
     <template #body>
       <div class="flex flex-col gap-4 overflow-y-auto">

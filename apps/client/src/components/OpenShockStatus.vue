@@ -30,12 +30,11 @@ const shockerList = computed(() =>
 </script>
 
 <template>
-  <!-- z-20: same reasoning as ConnectionStatus.vue - this renders inside AppHeader.vue's sticky
-  z-10 bar and needs its own explicit z-index to float above it. -->
+  <!-- No z-index override needed here - see ConnectionStatus.vue's comment; it's set globally in
+  vite.config.ts. -->
   <UPopover
     mode="hover"
     :content="{ align: 'center', side: 'bottom' }"
-    :ui="{ content: 'z-20' }"
   >
     <UIcon
       name="material-symbols:electric-bolt"

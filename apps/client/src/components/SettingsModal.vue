@@ -199,8 +199,7 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
   <UModal
     v-model:open="open"
     title="Settings"
-    class="z-50"
-    :ui="{ overlay: 'z-50', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
+    :ui="{ header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
   >
     <template #body>
       <UTabs
@@ -218,9 +217,6 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
               :error="wsUrlError"
             >
               <div class="flex gap-2">
-                <!-- z-[60]: same reasoning as the UPopover/UDropdownMenu instances in
-                ClientDetails.vue - Nuxt UI overlays don't set their own z-index, so this would
-                otherwise render behind this modal's own z-50. -->
                 <UInputMenu
                   v-model="wsUrlDraft"
                   mode="autocomplete"
@@ -228,7 +224,6 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
                   value-key="label"
                   :placeholder="defaultServerWsUrl"
                   class="w-full"
-                  :ui="{ content: 'z-[60]' }"
                   @change="commitWsUrl"
                   @keyup.enter="commitWsUrl"
                   @blur="commitWsUrl"
