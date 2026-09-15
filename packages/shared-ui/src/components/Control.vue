@@ -129,6 +129,29 @@ const unavailableReason = computed(
       v-if="edit"
       class="absolute inset-0 z-20 flex h-full w-full cursor-pointer items-center justify-center rounded-lg bg-black/70"
     >
+      <!-- The `.handle` class used to sit on UTooltip itself, forwarded onto its slotted child via
+      Reka UI's `as-child` prop-merging - fragile, since that merge target is an asynchronously-
+      rendered UIcon rather than an element guaranteed to exist as soon as this renders.
+      vue-draggable-plus's `handle: '.handle'` selector needs a real, always-present node to grab,
+      so it's now a plain span we render ourselves instead. Same grip icon/style as the group
+      drag handle (see ControlGroup.vue's `.group-handle`), just with explicit white tones instead
+      of the theme-aware `text-muted`/`text-default` tokens that handle uses - this one always sits
+      on the same hardcoded dark overlay, in both light and dark mode. -->
+      <UTooltip>
+        <span
+          class="handle absolute top-2 left-2 flex cursor-grab items-center justify-center rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white active:cursor-grabbing"
+        >
+          <UIcon
+            name="i-lucide-grip-vertical"
+            class="size-5"
+          />
+        </span>
+
+        <template #content>
+          Drag to Reorder
+        </template>
+      </UTooltip>
+
       <div class="absolute top-2 right-2 flex gap-2 rounded-lg">
         <UButton
           icon="fa7-solid:trash"
@@ -142,24 +165,6 @@ const unavailableReason = computed(
           @click="$emit('edit', control.id)"
         />
       </div>
-
-      <UTooltip>
-        <!-- The `.handle` class used to sit on UTooltip itself, forwarded onto its slotted child
-        via Reka UI's `as-child` prop-merging - fragile, since that merge target is an
-        asynchronously-rendered UIcon rather than an element guaranteed to exist as soon as this
-        renders. vue-draggable-plus's `handle: '.handle'` selector needs a real, always-present
-        node to grab, so it's now a plain span we render ourselves instead. -->
-        <span class="handle absolute top-3 left-3 cursor-grab rounded-lg">
-          <UIcon
-            name="iconamoon:menu-burger-horizontal-light"
-            class="size-6"
-          />
-        </span>
-
-        <template #content>
-          Drag to Reorder
-        </template>
-      </UTooltip>
     </div>
     <div
       v-if="offline"
