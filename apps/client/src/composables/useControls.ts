@@ -52,6 +52,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   addGroup: () => void
   updateGroup: (groupId: string, name: string) => void
   deleteGroup: (groupId: string) => void
+  setGroups: (groups: ControlGroup[]) => void
   setGroupHidden: (groupId: string, hidden: boolean) => void
   isGroupHidden: (groupId: string) => boolean
   setGroupControls: (groupId: string, controls: ControlType[]) => void
@@ -163,6 +164,15 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
   const deleteGroup = (groupId: string): void => {
     controlsList.value = controls.value.filter((g) => g.id !== groupId)
+
+    saveControls()
+  }
+
+  // Re-orders the whole group list (drag-and-drop in App.vue), rather than mutating one group at
+  // a time like the other setters here - the new order is the only thing that changed, so it's
+  // taken as-is instead of matched back up by id.
+  const setGroups = (groups: ControlGroup[]): void => {
+    controlsList.value = groups
 
     saveControls()
   }
@@ -353,6 +363,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     addGroup,
     updateGroup,
     deleteGroup,
+    setGroups,
     setGroupHidden,
     isGroupHidden,
     setGroupControls,

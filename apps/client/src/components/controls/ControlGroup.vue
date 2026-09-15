@@ -148,6 +148,24 @@ watch(open, (value) => {
     :class="{ 'opacity-60': controlGroup.hidden }"
   >
     <div class="flex gap-2">
+      <!-- group-handle: App.vue's VueDraggable grabs groups by this selector only, so dragging to
+      reorder never fights with clicking the name/edit/menu buttons that make up the rest of this
+      row. -->
+      <UTooltip>
+        <span
+          class="group-handle flex shrink-0 cursor-grab items-center rounded-lg px-1 text-muted hover:text-default"
+        >
+          <UIcon
+            name="i-lucide-grip-vertical"
+            class="size-5"
+          />
+        </span>
+
+        <template #content>
+          Drag to Reorder
+        </template>
+      </UTooltip>
+
       <UButton
         v-if="!editMode"
         :label="controlGroup.name"

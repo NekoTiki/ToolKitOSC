@@ -8,12 +8,19 @@ import { useControls } from '@renderer/composables/useControls'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
 import { useTheme } from '@renderer/composables/useTheme'
 import { api } from '@renderer/lib/tauri-bridge'
+import type { ControlGroup as ControlGroupType } from '@vrc-osc-toolkit/shared-ui'
 import { computed, onMounted } from 'vue'
+import { VueDraggable } from 'vue-draggable-plus'
 
-const { controls, addGroup } = useControls()
+const { controls, setGroups, addGroup } = useControls()
 const { loadTheme } = useTheme()
 const { connected: oscConnected } = useOscConnection()
 const { avatarDetails } = useAvatarDetails()
+
+const groups = computed<ControlGroupType[]>({
+  get: () => controls.value,
+  set: (value) => setGroups(value)
+})
 
 // Control groups are keyed by avatar id (see useControls.ts's loadControls/saveControls), so
 // there's nothing meaningful to show or add to until VRChat's OSC is both alive and has told us
@@ -33,14 +40,25 @@ onMounted(() => loadTheme())
         v-if="ready"
         class="flex flex-col gap-4"
       >
-        <div class="flex flex-wrap justify-center gap-4">
+        <!-- forceFallback: same reasoning as the per-control VueDraggable inside ControlGroup.vue
+        - the native HTML5 drag API's own "not a valid drop target" cursor shows up otherwise. No
+        `group` prop here (unlike that inner one): groups don't drop into one another, only
+        reorder among themselves. -->
+        <VueDraggable
+          v-model.lazy="groups"
+          handle=".group-handle"
+          easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
+          :animation="200"
+          :force-fallback="true"
+          class="flex flex-wrap justify-center gap-4"
+        >
           <ControlGroup
-            v-for="controlGroup in controls"
+            v-for="controlGroup in groups"
             :key="controlGroup.id"
             :ui="{ body: 'p-4 sm:p-4 space-y-4' }"
             :control-group="controlGroup"
           />
-        </div>
+        </VueDraggable>
 
         <div class="flex justify-center">
           <UButton
