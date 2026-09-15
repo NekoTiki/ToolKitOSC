@@ -63,9 +63,8 @@ export function useWebsocketHost(): {
   open: () => void
   close: WebSocket['close']
 } {
-  const { controls, setControlLastUser, getControl, handleCommand } = useControls(() =>
-    sendControls()
-  )
+  const { controls, visibleControls, setControlLastUser, getControl, isGroupHidden, handleCommand } =
+    useControls(() => sendControls())
 
   watch(
     controls.value,
@@ -81,7 +80,10 @@ export function useWebsocketHost(): {
   const addressList = computed<Set<string>>(() => {
     const addresses = new Set<string>()
 
-    controls.value?.forEach((group) => {
+    // visibleControls, not controls: a hidden group's addresses must never be forwarded to
+    // clients either, or its live OSC state would leak to the share page even though the group
+    // itself doesn't.
+    visibleControls.value?.forEach((group) => {
       group.controls.forEach((control) => {
         if (control.type === 'boolean') {
           addresses.add(control.inputAddress)
@@ -194,10 +196,14 @@ export function useWebsocketHost(): {
           // a resolved control to know the OSC address/type. A control that *does* resolve but is
           // explicitly locked - or marked unavailable, e.g. an OpenShock control while no valid
           // API key is configured (see useControls.ts) - is still ignored entirely, same as before.
+          // Same for a control whose group has been hidden client-side: `sendControls` already
+          // keeps the server/viewers from ever learning it exists, but a viewer that cached an
+          // older `controls-update` (or a hand-crafted command) could still send one, so this is
+          // enforced host-side too rather than trusted to never arrive.
           const control = getControl(data.message.groupId, data.message.controlId)
           const ip = getStableIp(client.ip)
 
-          if (!control?.locked && !control?.unavailable) {
+          if (!control?.locked && !control?.unavailable && !isGroupHidden(data.message.groupId)) {
             const banned = isBanned(ip, client.user?.discord?.id)
             const clientValid = checkClient(clientType.value, client)
 
@@ -301,7 +307,7 @@ export function useWebsocketHost(): {
   }
 
   const sendControls = (): void => {
-    sendMessage('controls-update', controls.value)
+    sendMessage('controls-update', visibleControls.value)
     Array.from(addressList.value).forEach((address) => {
       const argList = args.value?.[address]
 

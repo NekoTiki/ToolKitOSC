@@ -6,6 +6,7 @@ import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useLockedControlsModal } from '@renderer/composables/useLockedControlsModal'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
+import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
 import { computed } from 'vue'
 
@@ -14,10 +15,28 @@ const { openModal, listOpen } = useLockedControlsModal()
 const { openModal: openSettingsModal } = useSettingsModal()
 const { avatarDetails } = useAvatarDetails()
 const { authUrl } = useWebsocketAuth()
-const { loggedIn } = useAuth()
+const { user, loggedIn } = useAuth()
+const toast = useToast()
 
 const openUrl = (url: string): void => {
   api.openUrl(url)
+}
+
+// The share page's room is keyed by the host's Discord id (see the server's host.ts
+// `getRoomId`), so there's nothing to share until that's known.
+const shareUrl = computed<string | null>(() =>
+  user.value?.discord?.id ? `${serverHttpUrl.value}/share/${user.value.discord.id}` : null
+)
+
+const copyShareLink = async (): Promise<void> => {
+  if (!shareUrl.value) return
+
+  try {
+    await navigator.clipboard.writeText(shareUrl.value)
+    toast.add({ title: 'Share link copied', icon: 'i-lucide-check', color: 'success' })
+  } catch {
+    toast.add({ title: 'Could not copy share link', color: 'error' })
+  }
 }
 
 const items = computed(() => [
@@ -97,6 +116,21 @@ const items = computed(() => [
             aria-label="Manage Locked Control Profiles"
           />
         </UDropdownMenu>
+
+        <UTooltip v-if="loggedIn">
+          <UButton
+            icon="i-lucide-share-2"
+            color="neutral"
+            variant="outline"
+            :disabled="!shareUrl"
+            aria-label="Copy Share Link"
+            @click="copyShareLink"
+          />
+
+          <template #content>
+            Copy the share link to your control page
+          </template>
+        </UTooltip>
 
         <UButton
           icon="i-lucide-settings"

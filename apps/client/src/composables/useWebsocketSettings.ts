@@ -16,6 +16,12 @@ const override = ref<string | undefined>(localStorage.getItem(STORAGE_KEY) || un
 // reconnect (see vueuse's `watch(urlRef, open)`).
 export const serverWsUrl = computed<string>(() => override.value || DEFAULT_SERVER_WS_URL)
 
+// The server's plain HTTP(S) origin, derived from `serverWsUrl` rather than the build-time
+// SERVER_URL constant - so a share link always points at whichever server the user is actually
+// connected to right now, custom override included. `ws`/`wss` share the same host:port as their
+// `http`/`https` counterpart on this server, so a straight protocol swap is enough.
+export const serverHttpUrl = computed<string>(() => serverWsUrl.value.replace(/^ws/, 'http'))
+
 export const isValidServerWsUrl = (url: string): boolean => {
   try {
     const protocol = new URL(url).protocol

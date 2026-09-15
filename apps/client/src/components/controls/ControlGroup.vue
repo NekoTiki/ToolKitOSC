@@ -17,8 +17,15 @@ import { useControls } from '../../composables/useControls'
 
 const props = defineProps<{ controlGroup: ControlGroup }>()
 
-const { getControl, updateGroup, deleteGroup, setGroupControls, deleteControl, handleCommand } =
-  useControls()
+const {
+  getControl,
+  updateGroup,
+  deleteGroup,
+  setGroupHidden,
+  setGroupControls,
+  deleteControl,
+  handleCommand
+} = useControls()
 const { openModal: ausOpenModal } = useAreYouSureModal()
 const { openModal } = useControlModal()
 
@@ -72,6 +79,11 @@ const items = computed<DropdownMenuItem[]>(() => [
     color: 'primary',
     icon: 'i-lucide-plus-circle',
     onSelect: () => openModal(props.controlGroup.id)
+  },
+  {
+    label: props.controlGroup.hidden ? 'Show' : 'Hide',
+    icon: props.controlGroup.hidden ? 'i-lucide-eye' : 'i-lucide-eye-off',
+    onSelect: () => setGroupHidden(props.controlGroup.id, !props.controlGroup.hidden)
   },
   { type: 'separator' },
   {
@@ -131,7 +143,10 @@ watch(open, (value) => {
 </script>
 
 <template>
-  <UCard :ui="{ body: 'p-4 sm:p-4 space-y-4' }">
+  <UCard
+    :ui="{ body: 'p-4 sm:p-4 space-y-4' }"
+    :class="{ 'opacity-60': controlGroup.hidden }"
+  >
     <div class="flex gap-2">
       <UButton
         v-if="!editMode"
@@ -152,6 +167,19 @@ watch(open, (value) => {
         placeholder="Control Group Name"
         class="grow"
       />
+
+      <!-- Hidden groups never reach the server (see useWebsocketHost.ts's `sendControls`), so
+      this is the only place that reminds the user this group is invisible to everyone else. -->
+      <UTooltip v-if="controlGroup.hidden && !editMode">
+        <UIcon
+          name="i-lucide-eye-off"
+          class="size-6 shrink-0 self-center text-muted"
+        />
+
+        <template #content>
+          Hidden from the server and share page
+        </template>
+      </UTooltip>
 
       <UButton
         v-if="editMode"

@@ -271,6 +271,11 @@ export type CommandWithoutIds =
 export interface ControlGroup {
   id: string
   name: string
+  // Client-side only: a hidden group is never included in the `controls-update` payload sent to
+  // the server (see apps/client's useWebsocketHost.ts `sendControls`), so it stays invisible to
+  // the share page and anyone viewing it - the host app itself still shows it (dimmed) so it can
+  // be un-hidden later.
+  hidden?: boolean
   controls: ControlType[]
 }
 

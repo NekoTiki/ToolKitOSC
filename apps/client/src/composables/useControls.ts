@@ -42,12 +42,18 @@ const migrateControlGroups = (groups: ControlGroup[]): ControlGroup[] => {
 
 export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) => void): {
   controls: ComputedRef<ControlGroup[]>
+  // Same groups/controls as `controls`, minus any group marked `hidden` - what the server (and so
+  // every share-page viewer) is allowed to know about. Use this, never `controls`, for anything
+  // that leaves the host app (see useWebsocketHost.ts).
+  visibleControls: ComputedRef<ControlGroup[]>
   controlLastUser: typeof controlLastUser
   getControlLastUser: (groupId: string, controlId: string) => LastUser | undefined
   setControlLastUser: (groupId: string, controlId: string, lastUser: LastUser) => void
   addGroup: () => void
   updateGroup: (groupId: string, name: string) => void
   deleteGroup: (groupId: string) => void
+  setGroupHidden: (groupId: string, hidden: boolean) => void
+  isGroupHidden: (groupId: string) => boolean
   setGroupControls: (groupId: string, controls: ControlType[]) => void
   getControl: (groupId: string, controlId: string) => ControlType | undefined
   addControl: (groupId: string, control: ControlType) => void
@@ -103,6 +109,10 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     }))
   })
 
+  const visibleControls = computed((): ControlGroup[] => {
+    return controls.value.filter((group) => !group.hidden)
+  })
+
   const controlsMap = computed<Map<string, Map<string, ControlType>>>(() => {
     const map = new Map<string, Map<string, ControlType>>()
 
@@ -155,6 +165,20 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     controlsList.value = controls.value.filter((g) => g.id !== groupId)
 
     saveControls()
+  }
+
+  const setGroupHidden = (groupId: string, hidden: boolean): void => {
+    const group = controlsList.value.find((g) => g.id === groupId)
+
+    if (!group) return
+
+    group.hidden = hidden
+
+    saveControls()
+  }
+
+  const isGroupHidden = (groupId: string): boolean => {
+    return controlsList.value.find((g) => g.id === groupId)?.hidden ?? false
   }
 
   const getControl = (groupId: string, controlId: string): ControlType | undefined => {
@@ -320,6 +344,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
   return {
     controls,
+    visibleControls,
 
     controlLastUser,
     getControlLastUser,
@@ -328,6 +353,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     addGroup,
     updateGroup,
     deleteGroup,
+    setGroupHidden,
+    isGroupHidden,
     setGroupControls,
 
     getControl,
