@@ -1,9 +1,21 @@
 <script setup lang="ts">
 import type { IntifaceStatus } from '@renderer/composables/useIntiface'
 import { useIntiface } from '@renderer/composables/useIntiface'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
-const { status, devices } = useIntiface()
+const { status, devices, installed, launch } = useIntiface()
+
+const launching = ref(false)
+
+const launchIntiface = async (): Promise<void> => {
+  launching.value = true
+
+  try {
+    await launch()
+  } finally {
+    launching.value = false
+  }
+}
 
 const STATE_COLOR: Record<IntifaceStatus, string> = {
   connected: 'text-success',
@@ -86,6 +98,23 @@ const batteryIcon = (level: number): string => {
             </div>
           </div>
         </template>
+
+        <div
+          v-else-if="(status === 'connecting' || status === 'error') && installed"
+          class="flex flex-col gap-2"
+        >
+          <p class="text-xs text-muted">
+            Intiface Central doesn't appear to be running.
+          </p>
+          <UButton
+            size="xs"
+            icon="i-lucide-play"
+            :loading="launching"
+            @click="launchIntiface"
+          >
+            Launch Intiface Central
+          </UButton>
+        </div>
       </div>
     </template>
   </UPopover>

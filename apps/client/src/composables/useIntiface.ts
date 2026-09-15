@@ -1,3 +1,4 @@
+import { api } from '@renderer/lib/tauri-bridge'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref } from 'vue'
 
@@ -102,6 +103,11 @@ const url = ref<string>(localStorage.getItem(URL_STORAGE_KEY) || '')
 const enabled = ref<boolean>(localStorage.getItem(ENABLED_STORAGE_KEY) === 'true')
 const status = ref<IntifaceStatus>('disabled')
 const devices = ref<Map<number, IntifaceDevice>>(new Map())
+
+// Whether a local Intiface Central install was found on this machine - checked once at module
+// load (see the bottom of this file) so the "connecting"/"error" status popover can offer to
+// launch it instead of just reporting the failure.
+const installed = ref(false)
 
 const BATTERY_POLL_INTERVAL = 30000
 
@@ -294,6 +300,8 @@ export function useIntiface(): {
   status: Ref<IntifaceStatus>
   isAvailable: ComputedRef<boolean>
   devices: Ref<Map<number, IntifaceDevice>>
+  installed: Ref<boolean>
+  launch: () => Promise<void>
   setActuatorIntensity: (
     actuators: { deviceIndex: number; actuatorIndex: number; actuatorType: string }[],
     value: number
@@ -328,6 +336,17 @@ export function useIntiface(): {
   }
 
   const isAvailable = computed(() => status.value === 'connected')
+
+  // Launches the local install found by the module-load check below, then lets the normal
+  // connect()/scheduleReconnect() retry loop (already running whenever `enabled`) pick up the
+  // connection once the user starts the server inside Intiface Central - this only opens the app.
+  const launch = async (): Promise<void> => {
+    try {
+      await api.startIntifaceCentral()
+    } catch (error) {
+      console.error('Failed to launch Intiface Central:', error)
+    }
+  }
 
   // Batches per device (a single ScalarCmd targets one DeviceIndex but can carry several
   // Scalars), so a control spanning multiple toys sends one message per toy, not per actuator.
@@ -378,6 +397,8 @@ export function useIntiface(): {
     status,
     isAvailable,
     devices,
+    installed,
+    launch,
     setActuatorIntensity
   }
 }
@@ -386,3 +407,10 @@ export function useIntiface(): {
 // no-op otherwise), so `isAvailable` reflects reality before Settings is ever opened - same idea
 // as useOpenShock's auto-validate-on-load.
 connect()
+
+// Checked once at module load, same reasoning as connect() above - a filesystem check, not a
+// network one, so no retry loop is needed.
+api
+  .intifaceCentralAvailable()
+  .then((value) => (installed.value = value))
+  .catch(() => (installed.value = false))

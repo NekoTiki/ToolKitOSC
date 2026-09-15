@@ -13,6 +13,8 @@ export const api = {
   openUrl: (url: string): void => {
     void invoke('open_url', { url })
   },
+  intifaceCentralAvailable: (): Promise<boolean> => invoke('intiface_central_available'),
+  startIntifaceCentral: (): Promise<void> => invoke('start_intiface_central'),
   onOscMessage: (callback: (msg: OSCMessage) => void): void => {
     void listen<OSCMessage>('vrc-osc-message', (event) => callback(event.payload))
   },

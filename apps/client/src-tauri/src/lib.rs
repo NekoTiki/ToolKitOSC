@@ -24,7 +24,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::send_osc_message,
             commands::open_url,
-            commands::ready
+            commands::ready,
+            commands::intiface_central_available,
+            commands::start_intiface_central
         ])
         .setup(|app| {
             let handle = app.handle().clone();
