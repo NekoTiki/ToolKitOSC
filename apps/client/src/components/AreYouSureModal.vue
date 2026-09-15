@@ -21,10 +21,13 @@ const messageParts = computed<{ text: string; bold: boolean }[]>(() =>
 </script>
 
 <template>
+  <!-- z-[60]: App.vue mounts this before ClientsListSliderover, so at equal z-50 the slideover
+  (e.g. the ban confirmation triggered from ClientDetails.vue) would paint on top of this modal -
+  same reasoning as the z-[60] popovers in ClientDetails.vue. -->
   <UModal
     v-model:open="open"
-    class="z-50"
-    :ui="{ overlay: 'z-50', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
+    class="z-[60]"
+    :ui="{ overlay: 'z-[60]', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
     @after:leave="cancel"
   >
     <template #header>
