@@ -1,17 +1,21 @@
 <script setup lang="ts">
+import { useAuth } from '@renderer/composables/useAuth'
 import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { COLOR_FAMILIES, useTheme } from '@renderer/composables/useTheme'
-import { useWebsocketSettings } from '@renderer/composables/useWebsocketSettings'
+import { hostStatus } from '@renderer/composables/useWebsocketHost'
+import { isValidServerWsUrl, useWebsocketSettings } from '@renderer/composables/useWebsocketSettings'
+import _ from 'lodash'
 import { computed, ref, watch } from 'vue'
 
 const { open } = useSettingsModal()
 const { selectedPrimary, setTheme } = useTheme()
 const { clientType, setClient } = useClientType()
 const { serverWsUrl, defaultServerWsUrl, isCustom, setServerWsUrl } = useWebsocketSettings()
+const { knownServers, loggedIn } = useAuth()
 const {
   token: openShockToken,
   status: openShockStatus,
@@ -29,18 +33,79 @@ const {
   status: intifaceStatus
 } = useIntiface()
 
-// Editable draft of the WS URL: mirrors the effective URL, but only commits (and reconnects) on
-// blur/enter rather than on every keystroke.
+// Editable draft of the WS URL: mirrors the effective URL. In autocomplete mode UInputMenu fires
+// `change` on every keystroke (not just blur/enter like a plain UInput), so committing straight
+// off that event used to reconnect - and briefly fall back to the default server - on every
+// keystroke, including the moment the field was emptied mid-edit.
 const wsUrlDraft = ref(serverWsUrl.value)
+const wsUrlError = ref<string | undefined>()
+
+// Servers previously logged into, offered as suggestions when picking a server - the default is
+// always reachable via the reset button, so it's left out unless the user has actually signed
+// into it before.
+const serverSuggestions = computed(() => knownServers.value.map((url) => ({ label: url })))
 
 watch(serverWsUrl, (value) => (wsUrlDraft.value = value))
 
-const commitWsUrl = (): void => setServerWsUrl(wsUrlDraft.value)
+// Validates and, if valid, commits the draft. A blank draft (still typing, or the user cleared
+// the field) is left alone rather than falling back to the default - only an explicit reset
+// (resetWsUrl) or a valid URL changes the active server.
+const applyWsUrl = (): void => {
+  const trimmed = wsUrlDraft.value.trim()
+
+  if (!trimmed) {
+    wsUrlError.value = undefined
+    return
+  }
+
+  if (!isValidServerWsUrl(trimmed)) {
+    wsUrlError.value = 'Enter a valid ws:// or wss:// URL'
+    return
+  }
+
+  wsUrlError.value = undefined
+  setServerWsUrl(trimmed)
+}
+
+const WS_URL_COMMIT_DEBOUNCE_MS = 500
+
+// Debounced so a valid URL is committed (and reconnected to) shortly after the user stops typing,
+// without reconnecting on every keystroke.
+const debouncedApplyWsUrl = _.debounce(applyWsUrl, WS_URL_COMMIT_DEBOUNCE_MS)
+
+watch(wsUrlDraft, () => debouncedApplyWsUrl())
+
+// Enter/blur commit (or report an error) immediately instead of waiting out the debounce.
+const commitWsUrl = (): void => {
+  debouncedApplyWsUrl.cancel()
+  applyWsUrl()
+}
 
 const resetWsUrl = (): void => {
+  debouncedApplyWsUrl.cancel()
+  wsUrlError.value = undefined
   setServerWsUrl(undefined)
   wsUrlDraft.value = defaultServerWsUrl
 }
+
+// The host connection only opens once the user is signed in (see AppHeader.vue/WebSocket.vue), so
+// that's checked first - otherwise hostStatus would just be stuck reading its initial 'CLOSED'
+// forever and misreport as a failed connection rather than "not signed in yet".
+const serverStatusInfo = computed(() => {
+  if (!loggedIn.value) {
+    return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Not signed in' }
+  }
+
+  switch (hostStatus.value) {
+    case 'CONNECTING':
+      // Same reasoning as openShockStatusInfo's 'checking' case below - animate-pulse, not spin.
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted animate-pulse', label: 'Connecting…' }
+    case 'OPEN':
+      return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Connected' }
+    default:
+      return { icon: 'i-lucide-circle-x', class: 'text-error', label: 'Disconnected' }
+  }
+})
 
 // Same draft-then-commit pattern as the WS URL above: typing doesn't hit the API on every
 // keystroke, only on blur/enter, which is also when setToken() kicks off validation.
@@ -150,12 +215,20 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
             <UFormField
               label="Server URL"
               :description="isCustom ? undefined : `Using the default (${defaultServerWsUrl})`"
+              :error="wsUrlError"
             >
               <div class="flex gap-2">
-                <UInput
+                <!-- z-[60]: same reasoning as the UPopover/UDropdownMenu instances in
+                ClientDetails.vue - Nuxt UI overlays don't set their own z-index, so this would
+                otherwise render behind this modal's own z-50. -->
+                <UInputMenu
                   v-model="wsUrlDraft"
+                  mode="autocomplete"
+                  :items="serverSuggestions"
+                  value-key="label"
                   :placeholder="defaultServerWsUrl"
                   class="w-full"
+                  :ui="{ content: 'z-[60]' }"
                   @change="commitWsUrl"
                   @keyup.enter="commitWsUrl"
                   @blur="commitWsUrl"
@@ -168,6 +241,14 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
                   aria-label="Reset to default"
                   @click="resetWsUrl"
                 />
+              </div>
+              <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+                <UIcon
+                  :name="serverStatusInfo.icon"
+                  class="size-3.5"
+                  :class="serverStatusInfo.class"
+                />
+                <span :class="serverStatusInfo.class">{{ serverStatusInfo.label }}</span>
               </div>
             </UFormField>
           </div>

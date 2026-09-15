@@ -16,6 +16,16 @@ const override = ref<string | undefined>(localStorage.getItem(STORAGE_KEY) || un
 // reconnect (see vueuse's `watch(urlRef, open)`).
 export const serverWsUrl = computed<string>(() => override.value || DEFAULT_SERVER_WS_URL)
 
+export const isValidServerWsUrl = (url: string): boolean => {
+  try {
+    const protocol = new URL(url).protocol
+
+    return protocol === 'ws:' || protocol === 'wss:'
+  } catch {
+    return false
+  }
+}
+
 export function useWebsocketSettings(): {
   serverWsUrl: ComputedRef<string>
   defaultServerWsUrl: string
@@ -25,14 +35,26 @@ export function useWebsocketSettings(): {
   const isCustom = computed(() => !!override.value)
 
   const setServerWsUrl = (url?: string): void => {
-    const trimmed = url?.trim()
-
-    if (trimmed && trimmed !== DEFAULT_SERVER_WS_URL) {
-      override.value = trimmed
-      localStorage.setItem(STORAGE_KEY, trimmed)
-    } else {
+    // `undefined` is the explicit "reset to default" call (the reset button). Anything else must
+    // be a valid, non-empty ws(s):// URL to take effect - a blank or malformed value (e.g. the
+    // user is mid-edit and has momentarily cleared the field) is ignored rather than falling back
+    // to the default and forcing a reconnect.
+    if (url === undefined) {
       override.value = undefined
       localStorage.removeItem(STORAGE_KEY)
+      return
+    }
+
+    const trimmed = url.trim()
+
+    if (!trimmed || !isValidServerWsUrl(trimmed)) return
+
+    if (trimmed === DEFAULT_SERVER_WS_URL) {
+      override.value = undefined
+      localStorage.removeItem(STORAGE_KEY)
+    } else {
+      override.value = trimmed
+      localStorage.setItem(STORAGE_KEY, trimmed)
     }
   }
 

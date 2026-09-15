@@ -37,6 +37,12 @@ export type Client = {
 }
 
 export const clients = ref<Client[]>([])
+
+// Mirrors useWebSocket's own `status` at module scope, same reasoning as `clients` above: the
+// actual socket is only ever opened once (by WebSocket.vue, the only place useWebsocketHost() is
+// called), but other places - e.g. SettingsModal's server status row - need to read the current
+// connection state without opening a second connection of their own.
+export const hostStatus = ref<WebSocketStatus>('CLOSED')
 const clientsMap = computed<Record<string, Client>>(() => {
   const map: Record<string, Client> = {}
 
@@ -273,6 +279,8 @@ export function useWebsocketHost(): {
       }
     }
   })
+
+  watch(status, (value) => (hostStatus.value = value), { immediate: true })
 
   onMounted(() => open())
 
