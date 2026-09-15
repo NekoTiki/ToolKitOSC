@@ -140,7 +140,7 @@ const unavailableReason = computed(
       so it's now a plain span we render ourselves instead. -->
       <UTooltip>
         <span
-          class="handle bg-primary text-inverted flex cursor-grab items-center gap-1 rounded-full py-1 pr-3 pl-2 text-xs font-bold shadow-md transition-transform hover:scale-105 active:cursor-grabbing active:scale-95"
+          class="handle bg-primary text-inverted flex cursor-grab items-center gap-1 rounded-full py-1 pr-3 pl-2 text-xs font-bold shadow-md transition-transform select-none hover:scale-105 active:cursor-grabbing active:scale-95"
         >
           <UIcon
             name="i-lucide-grip-vertical"
@@ -154,16 +154,21 @@ const unavailableReason = computed(
         </template>
       </UTooltip>
 
-      <!-- Labeled, not icon-only, and stretched across the full width as a UButtonGroup - a
-      bigger, harder-to-mis-tap target than the small icon buttons this replaced, and the label
-      removes any doubt about which button does what while a whole grid of controls is in edit
-      mode at once. -->
-      <UButtonGroup class="w-full">
+      <!-- Labeled, not icon-only, and stretched across the full width - a bigger, harder-to-
+      mis-tap target than the small icon buttons this replaced, and the label removes any doubt
+      about which button does what while a whole grid of controls is in edit mode at once. A plain
+      flex row with a gap, not UButtonGroup - that component joins its buttons into one seamless
+      segmented control (shared edges, no gap by design), which isn't what's wanted between two
+      unrelated actions like these. `variant="subtle"` for Edit instead of `"solid"`: solid+neutral
+      inverts to a stark white pill in dark mode, too bright against this already-light
+      `bg-primary/15` scrim - Delete keeps `"solid"` since its error red doesn't have that
+      light/dark inversion problem. -->
+      <div class="flex w-full gap-2">
         <UButton
           label="Edit"
           icon="i-lucide-pen-line"
           color="neutral"
-          variant="solid"
+          variant="subtle"
           block
           class="grow"
           @click="$emit('edit', control.id)"
@@ -177,7 +182,7 @@ const unavailableReason = computed(
           class="grow"
           @click="$emit('delete', control.id)"
         />
-      </UButtonGroup>
+      </div>
     </div>
     <div
       v-if="offline"

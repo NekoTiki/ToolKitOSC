@@ -148,7 +148,7 @@ watch(open, (value) => {
       row. -->
       <UTooltip>
         <span
-          class="group-handle flex shrink-0 cursor-grab items-center rounded-lg px-1 text-muted hover:text-default"
+          class="group-handle flex shrink-0 cursor-grab items-center rounded-lg px-1 text-muted select-none hover:text-default"
         >
           <UIcon
             name="i-lucide-grip-vertical"
