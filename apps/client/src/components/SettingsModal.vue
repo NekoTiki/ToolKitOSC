@@ -222,6 +222,7 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
                   mode="autocomplete"
                   :items="serverSuggestions"
                   value-key="label"
+                  ignore-filter
                   :placeholder="defaultServerWsUrl"
                   class="w-full"
                   @change="commitWsUrl"
