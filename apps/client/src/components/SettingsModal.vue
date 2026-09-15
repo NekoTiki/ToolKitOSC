@@ -5,7 +5,10 @@ import { useClientType } from '@renderer/composables/useClientType'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
+import { useSteamVrLaunch } from '@renderer/composables/useSteamVrLaunch'
 import { COLOR_FAMILIES, useTheme } from '@renderer/composables/useTheme'
+import { useTraySettings } from '@renderer/composables/useTraySettings'
+import { useVrcxLaunch } from '@renderer/composables/useVrcxLaunch'
 import { hostStatus } from '@renderer/composables/useWebsocketHost'
 import { isValidServerWsUrl, useWebsocketSettings } from '@renderer/composables/useWebsocketSettings'
 import _ from 'lodash'
@@ -32,6 +35,21 @@ const {
   setEnabled: setIntifaceEnabled,
   status: intifaceStatus
 } = useIntiface()
+const { enabled: minimizeToTrayEnabled, setEnabled: setMinimizeToTrayEnabled } = useTraySettings()
+const {
+  enabled: steamVrEnabled,
+  setEnabled: setSteamVrEnabled,
+  status: steamVrStatus,
+  error: steamVrError,
+  available: steamVrAvailable
+} = useSteamVrLaunch()
+const {
+  enabled: vrcxEnabled,
+  setEnabled: setVrcxEnabled,
+  status: vrcxStatus,
+  error: vrcxError,
+  available: vrcxAvailable
+} = useVrcxLaunch()
 
 // Editable draft of the WS URL: mirrors the effective URL. In autocomplete mode UInputMenu fires
 // `change` on every keystroke (not just blur/enter like a plain UInput), so committing straight
@@ -162,6 +180,30 @@ const intifaceStatusInfo = computed(() => {
   }
 })
 
+const steamVrStatusInfo = computed(() => {
+  switch (steamVrStatus.value) {
+    case 'checking':
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted animate-pulse', label: 'Registering with SteamVR…' }
+    case 'enabled':
+      return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Enabled' }
+    case 'error':
+      return { icon: 'i-lucide-circle-x', class: 'text-error', label: steamVrError.value || 'Failed' }
+    default:
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Disabled' }
+  }
+})
+
+const vrcxStatusInfo = computed(() => {
+  switch (vrcxStatus.value) {
+    case 'enabled':
+      return { icon: 'i-lucide-check-circle', class: 'text-success', label: 'Enabled' }
+    case 'error':
+      return { icon: 'i-lucide-circle-x', class: 'text-error', label: vrcxError.value || 'Failed' }
+    default:
+      return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Disabled' }
+  }
+})
+
 // Config (external connections) vs. preferences (styling/who's allowed to connect) don't have much
 // to do with each other and were just piling up as one long scroll - splitting them into tabs
 // keeps each one short enough to see at a glance.
@@ -170,7 +212,8 @@ const intifaceStatusInfo = computed(() => {
 // connection.
 const settingsTabs = [
   { label: 'Preferences', icon: 'i-lucide-sliders-horizontal', slot: 'preferences' },
-  { label: 'Connections', icon: 'i-lucide-plug', slot: 'connections' }
+  { label: 'Connections', icon: 'i-lucide-plug', slot: 'connections' },
+  { label: 'Launch', icon: 'i-lucide-rocket', slot: 'launch' }
 ]
 
 const clientTypeOptions: { value: ClientType; label: string; description: string; icon: string }[] = [
@@ -408,6 +451,66 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
                 />
               </button>
             </div>
+          </div>
+
+        </template>
+
+        <template #launch>
+          <div class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold text-highlighted">
+              Launch Options
+            </h3>
+            <UFormField
+              label="Keep running in the tray"
+              description="Closing the window keeps the app running in the system tray instead of quitting it."
+            >
+              <USwitch
+                :model-value="minimizeToTrayEnabled"
+                @update:model-value="setMinimizeToTrayEnabled(!!$event)"
+              />
+            </UFormField>
+            <UFormField
+              v-if="steamVrAvailable"
+              label="Launch with SteamVR"
+              description="Registers this app with SteamVR so it starts automatically whenever SteamVR does."
+            >
+              <USwitch
+                :model-value="steamVrEnabled"
+                @update:model-value="setSteamVrEnabled(!!$event)"
+              />
+              <div
+                v-if="steamVrEnabled"
+                class="mt-1.5 flex items-center gap-1.5 text-xs"
+              >
+                <UIcon
+                  :name="steamVrStatusInfo.icon"
+                  class="size-3.5"
+                  :class="steamVrStatusInfo.class"
+                />
+                <span :class="steamVrStatusInfo.class">{{ steamVrStatusInfo.label }}</span>
+              </div>
+            </UFormField>
+            <UFormField
+              v-if="vrcxAvailable"
+              label="Launch with VRChat"
+              description="Adds this app to VRCX's Auto-Launch Folder, so it starts whenever VRChat does."
+            >
+              <USwitch
+                :model-value="vrcxEnabled"
+                @update:model-value="setVrcxEnabled(!!$event)"
+              />
+              <div
+                v-if="vrcxEnabled"
+                class="mt-1.5 flex items-center gap-1.5 text-xs"
+              >
+                <UIcon
+                  :name="vrcxStatusInfo.icon"
+                  class="size-3.5"
+                  :class="vrcxStatusInfo.class"
+                />
+                <span :class="vrcxStatusInfo.class">{{ vrcxStatusInfo.label }}</span>
+              </div>
+            </UFormField>
           </div>
         </template>
       </UTabs>

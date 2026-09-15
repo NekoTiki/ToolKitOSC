@@ -15,6 +15,15 @@ export const api = {
   },
   intifaceCentralAvailable: (): Promise<boolean> => invoke('intiface_central_available'),
   startIntifaceCentral: (): Promise<void> => invoke('start_intiface_central'),
+  steamVrAvailable: (): Promise<boolean> => invoke('steamvr_available'),
+  steamVrSetAutoLaunch: (enable: boolean): Promise<void> => invoke('steamvr_set_auto_launch', { enable }),
+  steamVrGetAutoLaunch: (): Promise<boolean> => invoke('steamvr_get_auto_launch'),
+  vrcxAvailable: (): Promise<boolean> => invoke('vrcx_available'),
+  vrcxSetAutoLaunch: (enable: boolean): Promise<void> => invoke('vrcx_set_auto_launch', { enable }),
+  vrcxGetAutoLaunch: (): Promise<boolean> => invoke('vrcx_get_auto_launch'),
+  setMinimizeToTray: (enabled: boolean): void => {
+    void invoke('set_minimize_to_tray', { enabled })
+  },
   onOscMessage: (callback: (msg: OSCMessage) => void): void => {
     void listen<OSCMessage>('vrc-osc-message', (event) => callback(event.payload))
   },

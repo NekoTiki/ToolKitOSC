@@ -2,12 +2,14 @@
 //! (src/lib/tauri-bridge.ts) wraps, matching the shape of the old Electron `window.api`.
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::Ordering;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::osc::codec;
 use crate::state::AppState;
 use crate::types::OscCommand;
+use crate::{steamvr, vrcx};
 
 #[tauri::command]
 pub fn send_osc_message(state: State<AppState>, msg: OscCommand) -> Result<(), String> {
@@ -126,6 +128,50 @@ pub fn start_intiface_central() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn steamvr_manifest_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("app.vrmanifest"))
+}
+
+#[tauri::command]
+pub fn steamvr_available() -> bool {
+    steamvr::find_openvr_api_dll().is_some()
+}
+
+#[tauri::command]
+pub fn steamvr_set_auto_launch(app: AppHandle, enable: bool) -> Result<(), String> {
+    steamvr::set_auto_launch(&steamvr_manifest_path(&app)?, enable)
+}
+
+#[tauri::command]
+pub fn steamvr_get_auto_launch(app: AppHandle) -> Result<bool, String> {
+    steamvr::get_auto_launch(&steamvr_manifest_path(&app)?)
+}
+
+#[tauri::command]
+pub fn vrcx_available() -> bool {
+    vrcx::is_vrcx_installed()
+}
+
+#[tauri::command]
+pub fn vrcx_set_auto_launch(enable: bool) -> Result<(), String> {
+    vrcx::set_auto_launch(enable)
+}
+
+#[tauri::command]
+pub fn vrcx_get_auto_launch() -> bool {
+    vrcx::get_auto_launch()
+}
+
+/// Keeps the window's native close handler (see `lib.rs`) in sync with the frontend's
+/// localStorage-backed "keep running in the tray" setting - called once at startup and on every
+/// change, since the setting itself lives in the webview, out of reach of that handler.
+#[tauri::command]
+pub fn set_minimize_to_tray(state: State<AppState>, enabled: bool) {
+    state.minimize_to_tray.store(enabled, Ordering::Relaxed);
 }
 
 /// Replays current state to a (re)connecting frontend — equivalent to the original's

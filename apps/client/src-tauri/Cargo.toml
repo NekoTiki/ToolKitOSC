@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-single-instance = "2"
@@ -26,6 +26,14 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Dynamically loads openvr_api.dll at runtime (see src/steamvr.rs) - avoids the CMake + bindgen/
+# libclang build-time toolchain the community openvr/openvr_sys crates require.
+libloading = "0.9"
+# Creates the .lnk shortcut VRCX's own "Launch with VRChat" folder watches (see src/vrcx.rs).
+mslnk = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
 
 [profile.release]
 panic = "abort"
