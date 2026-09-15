@@ -23,7 +23,16 @@ const icons = ref<SelectMenuItem[]>([
     { label: 'Bikini', ...getIconItem('temaki:bikini') },
     { label: 'Bikini Color', ...getIconItem('emojione-v1:bikini') },
     { label: 'Sock', ...getIconItem('mingcute:sock-fill') },
-    { label: 'Stocking', ...getIconItem('mdi:stocking') }
+    { label: 'Stocking', ...getIconItem('mdi:stocking') },
+    { label: 'Dress', ...getIconItem('mingcute:dress-fill') },
+    { label: 'Kimono', ...getIconItem('game-icons:kimono') },
+    { label: 'Sweater', ...getIconItem('icon-park-solid:sweater') },
+    { label: 'Coat', ...getIconItem('icon-park-outline:women-coat') },
+    { label: 'Vest', ...getIconItem('icon-park-solid:vest') },
+    { label: 'Swimsuit', ...getIconItem('icon-park-solid:swimsuit') },
+    { label: 'Onesie', ...getIconItem('icon-park-solid:onesies') },
+    { label: 'Cape', ...getIconItem('game-icons:cape') },
+    { label: 'Apron', ...getIconItem('hugeicons:apron') }
   ],
   [
     { type: 'label', label: 'Accessories' },
@@ -41,7 +50,22 @@ const icons = ref<SelectMenuItem[]>([
     { label: 'Mask', ...getIconItem('material-symbols:masks-rounded') },
     { label: 'Glasses', ...getIconItem('material-symbols:eyeglasses') },
     { label: 'Goggles', ...getIconItem('mdi:safety-googles') },
-    { label: 'Horns', ...getIconItem('i-game-icons:bull-horns') }
+    { label: 'Horns', ...getIconItem('i-game-icons:bull-horns') },
+    { label: 'Hat', ...getIconItem('icon-park-solid:hat') },
+    { label: 'Cap', ...getIconItem('hugeicons:cap') },
+    { label: 'Crown', ...getIconItem('solar:crown-bold') },
+    { label: 'Necklace', ...getIconItem('game-icons:necklace') },
+    { label: 'Earrings', ...getIconItem('game-icons:earrings') },
+    { label: 'Bandana', ...getIconItem('game-icons:bandana') },
+    { label: 'Belt', ...getIconItem('game-icons:belt') },
+    { label: 'Bow Tie', ...getIconItem('mdi:bow-tie') },
+    { label: 'Backpack', ...getIconItem('solar:backpack-bold') },
+    { label: 'Headphones', ...getIconItem('material-symbols:headphones') },
+    { label: 'Hair', ...getIconItem('mingcute:hair-fill') },
+    { label: 'Eyepatch', ...getIconItem('game-icons:eyepatch') },
+    { label: 'Chain', ...getIconItem('fa7-solid:chain') },
+    { label: 'Feather', ...getIconItem('ph:feather-fill') },
+    { label: 'Halo', ...getIconItem('icon-park-solid:halo') }
   ],
   [
     { type: 'label', label: 'Body' },
@@ -53,7 +77,16 @@ const icons = ref<SelectMenuItem[]>([
     { label: 'Feet', ...getIconItem('streamline-ultimate:medical-specialty-feet-bold') },
     { label: 'Animal Ears', ...getIconItem('emojione-monotone:cat-face') },
     { label: 'Ears', ...getIconItem('i-famicons:ear-outline') },
-    { label: 'Tail', ...getIconItem('game-icons:fox-tail') }
+    { label: 'Tail', ...getIconItem('game-icons:fox-tail') },
+    { label: 'Angel Wings', ...getIconItem('game-icons:feathered-wing') },
+    { label: 'Bat Wings', ...getIconItem('game-icons:bat-wing') },
+    { label: 'Paw', ...getIconItem('mdi:paw') },
+    { label: 'Claw', ...getIconItem('game-icons:claw') },
+    { label: 'Fangs', ...getIconItem('game-icons:fangs') },
+    { label: 'Hoof', ...getIconItem('game-icons:hoof') },
+    { label: 'Fin', ...getIconItem('mdi:shark-fin') },
+    { label: 'Mustache', ...getIconItem('game-icons:mustache') },
+    { label: 'Beard', ...getIconItem('game-icons:beard') }
   ],
   [
     { type: 'label', label: 'Others' },
@@ -62,7 +95,13 @@ const icons = ref<SelectMenuItem[]>([
     { label: 'Draw', ...getIconItem('material-symbols:draw-abstract') },
     { label: 'Makeup', ...getIconItem('icon-park-twotone:foundation-makeup') },
     { label: 'Dryer', ...getIconItem('ph:hair-dryer-fill') },
-    { label: 'Eye Blind', ...getIconItem('streamline-flex:visual-blind-1') }
+    { label: 'Eye Blind', ...getIconItem('streamline-flex:visual-blind-1') },
+    { label: 'Tattoo', ...getIconItem('temaki:tattoo-machine') },
+    { label: 'Lipstick', ...getIconItem('icon-park-solid:lipstick') },
+    { label: 'Sparkle', ...getIconItem('ph:sparkle-bold') },
+    { label: 'Flame', ...getIconItem('solar:flame-bold') },
+    { label: 'Lightning', ...getIconItem('solar:lightning-bold') },
+    { label: 'LED', ...getIconItem('icon-park-solid:led-diode') }
   ]
 ])
 
