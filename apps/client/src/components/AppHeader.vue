@@ -83,6 +83,9 @@ const items = computed(() => [
         Sign In
       </UButton>
 
+      <!-- z-20: Nuxt UI overlays don't set their own z-index by default, so without this they'd
+      render behind this header's own z-10 (its portaled content is a sibling of the header in the
+      DOM, not a descendant, so it doesn't just inherit/exceed the header's stacking level). -->
       <div class="flex items-center gap-2">
         <USelect
           v-model="currentLockedControlsGroup"
@@ -94,6 +97,7 @@ const items = computed(() => [
           :disabled="!avatarDetails?.id"
           icon="i-lucide-lock"
           class="min-w-52"
+          :ui="{ content: 'z-20' }"
         />
 
         <UButton
@@ -111,6 +115,7 @@ const items = computed(() => [
             side: 'bottom',
             sideOffset: 8
           }"
+          :ui="{ content: 'z-20' }"
         >
           <UButton
             icon="i-lucide-menu"

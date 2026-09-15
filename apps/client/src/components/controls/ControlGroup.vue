@@ -171,10 +171,13 @@ const handleCommandEvent = (controlId: string, command: CommandWithoutIds): void
         </template>
       </UTooltip>
 
+      <!-- z-20: this control group can scroll up under AppHeader.vue's sticky z-10 bar - without
+      its own explicit z-index above that, this (like every Nuxt UI overlay, none of which set one
+      by default) would render behind it instead of floating over it. -->
       <UDropdownMenu
         :items="items"
         :content="{ align: 'end', side: 'bottom', sideOffset: 8 }"
-        :ui="{ content: 'w-48' }"
+        :ui="{ content: 'w-48 z-20' }"
       >
         <UButton
           icon="i-lucide-menu"

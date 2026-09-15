@@ -28,9 +28,13 @@ defineSlots<{
 </script>
 
 <template>
+  <!-- z-20: this renders inside AppHeader.vue's sticky z-10 bar - without its own explicit
+  z-index above that, this (like every Nuxt UI overlay, none of which set one by default) would
+  render behind it instead of floating over it. -->
   <UPopover
     mode="hover"
     :content="{ align: 'center', side: 'bottom' }"
+    :ui="{ content: 'z-20' }"
   >
     <UIcon
       :name="icon"
