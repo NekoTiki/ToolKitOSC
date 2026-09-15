@@ -127,54 +127,57 @@ const unavailableReason = computed(
     </UPopover>
     <div
       v-if="edit"
-      class="absolute inset-0 z-20 flex h-full w-full cursor-pointer flex-col rounded-lg bg-black/70"
+      class="absolute inset-0 z-20 flex h-full w-full flex-col items-center justify-between gap-2 rounded-lg bg-primary/15 p-2 ring-2 ring-primary"
     >
-      <!-- A single toolbar strip along the top, not two clusters floating in opposite corners -
-      the handle and the edit/delete actions now read as one related group of "things you can do
-      to this control" instead of two unrelated overlays. The gradient fades it back into the
-      plain dark backdrop below rather than cutting off with a hard edge. -->
-      <div
-        class="flex items-center justify-between gap-1 rounded-t-lg bg-gradient-to-b from-black/50 to-transparent p-1.5"
-      >
-        <!-- The `.handle` class used to sit on UTooltip itself, forwarded onto its slotted child
-        via Reka UI's `as-child` prop-merging - fragile, since that merge target is an
-        asynchronously-rendered UIcon rather than an element guaranteed to exist as soon as this
-        renders. vue-draggable-plus's `handle: '.handle'` selector needs a real, always-present
-        node to grab, so it's now a plain span we render ourselves instead. Same grip icon as the
-        group drag handle (see ControlGroup.vue's `.group-handle`), but with explicit white tones
-        instead of that one's theme-aware `text-muted`/`text-default` tokens - this always sits on
-        the same hardcoded dark overlay, in both light and dark mode. -->
-        <UTooltip>
-          <span
-            class="handle flex cursor-grab items-center justify-center rounded-md p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white active:cursor-grabbing"
-          >
-            <UIcon
-              name="i-lucide-grip-vertical"
-              class="size-5"
-            />
-          </span>
-
-          <template #content>
-            Drag to Reorder
-          </template>
-        </UTooltip>
-
-        <div class="flex gap-1">
-          <UButton
-            icon="i-lucide-pen-line"
-            size="sm"
-            variant="subtle"
-            @click="$emit('edit', control.id)"
+      <!-- A primary-tinted scrim + ring, not a generic dark one - this reuses the same
+      "bg-primary/10 ring-primary" language ControlBase.vue already uses for its own `active`
+      state, so "editing" reads as its own distinct mode rather than a disabled/unavailable look
+      (those still use a flat black scrim - see the offline/locked/unavailable divs below). -->
+      <!-- The `.handle` class used to sit on UTooltip itself, forwarded onto its slotted child via
+      Reka UI's `as-child` prop-merging - fragile, since that merge target is an asynchronously-
+      rendered UIcon rather than an element guaranteed to exist as soon as this renders.
+      vue-draggable-plus's `handle: '.handle'` selector needs a real, always-present node to grab,
+      so it's now a plain span we render ourselves instead. -->
+      <UTooltip>
+        <span
+          class="handle bg-primary text-inverted flex cursor-grab items-center gap-1 rounded-full py-1 pr-3 pl-2 text-xs font-bold shadow-md transition-transform hover:scale-105 active:cursor-grabbing active:scale-95"
+        >
+          <UIcon
+            name="i-lucide-grip-vertical"
+            class="size-4"
           />
-          <UButton
-            icon="i-lucide-trash-2"
-            size="sm"
-            color="error"
-            variant="subtle"
-            @click="$emit('delete', control.id)"
-          />
-        </div>
-      </div>
+          Drag
+        </span>
+
+        <template #content>
+          Drag to Reorder
+        </template>
+      </UTooltip>
+
+      <!-- Labeled, not icon-only, and stretched across the full width as a UButtonGroup - a
+      bigger, harder-to-mis-tap target than the small icon buttons this replaced, and the label
+      removes any doubt about which button does what while a whole grid of controls is in edit
+      mode at once. -->
+      <UButtonGroup class="w-full">
+        <UButton
+          label="Edit"
+          icon="i-lucide-pen-line"
+          color="neutral"
+          variant="solid"
+          block
+          class="grow"
+          @click="$emit('edit', control.id)"
+        />
+        <UButton
+          label="Delete"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="solid"
+          block
+          class="grow"
+          @click="$emit('delete', control.id)"
+        />
+      </UButtonGroup>
     </div>
     <div
       v-if="offline"

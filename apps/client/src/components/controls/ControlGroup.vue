@@ -80,11 +80,6 @@ const items = computed<DropdownMenuItem[]>(() => [
     icon: 'i-lucide-plus-circle',
     onSelect: () => openModal(props.controlGroup.id)
   },
-  {
-    label: props.controlGroup.hidden ? 'Show' : 'Hide',
-    icon: props.controlGroup.hidden ? 'i-lucide-eye' : 'i-lucide-eye-off',
-    onSelect: () => setGroupHidden(props.controlGroup.id, !props.controlGroup.hidden)
-  },
   { type: 'separator' },
   {
     label: 'Delete',
@@ -186,19 +181,6 @@ watch(open, (value) => {
         class="grow"
       />
 
-      <!-- Hidden groups never reach the server (see useWebsocketHost.ts's `sendControls`), so
-      this is the only place that reminds the user this group is invisible to everyone else. -->
-      <UTooltip v-if="controlGroup.hidden && !editMode">
-        <UIcon
-          name="i-lucide-eye-off"
-          class="size-6 shrink-0 self-center text-muted"
-        />
-
-        <template #content>
-          Hidden from the server and share page
-        </template>
-      </UTooltip>
-
       <UButton
         v-if="editMode"
         color="success"
@@ -218,6 +200,22 @@ watch(open, (value) => {
 
         <template #content>
           Edit Control Group
+        </template>
+      </UTooltip>
+
+      <!-- Hidden groups never reach the server (see useWebsocketHost.ts's `sendControls`) - the
+      icon itself carries the current state (eye-off = hidden), so no separate indicator is
+      needed elsewhere; the dimmed card (see `opacity-60` above) is the only other cue. -->
+      <UTooltip>
+        <UButton
+          :icon="controlGroup.hidden ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+          color="neutral"
+          :variant="controlGroup.hidden ? 'subtle' : 'outline'"
+          @click="setGroupHidden(controlGroup.id, !controlGroup.hidden)"
+        />
+
+        <template #content>
+          {{ controlGroup.hidden ? 'Show Control Group' : 'Hide Control Group' }}
         </template>
       </UTooltip>
 
