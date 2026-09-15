@@ -3,6 +3,14 @@ export default defineNuxtConfig({
   modules: ['nuxt-auth-utils', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/eslint'],
   devtools: { enabled: true },
   css: ['~/assets/css/main.css'],
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'shortcut icon', href: '/favicon.ico' }
+      ]
+    }
+  },
   runtimeConfig: {
     session: {
       password: '',
