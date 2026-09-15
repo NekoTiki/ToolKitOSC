@@ -54,26 +54,35 @@ const header = blessed.box({
   style: { fg: 'black', bg: 'white', bold: true }
 })
 
-function makeLogBox(left) {
-  const box = blessed.log({
-    top: 1,
-    left,
-    width: '50%',
-    height: '100%-4',
-    label: ' ... ',
-    tags: true,
-    border: { type: 'line' },
-    scrollback: 5000,
-    scrollbar: { ch: ' ', track: { bg: 'grey' }, style: { inverse: true } },
-    mouse: true,
-    keys: true,
-    vi: true,
-    style: { border: { fg: 'grey' } }
+// 'lr' places the panes side by side (focus switches with ←/→), 'ud' stacks
+// them (focus switches with ↑/↓). Toggled at runtime with the 's' key.
+let splitMode = 'lr'
+
+// blessed's own keys/vi scroll bindings can't be reconfigured after the widget
+// is built, and bundle the plain up/down arrows together with j/k, g/G, etc.
+// We implement scrolling ourselves instead so the plain up/down arrows can be
+// released to switch focus once the panes are stacked (splitMode === 'ud').
+function bindScrollKeys(box) {
+  box.on('keypress', (ch, key) => {
+    if ((key.name === 'up' || key.name === 'down') && splitMode === 'ud') return
+    if (key.name === 'up' || key.name === 'k') return void (box.scroll(-1), screen.render())
+    if (key.name === 'down' || key.name === 'j') return void (box.scroll(1), screen.render())
+    if (key.ctrl && key.name === 'u') {
+      return void (box.scroll(-((box.height / 2) | 0) || -1), screen.render())
+    }
+    if (key.ctrl && key.name === 'd') {
+      return void (box.scroll((box.height / 2) | 0 || 1), screen.render())
+    }
+    if (key.ctrl && key.name === 'b') return void (box.scroll(-box.height || -1), screen.render())
+    if (key.ctrl && key.name === 'f') return void (box.scroll(box.height || 1), screen.render())
+    if (key.name === 'g' && !key.shift) return void (box.scrollTo(0), screen.render())
+    if (key.name === 'g' && key.shift) {
+      return void (box.scrollTo(box.getScrollHeight()), screen.render())
+    }
   })
 
-  // blessed's scrollable widgets only bind the plain arrow keys (and, with vi:true,
-  // ctrl+b/f, ctrl+u/d, g/G) — the literal PageUp/PageDown keys aren't wired up by
-  // default, so we bind them ourselves to a full-page scroll.
+  // The literal PageUp/PageDown keys aren't key names blessed's keypress
+  // events use directly above, so bind them separately to a full-page scroll.
   box.key(['pageup'], () => {
     box.scroll(-(box.height || 1))
     screen.render()
@@ -82,13 +91,45 @@ function makeLogBox(left) {
     box.scroll(box.height || 1)
     screen.render()
   })
+}
+
+function makeLogBox() {
+  const box = blessed.log({
+    label: ' ... ',
+    tags: true,
+    border: { type: 'line' },
+    scrollback: 5000,
+    scrollbar: { ch: ' ', track: { bg: 'grey' }, style: { inverse: true } },
+    mouse: true,
+    style: { border: { fg: 'grey' } }
+  })
+
+  bindScrollKeys(box)
 
   return box
 }
 
 const boxes = {
-  server: makeLogBox(0),
-  client: makeLogBox('50%')
+  server: makeLogBox(),
+  client: makeLogBox()
+}
+
+function setBoxLayout(box, { top, left, width, height }) {
+  box.top = top
+  box.left = left
+  box.width = width
+  box.height = height
+}
+
+function layoutBoxes() {
+  if (splitMode === 'lr') {
+    setBoxLayout(boxes.server, { top: 1, left: 0, width: '50%', height: '100%-4' })
+    setBoxLayout(boxes.client, { top: 1, left: '50%', width: '50%', height: '100%-4' })
+  } else {
+    setBoxLayout(boxes.server, { top: 1, left: 0, width: '100%', height: '50%-2' })
+    setBoxLayout(boxes.client, { top: '50%-1', left: 0, width: '100%', height: '50%-2' })
+  }
+  screen.render()
 }
 
 const footer = blessed.box({
@@ -128,9 +169,14 @@ function renderFooter() {
     })
     .join('   ')
 
+  const focusArrows = splitMode === 'lr' ? '←→' : '↑↓'
+  const scrollKeys = splitMode === 'lr' ? '↑↓ / PgUp PgDn' : 'PgUp PgDn / j k'
+  const splitLabel = splitMode === 'lr' ? 'left/right' : 'up/down'
+
   footer.setContent(
     ` {bold}[1]{/bold} restart server   {bold}[2]{/bold} restart client   {bold}[a]{/bold} restart all   ` +
-      `{bold}[←→]{/bold} switch focus   {bold}[↑↓ / PgUp PgDn]{/bold} scroll   {bold}[q]{/bold} quit\n` +
+      `{bold}[${focusArrows}]{/bold} switch focus   {bold}[${scrollKeys}]{/bold} scroll   ` +
+      `{bold}[s]{/bold} split: ${splitLabel}   {bold}[q]{/bold} quit\n` +
       ` ${statusLine}`
   )
   screen.render()
@@ -254,12 +300,32 @@ screen.key(['a'], () => {
   restartService('server')
   restartService('client')
 })
-screen.key(['left', 'right'], () => focus(focused === 'server' ? 'client' : 'server'))
+
+// The keys used to switch focus between panes follow the current split
+// orientation: ←→ when the panes sit side by side, ↑↓ when they're stacked.
+const FOCUS_KEYS = { lr: ['left', 'right'], ud: ['up', 'down'] }
+const switchFocus = () => focus(focused === 'server' ? 'client' : 'server')
+
+function bindFocusKeys() {
+  screen.key(FOCUS_KEYS[splitMode], switchFocus)
+}
+
+function toggleSplit() {
+  screen.unkey(FOCUS_KEYS[splitMode], switchFocus)
+  splitMode = splitMode === 'lr' ? 'ud' : 'lr'
+  bindFocusKeys()
+  layoutBoxes()
+  renderFooter()
+}
+
+screen.key(['s'], () => toggleSplit())
 screen.key(['q', 'C-c'], () => quit())
 
 process.on('SIGINT', quit)
 process.on('SIGTERM', quit)
 
+layoutBoxes()
+bindFocusKeys()
 updateLabel('server')
 updateLabel('client')
 renderFooter()
