@@ -88,11 +88,17 @@ const typeColor = (type: string): UiColor => CONTROL_TYPE_COLORS[type as Control
 </script>
 
 <template>
+  <!-- Every Modal/Slideover in this app defaults to the same z-30 (set globally in
+  vite.config.ts), which is normally fine since they don't overlap - but this one is opened from
+  ClientDetails.vue's "See Logs" action while ClientsListSliderover stays open behind it (unlike
+  e.g. the locked-group editor, which closes its own list first). Same reasoning and tier as
+  AreYouSureModal.vue's override: two equal z-30 overlays would fall back to DOM/mount order, so
+  this is deliberately bumped above that shared tier. -->
   <USlideover
     v-model:open="open"
     inset
     side="right"
-    class="w-full max-w-lg"
+    class="z-50 w-full max-w-lg"
   >
     <template #title>
       <div class="flex items-center gap-1.5">
