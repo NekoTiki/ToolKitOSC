@@ -1,0 +1,21 @@
+# Reference compose file for running the server image standalone.
+#
+# From the repo root:
+#   docker compose -f apps/server/docker-compose.yml build
+#   docker compose -f apps/server/docker-compose.yml up -d
+#
+# build.context points at the repo root (two levels up) because this app depends on
+# the packages/shared-ui workspace package — see apps/server/Dockerfile.
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+    # Or skip the local build and run the image published by CI instead:
+    # image: ghcr.io/nekotiki/vrc-osc-toolkit-server:latest
+    restart: always
+    container_name: vrc-osc-toolkit-server
+    env_file:
+      - .env
+    ports:
+      - '3131:3000'

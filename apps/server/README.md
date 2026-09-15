@@ -78,10 +78,18 @@ Check out the [deployment documentation](https://nuxt.com/docs/getting-started/d
 
 A multi-stage `Dockerfile` is provided for building a minimal production image using the Nitro node-server preset.
 
+This app depends on the `packages/shared-ui` workspace package, so the image **must be built
+from the monorepo root** (not from `apps/server`) so npm can resolve the workspace.
+
 ### Build Image
 ```cmd
-REM From project root
-docker build -t vrc-osc-toolkit-server:prod .
+REM From the repo root
+docker build -f apps/server/Dockerfile -t vrc-osc-toolkit-server:prod .
+```
+
+Or via the reference compose file:
+```cmd
+docker compose -f apps/server/docker-compose.yml build
 ```
 
 ### Run Container
@@ -92,18 +100,25 @@ docker run --rm -p 3000:3000 --name vrc-osc-toolkit vrc-osc-toolkit-server:prod
 Then visit: http://localhost:3000
 
 ### Environment Variables
-You can override host/port and other runtime settings:
-```cmd
-docker run --rm -e PORT=8080 -p 8080:8080 vrc-osc-toolkit-server:prod
-```
-
-If you add custom runtime env variables (e.g. OAuth secrets), pass them with `-e VAR=value` or use a file:
+Copy `.env.example` to `.env` and fill in the values, then pass it at runtime:
 ```cmd
 docker run --rm --env-file .env -p 3000:3000 vrc-osc-toolkit-server:prod
+```
+
+You can also override host/port individually:
+```cmd
+docker run --rm -e PORT=8080 -p 8080:8080 vrc-osc-toolkit-server:prod
 ```
 
 ### Healthcheck
 The image includes a basic `HEALTHCHECK` hitting `/`. For a dedicated endpoint, create an API route and adjust the Dockerfile accordingly.
 
 ### Rebuild Strategy
-The Docker build caches dependency installation using `package.json` + `package-lock.json`. When dependencies change, that layer is invalidated automatically. Source changes without dependency updates will reuse cached deps and only rebuild Nuxt.
+The Docker build caches dependency installation using every workspace's `package.json` +
+the root `package-lock.json`. When none of those change, that layer is reused and only
+the Nuxt build reruns on source changes.
+
+### CI image (GitHub Container Registry)
+`.github/workflows/build-server-image.yml` builds this Dockerfile (linux/amd64 + linux/arm64)
+and pushes it to `ghcr.io/<owner>/vrc-osc-toolkit-server` on every push to `main` that touches
+the server or its workspace dependencies, or via manual dispatch.

@@ -24,3 +24,6 @@ apps/client/src-tauri/gen
 .env
 .env.*
 !.env.example
+
+# Machine-specific server deploy script (ssh host/path baked in, not shared)
+apps/server/deploy.mjs

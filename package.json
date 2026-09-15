@@ -6,7 +6,8 @@
     "dev": "node packages/dev-cli/index.js",
     "lint": "eslint --cache .",
     "format": "prettier --write .",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "deploy": "node apps/server/deploy.mjs"
   },
   "devDependencies": {
     "eslint": "^10.9.1",

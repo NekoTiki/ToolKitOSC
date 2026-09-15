@@ -1,0 +1,44 @@
+# Docker build context excludes for the monorepo root.
+# The server image (apps/server/Dockerfile) is built from this root so it can reach
+# the packages/shared-ui workspace dependency.
+
+.git
+.gitignore
+.gitattributes
+
+**/node_modules
+
+.nuxt
+.output
+.nitro
+.data
+.cache
+**/.nuxt
+**/.output
+**/.nitro
+**/.data
+**/.cache
+
+apps/client/src-tauri/target
+apps/client/src-tauri/gen
+
+dist
+build/Output
+coverage
+
+*.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+.fleet
+
+.env
+.env.*
+!.env.example
+
+.github
