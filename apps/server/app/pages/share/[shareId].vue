@@ -110,8 +110,8 @@ onBeforeUnmount(removeTheme)
         :ui="{ root: 'h-min', body: 'p-4 sm:p-4 space-y-4' }"
       >
         <UCollapsible
+          v-model:open="useControlGroupOpen(controlGroup.id).value"
           class="flex flex-col gap-2 min-w-[90vw] sm:min-w-[456px] md:min-w-[692px]"
-          default-open
           :ui="{ content: 'overflow-visible' }"
         >
           <template #default="{ open: cOpen }">

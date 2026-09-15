@@ -9,7 +9,7 @@ import type { CommandWithoutIds, ControlGroup } from '@vrc-osc-toolkit/shared-ui
 import { Control } from '@vrc-osc-toolkit/shared-ui'
 import { from, useObservable } from '@vueuse/rxjs'
 import { liveQuery } from 'dexie'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 
 import { useControlModal } from '../../composables/useControlModal'
@@ -22,7 +22,7 @@ const { getControl, updateGroup, deleteGroup, setGroupControls, deleteControl, h
 const { openModal: ausOpenModal } = useAreYouSureModal()
 const { openModal } = useControlModal()
 
-const open = ref(true)
+const open = ref(localStorage.getItem(`controlGroupOpen_${props.controlGroup.id}`) !== 'false')
 const editMode = ref(false)
 const groupNameInput = ref<string>('')
 
@@ -124,6 +124,10 @@ const handleCommandEvent = (controlId: string, command: CommandWithoutIds): void
 
   if (control) handleCommand(control, command)
 }
+
+watch(open, (value) => {
+  localStorage.setItem(`controlGroupOpen_${props.controlGroup.id}`, String(value))
+})
 </script>
 
 <template>

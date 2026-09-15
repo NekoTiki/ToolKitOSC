@@ -2,8 +2,6 @@
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { useClientsListDrawer } from '@renderer/composables/useClientsListDrawer'
-import { useControls } from '@renderer/composables/useControls'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useLockedControlsModal } from '@renderer/composables/useLockedControlsModal'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
@@ -14,9 +12,7 @@ import { computed } from 'vue'
 const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
 const { openModal, listOpen } = useLockedControlsModal()
 const { openModal: openSettingsModal } = useSettingsModal()
-const { openDrawer: openClientsListDrawer } = useClientsListDrawer()
 const { avatarDetails } = useAvatarDetails()
-const { addGroup } = useControls()
 const { authUrl } = useWebsocketAuth()
 const { loggedIn } = useAuth()
 
@@ -25,21 +21,6 @@ const openUrl = (url: string): void => {
 }
 
 const items = computed(() => [
-  { type: 'label', label: 'Divers', icon: 'lucide:ellipsis-vertical', ui: { label: 'text-muted' } },
-  {
-    label: 'Client List',
-    icon: 'i-lucide-users',
-    onSelect: () => openClientsListDrawer()
-  },
-  { type: 'label', label: 'Control Group', icon: 'lucide:list-tree', ui: { label: 'text-muted' } },
-  {
-    label: 'Add',
-    icon: 'i-lucide-plus',
-    color: 'primary',
-    onSelect: addGroup
-  },
-  { type: 'separator' },
-  { type: 'label', label: 'Locked Controls', icon: 'i-lucide-lock', ui: { label: 'text-muted' } },
   {
     label: 'Add',
     icon: 'i-lucide-plus',
@@ -100,14 +81,6 @@ const items = computed(() => [
           :ui="{ content: 'z-20' }"
         />
 
-        <UButton
-          icon="i-lucide-settings"
-          color="neutral"
-          variant="outline"
-          aria-label="Settings"
-          @click="openSettingsModal()"
-        />
-
         <UDropdownMenu
           :items="items"
           :content="{
@@ -118,11 +91,20 @@ const items = computed(() => [
           :ui="{ content: 'z-20' }"
         >
           <UButton
-            icon="i-lucide-menu"
+            icon="i-lucide-lock"
             color="neutral"
             variant="outline"
+            aria-label="Manage Locked Control Profiles"
           />
         </UDropdownMenu>
+
+        <UButton
+          icon="i-lucide-settings"
+          color="neutral"
+          variant="outline"
+          aria-label="Settings"
+          @click="openSettingsModal()"
+        />
       </div>
     </div>
   </UCard>
