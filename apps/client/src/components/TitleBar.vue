@@ -34,7 +34,22 @@ const close = (): void => void appWindow.close()
   deliberately only wraps the logo/title section (flex-1, so it still fills all the empty space to
   the buttons' left) rather than the whole bar - putting it on a shared ancestor of the window
   control buttons risks the drag starting on their mousedown before a click can register. -->
-  <div class="flex h-9 shrink-0 items-center border-b border-default bg-default select-none">
+  <!-- relative z-50: modals/slideovers (UModal/USlideover) are teleported to the end of <body> with
+  no explicit z-index of their own, so they'd otherwise paint over this in DOM order. A positive
+  z-index here outranks their z-index:auto stacking, keeping the window controls and drag region
+  clickable even while a modal is open.
+  pointer-events-auto: a modal dialog sets `document.body.style.pointerEvents = 'none'` while open
+  (reka-ui's disableOutsidePointerEvents) and only re-enables it on the dialog content itself -
+  without overriding that inherited 'none' back to 'auto' here, this bar wouldn't even be a valid
+  click target while a modal is open, no matter its z-index.
+  @pointerdown.stop: reka-ui's Dialog treats any pointerdown that bubbles all the way up to
+  `document` as a click "outside" the modal and closes it - it doesn't matter that it visually hit
+  this bar rather than the overlay. Stopping propagation here keeps that pointerdown from ever
+  reaching `document`, without affecting the buttons' own @click handlers below. -->
+  <div
+    class="pointer-events-auto relative z-50 flex h-9 shrink-0 items-center border-b border-default bg-default select-none"
+    @pointerdown.stop
+  >
     <div
       data-tauri-drag-region
       class="flex flex-1 items-center gap-2 self-stretch pl-3 text-xs font-medium text-muted"
