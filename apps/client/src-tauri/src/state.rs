@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+use tauri::tray::TrayIcon;
 use tokio::net::UdpSocket;
 
 use crate::osc::cache::CacheThrottle;
@@ -19,7 +20,11 @@ pub struct AppState {
     /// Mirrors the frontend's "keep running in the tray" setting (persisted in the webview's own
     /// localStorage, out of reach of the window's native close handler) - kept in sync via
     /// `commands::set_minimize_to_tray`, which the frontend calls on load and on every toggle.
-    pub minimize_to_tray: AtomicBool
+    pub minimize_to_tray: AtomicBool,
+    /// The tray icon built once in `lib.rs::setup_tray`. Kept here so `commands::set_minimize_to_tray`
+    /// can show/hide it in step with the setting - the icon only earns its keep as a way back into
+    /// a window that's hidden rather than closed, so it has no reason to exist while the setting is off.
+    pub tray_icon: Mutex<Option<TrayIcon>>
 }
 
 impl Default for AppState {
@@ -29,7 +34,8 @@ impl Default for AppState {
             avatar_details: Mutex::new(None),
             cache_throttle: CacheThrottle::default(),
             sender_socket: Mutex::new(None),
-            minimize_to_tray: AtomicBool::new(false)
+            minimize_to_tray: AtomicBool::new(false),
+            tray_icon: Mutex::new(None)
         }
     }
 }

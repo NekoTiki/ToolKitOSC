@@ -15,10 +15,11 @@ use tauri::{Manager, WindowEvent};
 
 use crate::state::AppState;
 
-/// Builds the tray icon and its "Show"/"Quit" menu - present for the whole app lifetime
-/// regardless of the "keep running in the tray" setting, since that setting only changes what
-/// closing the window does, not whether a tray icon exists at all.
-fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+/// Builds the tray icon and its "Show"/"Quit" menu, built once for the whole app lifetime but
+/// hidden until `commands::set_minimize_to_tray` shows it - the icon's only purpose is as a way
+/// back into a window that's hidden instead of closed, so it should only be visible while that
+/// setting is actually on.
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<tauri::tray::TrayIcon> {
     let show = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -51,9 +52,10 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 }
             }
         })
-        .build(app)?;
-
-    Ok(())
+        .build(app)
+        .inspect(|tray| {
+            let _ = tray.set_visible(false);
+        })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -86,7 +88,8 @@ pub fn run() {
             commands::set_minimize_to_tray
         ])
         .setup(|app| {
-            setup_tray(app.handle())?;
+            let tray = setup_tray(app.handle())?;
+            *app.state::<AppState>().tray_icon.lock().unwrap() = Some(tray);
 
             if let Some(window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();

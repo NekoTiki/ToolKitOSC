@@ -166,12 +166,16 @@ pub fn vrcx_get_auto_launch() -> bool {
     vrcx::get_auto_launch()
 }
 
-/// Keeps the window's native close handler (see `lib.rs`) in sync with the frontend's
-/// localStorage-backed "keep running in the tray" setting - called once at startup and on every
-/// change, since the setting itself lives in the webview, out of reach of that handler.
+/// Keeps the window's native close handler and the tray icon (see `lib.rs`) in sync with the
+/// frontend's localStorage-backed "keep running in the tray" setting - called once at startup and
+/// on every change, since the setting itself lives in the webview, out of reach of either.
 #[tauri::command]
 pub fn set_minimize_to_tray(state: State<AppState>, enabled: bool) {
     state.minimize_to_tray.store(enabled, Ordering::Relaxed);
+
+    if let Some(tray) = state.tray_icon.lock().unwrap().as_ref() {
+        let _ = tray.set_visible(enabled);
+    }
 }
 
 /// Replays current state to a (re)connecting frontend — equivalent to the original's
