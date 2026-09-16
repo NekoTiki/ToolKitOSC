@@ -143,7 +143,14 @@ const updateSliderValue = (event: MouseEvent): void => {
     </svg>
 
     <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-      <div class="text-2xl font-medium">
+      <!-- max-w-[55%]: the ring's clear inner circle (radius 35 minus half its 12-wide stroke,
+      i.e. 29 units out of the SVG's 100-unit viewBox) only guarantees ~58% of the box's width at
+      its exact vertical center, less again this far off-center - capping the title noticeably
+      narrower than the box, rather than relying on a few pixels of padding, is what actually keeps
+      a long one from visually running under the ring instead of just stopping short of the box's
+      own edge. w-full alongside it: a flex-col child otherwise shrinks to its own content width,
+      leaving `truncate` nothing narrower than the text itself to ever clip against. -->
+      <div class="w-full max-w-[55%] truncate text-center text-2xl font-medium">
         {{ title }}
       </div>
       <div class="text-sm font-bold opacity-70">

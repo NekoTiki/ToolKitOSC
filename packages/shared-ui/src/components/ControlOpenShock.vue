@@ -108,7 +108,9 @@ watch(
     @click="$emit('run')"
   >
     <div class="flex h-full flex-col items-center justify-center gap-2 select-none">
-      <div class="text-2xl">
+      <!-- w-full: a flex-col child otherwise shrinks to its own content width, which would leave
+      `truncate` nothing narrower than the text itself to ever clip against. -->
+      <div class="w-full truncate px-2 text-center text-2xl">
         {{ title }}
       </div>
       <div class="relative min-h-0 flex-grow cursor-pointer">
