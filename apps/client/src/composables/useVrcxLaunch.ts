@@ -53,3 +53,14 @@ api
 // Unlike SteamVR's registration (which lives in a running SteamVR's own memory/config and needs
 // re-establishing every session), the shortcut this drops in VRCX's Auto-Launch Folder is plain
 // state on disk - it either exists or it doesn't, no retry-on-launch needed to keep it in sync.
+// It can still drift from the last-known `enabled` flag though (e.g. the shortcut was deleted
+// externally), so check the actual file once at load and reconcile both `enabled` and `status`
+// to match reality instead of trusting localStorage blindly.
+api
+  .vrcxGetAutoLaunch()
+  .then((value) => {
+    enabled.value = value
+    localStorage.setItem(ENABLED_STORAGE_KEY, String(value))
+    status.value = value ? 'enabled' : 'disabled'
+  })
+  .catch(() => {})
