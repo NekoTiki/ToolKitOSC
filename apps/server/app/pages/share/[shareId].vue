@@ -2,17 +2,45 @@
 import { Control } from '@vrc-osc-toolkit/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
+import type { ShareInfo } from '~~/server/api/share/[shareId].get'
 
 const shareId = useRoute().params.shareId as string
 
-useHead({
-  title: 'Shared Controls',
-  meta: [
-    {
-      name: 'description',
-      content: 'Access shared controls remotely via the provided link.'
-    }
-  ]
+// Awaited (not fire-and-forget) so `shareInfo` is already populated when the SEO meta below reads
+// it - this is what Discord's link-preview crawler (which never runs JS) actually sees, not the
+// generic fallback text a client-side-only fetch would leave in the initial HTML.
+const { data: shareInfo } = await useFetch<ShareInfo>(`/api/share/${shareId}`)
+
+const requestUrl = useRequestURL()
+const ogImageUrl = `${requestUrl.origin}/og-image.png`
+const pageUrl = `${requestUrl.origin}/share/${shareId}`
+
+const title = computed(() =>
+  shareInfo.value?.hostName ? `${shareInfo.value.hostName}'s Controls` : 'Shared Controls'
+)
+
+const description = computed(() => {
+  const info = shareInfo.value
+  const who = info?.hostName ? `${info.hostName} is` : 'This host is'
+
+  if (!info?.online) return `${who} currently offline.`
+  if (info.controlCount === 0) return `${who} online, but hasn't shared any controls yet.`
+
+  return `${who} sharing ${info.controlCount} live ${info.controlCount === 1 ? 'control' : 'controls'} - open the link to view and use them.`
+})
+
+useSeoMeta({
+  title,
+  description,
+  ogTitle: title,
+  ogDescription: description,
+  ogImage: ogImageUrl,
+  ogUrl: pageUrl,
+  ogType: 'website',
+  twitterCard: 'summary_large_image',
+  twitterTitle: title,
+  twitterDescription: description,
+  twitterImage: ogImageUrl
 })
 
 const { controlGroups, authRequired, banned, status, hostStatus, open, close, sendMessage } =
