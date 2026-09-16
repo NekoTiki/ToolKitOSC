@@ -247,7 +247,7 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
     <template #body>
       <UTabs
         :items="settingsTabs"
-        :ui="{ content: 'flex flex-col gap-6 pt-4' }"
+        :ui="{ trigger: 'flex-1 basis-0', content: 'flex flex-col gap-6 pt-4' }"
       >
         <template #connections>
           <div class="flex flex-col gap-2">
