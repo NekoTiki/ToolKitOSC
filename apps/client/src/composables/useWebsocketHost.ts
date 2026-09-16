@@ -10,7 +10,9 @@ import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
 import { getStableIp } from '@renderer/utils/stableIp'
+import type { ControlTypes } from '@vrc-osc-toolkit/shared-ui'
 import {
+  PROTOCOL_VERSION,
   useIntifaceControl,
   useIntifacePatternControl,
   useOpenShockControl
@@ -39,10 +41,24 @@ export type Client = {
 export const clients = ref<Client[]>([])
 
 // Mirrors useWebSocket's own `status` at module scope, same reasoning as `clients` above: the
-// actual socket is only ever opened once (by WebSocket.vue, the only place useWebsocketHost() is
+// actual socket is only ever opened once (by StatusBar.vue, the only place useWebsocketHost() is
 // called), but other places - e.g. SettingsModal's server status row - need to read the current
 // connection state without opening a second connection of their own.
 export const hostStatus = ref<WebSocketStatus>('CLOSED')
+// Set from auth-success/protocol-mismatch (both report the server's own version, whether or not
+// it accepted this client) so the "Server" tooltip can show a client/server version pair even
+// though a real mismatch closes the connection before `hostStatus` ever reaches 'OPEN'.
+export const serverProtocolVersion = ref<number | null>(null)
+export const protocolMismatchReason = ref<string | null>(null)
+// Every control type the connected server can currently render (from auth-success) - null until
+// then, since we don't know yet.
+export const serverSupportedControlTypes = ref<ControlTypes[] | null>(null)
+// Control types actually sent to the server (i.e. from `visibleControls`, same set `sendControls`
+// forwards - a hidden group's controls never reach the server at all, so their types can't be
+// unsupported in any way that matters) that `serverSupportedControlTypes` doesn't list - controls
+// this client can create but the connected server can't display for viewers yet. Recomputed by
+// the watch in useWebsocketHost() below.
+export const unsupportedControlTypes = ref<ControlTypes[]>([])
 const clientsMap = computed<Record<string, Client>>(() => {
   const map: Record<string, Client> = {}
 
@@ -109,6 +125,28 @@ export function useWebsocketHost(): {
     return addresses
   })
 
+  watch(
+    [visibleControls, serverSupportedControlTypes],
+    () => {
+      if (!serverSupportedControlTypes.value) {
+        unsupportedControlTypes.value = []
+        return
+      }
+
+      const supported = new Set(serverSupportedControlTypes.value)
+      const found = new Set<ControlTypes>()
+
+      visibleControls.value?.forEach((group) => {
+        group.controls.forEach((control) => {
+          if (!supported.has(control.type)) found.add(control.type)
+        })
+      })
+
+      unsupportedControlTypes.value = Array.from(found)
+    },
+    { deep: true, immediate: true }
+  )
+
   const { args } = useOscMessages((msg) => {
     if (!addressList.value.has(msg.address)) return
 
@@ -154,11 +192,27 @@ export function useWebsocketHost(): {
       )
 
       if (data.type === 'auth-success') {
+        serverProtocolVersion.value = data.message.serverVersion
+        serverSupportedControlTypes.value = data.message.supportedControlTypes
+        protocolMismatchReason.value = null
         sendControls()
         sendTheme()
       } else if (data.type === 'auth-error') {
         console.error('Authentication failed:', data.message)
         setToken(undefined)
+        close()
+      } else if (data.type === 'protocol-mismatch') {
+        console.error('Protocol mismatch:', data.message.reason)
+        serverProtocolVersion.value = data.message.serverVersion
+        protocolMismatchReason.value = data.message.reason
+        useToast().add({
+          title: 'App update required',
+          description: data.message.reason,
+          color: 'error'
+        })
+        // Not an auth problem - don't clear the token. `close()` marks the connection as
+        // explicitly closed, which stops vueuse's autoReconnect from retrying forever against a
+        // server it can never satisfy until the app is updated (mirrors auth-error above).
         close()
       } else if (data.type === 'update-username') {
         const client = clientsMap.value[data.from]
@@ -303,7 +357,7 @@ export function useWebsocketHost(): {
   }
 
   const initMessages = (): void => {
-    sendMessage('auth-token', { token: token.value })
+    sendMessage('auth-token', { token: token.value, protocolVersion: PROTOCOL_VERSION })
   }
 
   const sendControls = (): void => {

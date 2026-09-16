@@ -3,6 +3,11 @@ import jwt from 'jsonwebtoken'
 
 import type { User } from '#auth-utils'
 import type { ControlGroup, HostToServerMessage, OSCArg } from '#shared/types/protocol'
+import {
+  KNOWN_CONTROL_TYPES,
+  MIN_SUPPORTED_PROTOCOL_VERSION,
+  PROTOCOL_VERSION
+} from '#shared/types/protocol'
 import { clientList, sendToClient, sendToEveryoneInRoom } from '~~/server/routes/ws/[ws]'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
@@ -90,6 +95,28 @@ export default defineWebSocketHandler({
     const data = JSON.parse(message.text()) as HostToServerMessage
 
     if (data.type === 'auth-token') {
+      const { protocolVersion } = data.message
+
+      // Checked before the token itself: a client outside the supported range needs a clear
+      // "please update" signal, not a confusing "invalid token" (auth-error), and there's no
+      // point spending a JWT verification on a message this server won't service anyway.
+      if (
+        typeof protocolVersion !== 'number' ||
+        protocolVersion < MIN_SUPPORTED_PROTOCOL_VERSION ||
+        protocolVersion > PROTOCOL_VERSION
+      ) {
+        peer.send({
+          type: 'protocol-mismatch',
+          message: {
+            reason: `Client protocol version ${protocolVersion ?? 'unknown'} is not supported by this server (supported: ${MIN_SUPPORTED_PROTOCOL_VERSION}-${PROTOCOL_VERSION})`,
+            serverVersion: PROTOCOL_VERSION,
+            minSupportedVersion: MIN_SUPPORTED_PROTOCOL_VERSION
+          }
+        })
+        peer.close()
+        return
+      }
+
       const runtimeConfig = useRuntimeConfig()
 
       try {
@@ -98,7 +125,14 @@ export default defineWebSocketHandler({
           runtimeConfig.session.password
         ) as jwt.JwtPayload & { sub: string; user: User }
 
-        peer.send({ type: 'auth-success', message: 'Authentication successful' })
+        peer.send({
+          type: 'auth-success',
+          message: {
+            message: 'Authentication successful',
+            serverVersion: PROTOCOL_VERSION,
+            supportedControlTypes: KNOWN_CONTROL_TYPES
+          }
+        })
 
         const roomId = user.discord?.id
         const userIp = useWsIp(peer)

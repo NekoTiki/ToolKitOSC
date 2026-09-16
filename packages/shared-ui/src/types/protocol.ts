@@ -2,7 +2,7 @@
 // hand-parsed independently in useWebsocketHost.ts (client), useWebsocketClient.ts (server app),
 // and the Nitro routes server/routes/host.ts + server/routes/ws/[ws].ts. Shapes below are taken
 // directly from those call sites, not guessed.
-import type { ControlCommand, ControlGroup } from './controls'
+import type { ControlCommand, ControlGroup, ControlTypes } from './controls'
 import type { OpenShockControlValue } from './openShock'
 import type { OSCArg } from './osc'
 import type { ColorFamilyWithoutNeutral } from './theme'
@@ -10,6 +10,34 @@ import type { ColorFamilyWithoutNeutral } from './theme'
 export interface WsEnvelope<Type extends string, Message> {
   type: Type
   message: Message
+}
+
+// Bumped only when a wire-format change actually breaks compatibility (a message shape changes or
+// a required field is added/removed) — not on every feature release. The desktop client reports
+// this at auth-token time so the server (the one long-lived instance, redeployed independently of
+// any given client build - see apps/server/deploy.mjs) can tell a stale client apart from a bad
+// token, instead of silently misparsing or dropping its messages.
+export const PROTOCOL_VERSION = 1
+
+// Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
+// shim is needed for versions below it; for now (no shim exists yet) it tracks PROTOCOL_VERSION.
+export const MIN_SUPPORTED_PROTOCOL_VERSION = 1
+
+export interface ProtocolMismatchMessage {
+  reason: string
+  serverVersion: number
+  minSupportedVersion: number
+}
+
+export interface AuthSuccessMessage {
+  message: string
+  serverVersion: number
+  // Every control type this server's bundled shared-ui build currently knows how to render (see
+  // KNOWN_CONTROL_TYPES in controls.ts) - lets the client warn when a control it just created uses
+  // a type this server (and so the browser viewer page, which is served from the same build)
+  // can't display yet, without needing a full protocol-version bump/disconnect over it: the server
+  // itself doesn't care what a control's `type` is, it only stores and relays the JSON.
+  supportedControlTypes: ControlTypes[]
 }
 
 export type ClientType = 'everyone' | 'username' | 'discord'
@@ -77,7 +105,7 @@ export interface ClientListEntry {
 // (server/routes/host.ts) but the current client never sends it (it only ever sends per-address
 // `args-update`) — kept here to match what the server actually handles, not just what's used today.
 export type HostToServerMessage =
-  | WsEnvelope<'auth-token', { token: string }>
+  | WsEnvelope<'auth-token', { token: string; protocolVersion: number }>
   | WsEnvelope<'controls-update', ControlGroup[]>
   | WsEnvelope<'args-initial', Record<string, OSCArg[]>>
   | WsEnvelope<'args-update', ArgUpdateMessage>
@@ -91,8 +119,9 @@ export type HostToServerMessage =
 // Server -> desktop client, over /host. `command`/`update-username` are relays of a viewer's
 // message with a `from` (session id) field appended directly onto the envelope, not nested.
 export type ServerToHostMessage =
-  | WsEnvelope<'auth-success', string>
+  | WsEnvelope<'auth-success', AuthSuccessMessage>
   | WsEnvelope<'auth-error', string>
+  | WsEnvelope<'protocol-mismatch', ProtocolMismatchMessage>
   | (WsEnvelope<'command', ControlCommand> & { from: string })
   | (WsEnvelope<'update-username', { displayName: string }> & { from: string })
   | WsEnvelope<'client-list', ClientListEntry[]>

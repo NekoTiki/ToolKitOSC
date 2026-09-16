@@ -3,6 +3,13 @@ import type { OpenShockStatus } from '@renderer/composables/useOpenShock'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { computed } from 'vue'
 
+defineProps<{
+  // The shared anchor every header status popover positions against (see StatusBar.vue) - lets
+  // them all open with the same left edge/baseline instead of each one centering under its own
+  // icon, which sits at a different x position for each.
+  reference?: HTMLElement | null
+}>()
+
 // Not a persistent connection like Intiface (OpenShock is plain request/response HTTP), but the
 // same "icon + hover popover" treatment still applies well: a glanceable status, with the details
 // - here, the shockers found on the account - one hover away instead of only visible in Settings.
@@ -34,7 +41,8 @@ const shockerList = computed(() =>
   vite.config.ts. -->
   <UPopover
     mode="hover"
-    :content="{ align: 'center', side: 'bottom' }"
+    :reference="reference ?? undefined"
+    :content="{ align: 'start', side: 'bottom' }"
   >
     <UIcon
       name="material-symbols:electric-bolt"

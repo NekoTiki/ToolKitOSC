@@ -54,6 +54,15 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   'intiface-pattern': 'warning'
 }
 
+// Every control type this build of shared-ui's Control.vue can render - derived from
+// CONTROL_TYPE_LABELS (which the compiler already requires to have one entry per ControlTypes
+// member) instead of a separately hand-maintained list, so it can't silently drift from what
+// Control.vue's dispatch actually implements. The server reports this back to the desktop client
+// on auth-success (see AuthSuccessMessage in protocol.ts) so the client can warn when a control
+// type it just created is one the server (and therefore anyone on the browser viewer page, which
+// renders using the server's own bundled shared-ui build) can't display yet.
+export const KNOWN_CONTROL_TYPES: ControlTypes[] = Object.keys(CONTROL_TYPE_LABELS) as ControlTypes[]
+
 export interface BaseControl {
   id: string
   name: string

@@ -106,7 +106,7 @@ const resetWsUrl = (): void => {
   wsUrlDraft.value = defaultServerWsUrl
 }
 
-// The host connection only opens once the user is signed in (see AppHeader.vue/WebSocket.vue), so
+// The host connection only opens once the user is signed in (see AppHeader.vue/StatusBar.vue), so
 // that's checked first - otherwise hostStatus would just be stuck reading its initial 'CLOSED'
 // forever and misreport as a failed connection rather than "not signed in yet".
 const serverStatusInfo = computed(() => {

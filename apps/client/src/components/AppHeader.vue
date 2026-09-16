@@ -8,7 +8,7 @@ import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
-import { computed } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 
 const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
 const { openModal, listOpen } = useLockedControlsModal()
@@ -17,6 +17,10 @@ const { avatarDetails } = useAvatarDetails()
 const { authUrl } = useWebsocketAuth()
 const { user, loggedIn } = useAuth()
 const toast = useToast()
+
+// Anchor for every status popover in StatusBar.vue - passed down so they all open flush with the
+// header bar's own left edge, right below it, rather than each centering under its own icon.
+const headerBarEl = useTemplateRef('headerBarEl')
 
 const openUrl = (url: string): void => {
   api.openUrl(url)
@@ -67,12 +71,16 @@ const items = computed(() => [
       root: 'overflow-visible'
     }"
   >
-    <div class="flex items-center justify-between px-4 py-3.5">
-      <!-- Avatar details (name/id/hash) live in WebSocket.vue's OSC status popover now, not a
+    <div
+      ref="headerBarEl"
+      class="flex items-center justify-between px-4 py-3.5"
+    >
+      <!-- Avatar details (name/id/hash) live in StatusBar.vue's OSC status popover now, not a
       separate header icon. -->
-      <WebSocket
+      <StatusBar
         v-if="loggedIn"
         class="col-span-2"
+        :reference="headerBarEl"
       />
       <UButton
         v-else

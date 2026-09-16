@@ -40,6 +40,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SettingsModal: typeof import('./src/components/SettingsModal.vue')['default']
+    StatusBar: typeof import('./src/components/StatusBar.vue')['default']
     TitleBar: typeof import('./src/components/TitleBar.vue')['default']
     UAlert: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Alert.vue')['default']
     UApp: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
@@ -64,7 +65,6 @@ declare module 'vue' {
     USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
     UTabs: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tabs.vue')['default']
     UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
-    WebSocket: typeof import('./src/components/WebSocket.vue')['default']
   }
 }
 
@@ -98,6 +98,7 @@ declare global {
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
   const SettingsModal: typeof import('./src/components/SettingsModal.vue')['default']
+  const StatusBar: typeof import('./src/components/StatusBar.vue')['default']
   const TitleBar: typeof import('./src/components/TitleBar.vue')['default']
   const UAlert: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Alert.vue')['default']
   const UApp: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
@@ -122,5 +123,4 @@ declare global {
   const USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
   const UTabs: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tabs.vue')['default']
   const UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
-  const WebSocket: typeof import('./src/components/WebSocket.vue')['default']
 }

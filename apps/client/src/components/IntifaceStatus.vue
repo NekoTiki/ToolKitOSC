@@ -3,6 +3,13 @@ import type { IntifaceStatus } from '@renderer/composables/useIntiface'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { computed, ref } from 'vue'
 
+defineProps<{
+  // The shared anchor every header status popover positions against (see StatusBar.vue) - lets
+  // them all open with the same left edge/baseline instead of each one centering under its own
+  // icon, which sits at a different x position for each.
+  reference?: HTMLElement | null
+}>()
+
 const { status, devices, installed, launch } = useIntiface()
 
 const launching = ref(false)
@@ -48,7 +55,8 @@ const batteryIcon = (level: number): string => {
   override needed - see ConnectionStatus.vue's comment; it's set globally in vite.config.ts. -->
   <UPopover
     mode="hover"
-    :content="{ align: 'center', side: 'bottom' }"
+    :reference="reference ?? undefined"
+    :content="{ align: 'start', side: 'bottom' }"
   >
     <UIcon
       name="mdi:vibrate"
