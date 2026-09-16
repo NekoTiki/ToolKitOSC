@@ -96,14 +96,26 @@ onMounted(() => loadTheme())
               </p>
             </div>
 
-            <div
-              v-if="!oscConnected"
-              class="w-full space-y-1.5 rounded-md bg-elevated/50 p-3 text-left text-sm"
-            >
+            <div class="w-full space-y-1.5 rounded-md bg-elevated/50 p-3 text-left text-sm">
               <p class="font-medium">
-                How to enable OSC in VRChat
+                {{ oscConnected ? "Avatar not showing up?" : "How to enable OSC in VRChat" }}
               </p>
-              <ol class="list-decimal space-y-1 pl-5 text-muted">
+              <!-- VRChat only sends avatar info once, right as OSC is enabled - if that happened
+              before this app was listening (or the message just got missed), nothing here will
+              ever populate `avatarDetails` until OSC is toggled off and back on to resend it. -->
+              <p
+                v-if="oscConnected"
+                class="text-muted"
+              >
+                Toggle OSC off, then back on, via
+                <span class="text-default">Radial Menu → Options → OSC → Enabled</span>
+                or <span class="text-default">Settings → Avatars → OSC</span> - this makes VRChat
+                resend your avatar's info.
+              </p>
+              <ol
+                v-else
+                class="list-decimal space-y-1 pl-5 text-muted"
+              >
                 <li>Launch VRChat and load into any world.</li>
                 <li>
                   Enable OSC, either via
