@@ -3,6 +3,7 @@ import AppHeader from '@renderer/components/AppHeader.vue'
 import AreYouSureModal from '@renderer/components/AreYouSureModal.vue'
 import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
 import SettingsModal from '@renderer/components/SettingsModal.vue'
+import TitleBar from '@renderer/components/TitleBar.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
@@ -33,84 +34,88 @@ onMounted(() => loadTheme())
 
 <template>
   <UApp>
-    <div class="flex max-h-dvh flex-col gap-4 overflow-auto p-4">
-      <AppHeader />
+    <div class="flex h-dvh flex-col">
+      <TitleBar />
 
-      <div
-        v-if="ready"
-        class="flex flex-col gap-4"
-      >
-        <!-- forceFallback: same reasoning as the per-control VueDraggable inside ControlGroup.vue
-        - the native HTML5 drag API's own "not a valid drop target" cursor shows up otherwise. No
-        `group` prop here (unlike that inner one): groups don't drop into one another, only
-        reorder among themselves. -->
-        <VueDraggable
-          v-model.lazy="groups"
-          handle=".group-handle"
-          easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
-          :animation="200"
-          :force-fallback="true"
-          class="flex flex-wrap justify-center gap-4"
+      <div class="flex flex-1 flex-col gap-4 overflow-auto p-4">
+        <AppHeader />
+
+        <div
+          v-if="ready"
+          class="flex flex-col gap-4"
         >
-          <ControlGroup
-            v-for="controlGroup in groups"
-            :key="controlGroup.id"
-            :ui="{ body: 'p-4 sm:p-4 space-y-4' }"
-            :control-group="controlGroup"
-          />
-        </VueDraggable>
-
-        <div class="flex justify-center">
-          <UButton
-            icon="i-lucide-plus"
-            @click="addGroup"
+          <!-- forceFallback: same reasoning as the per-control VueDraggable inside ControlGroup.vue
+          - the native HTML5 drag API's own "not a valid drop target" cursor shows up otherwise. No
+          `group` prop here (unlike that inner one): groups don't drop into one another, only
+          reorder among themselves. -->
+          <VueDraggable
+            v-model.lazy="groups"
+            handle=".group-handle"
+            easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
+            :animation="200"
+            :force-fallback="true"
+            class="flex flex-wrap justify-center gap-4"
           >
-            Add Group
-          </UButton>
+            <ControlGroup
+              v-for="controlGroup in groups"
+              :key="controlGroup.id"
+              :ui="{ body: 'p-4 sm:p-4 space-y-4' }"
+              :control-group="controlGroup"
+            />
+          </VueDraggable>
+
+          <div class="flex justify-center">
+            <UButton
+              icon="i-lucide-plus"
+              @click="addGroup"
+            >
+              Add Group
+            </UButton>
+          </div>
         </div>
+
+        <UCard
+          v-else
+          class="mx-auto w-full max-w-lg"
+        >
+          <div class="flex flex-col items-center gap-3 py-4 text-center">
+            <UIcon
+              name="i-lucide-radio-tower"
+              class="size-10 text-muted"
+            />
+            <div>
+              <p class="font-medium">
+                {{ oscConnected ? 'Waiting for an avatar' : 'VRChat not detected' }}
+              </p>
+              <p class="text-sm text-muted">
+                {{
+                  oscConnected
+                    ? "OSC is connected, but no avatar has been detected yet. Load into a world and it'll show up here."
+                    : "No OSC data has been received yet. Make sure VRChat is running and OSC is enabled."
+                }}
+              </p>
+            </div>
+
+            <div
+              v-if="!oscConnected"
+              class="w-full space-y-1.5 rounded-md bg-elevated/50 p-3 text-left text-sm"
+            >
+              <p class="font-medium">
+                How to enable OSC in VRChat
+              </p>
+              <ol class="list-decimal space-y-1 pl-5 text-muted">
+                <li>Launch VRChat and load into any world.</li>
+                <li>
+                  Enable OSC, either via
+                  <span class="text-default">Radial Menu → Options → OSC → Enabled</span>
+                  or via
+                  <span class="text-default">Settings → Avatars → OSC</span>.
+                </li>
+              </ol>
+            </div>
+          </div>
+        </UCard>
       </div>
-
-      <UCard
-        v-else
-        class="mx-auto w-full max-w-lg"
-      >
-        <div class="flex flex-col items-center gap-3 py-4 text-center">
-          <UIcon
-            name="i-lucide-radio-tower"
-            class="size-10 text-muted"
-          />
-          <div>
-            <p class="font-medium">
-              {{ oscConnected ? 'Waiting for an avatar' : 'VRChat not detected' }}
-            </p>
-            <p class="text-sm text-muted">
-              {{
-                oscConnected
-                  ? "OSC is connected, but no avatar has been detected yet. Load into a world and it'll show up here."
-                  : "No OSC data has been received yet. Make sure VRChat is running and OSC is enabled."
-              }}
-            </p>
-          </div>
-
-          <div
-            v-if="!oscConnected"
-            class="w-full space-y-1.5 rounded-md bg-elevated/50 p-3 text-left text-sm"
-          >
-            <p class="font-medium">
-              How to enable OSC in VRChat
-            </p>
-            <ol class="list-decimal space-y-1 pl-5 text-muted">
-              <li>Launch VRChat and load into any world.</li>
-              <li>
-                Enable OSC, either via
-                <span class="text-default">Radial Menu → Options → OSC → Enabled</span>
-                or via
-                <span class="text-default">Settings → Avatars → OSC</span>.
-              </li>
-            </ol>
-          </div>
-        </div>
-      </UCard>
     </div>
     <ControlModal />
     <LockedControlGroupModal />
