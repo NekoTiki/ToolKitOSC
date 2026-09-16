@@ -34,32 +34,45 @@ const { handleCommand } = useControls()
 const { getShockers, isAvailable: openShockAvailable } = useOpenShock()
 const { devices: intifaceDevices, isAvailable: intifaceAvailable } = useIntiface()
 
-type SelectMenuItemType = SelectMenuItem & { value: ControlType['type']; disabled?: boolean }
+type SelectMenuItemType = SelectMenuItem & { value?: ControlType['type']; disabled?: boolean }
 type SelectMenuItemOpenShockMode = SelectMenuItem & { value: OpenShockControl['mode'] }
 
-// A computed (not a plain ref) so the "Open Shock" option flips back to selectable the moment a
+// A computed (not a plain ref) so the "Shocker" option flips back to selectable the moment a
 // valid API key is configured in Settings, without the user needing to reopen this modal.
-const types = computed<SelectMenuItemType[]>(() => [
-  { label: CONTROL_TYPE_LABELS.boolean, value: 'boolean' },
-  { label: CONTROL_TYPE_LABELS['boolean-group'], value: 'boolean-group' },
-  { label: CONTROL_TYPE_LABELS['boolean-enum'], value: 'boolean-enum' },
-  { label: CONTROL_TYPE_LABELS.enum, value: 'enum' },
-  { label: CONTROL_TYPE_LABELS.slider, value: 'slider' },
-  {
-    label: CONTROL_TYPE_LABELS['open-shock-shocker'],
-    value: 'open-shock-shocker',
-    disabled: !openShockAvailable.value
-  },
-  {
-    label: CONTROL_TYPE_LABELS['intiface-toy'],
-    value: 'intiface-toy',
-    disabled: !intifaceAvailable.value
-  },
-  {
-    label: CONTROL_TYPE_LABELS['intiface-pattern'],
-    value: 'intiface-pattern',
-    disabled: !intifaceAvailable.value
-  }
+// Grouped (an array of arrays, per USelect's group support) by which system each type talks to,
+// with a `label`-type item heading each group and a `separator` dividing them.
+const types = computed<SelectMenuItemType[][]>(() => [
+  [
+    { type: 'label', label: 'VRChat' },
+    { label: CONTROL_TYPE_LABELS.boolean, value: 'boolean' },
+    { label: CONTROL_TYPE_LABELS['boolean-group'], value: 'boolean-group' },
+    { label: CONTROL_TYPE_LABELS['boolean-enum'], value: 'boolean-enum' },
+    { label: CONTROL_TYPE_LABELS.enum, value: 'enum' },
+    { label: CONTROL_TYPE_LABELS.slider, value: 'slider' }
+  ],
+  [
+    { type: 'separator' },
+    { type: 'label', label: 'OpenShock' },
+    {
+      label: CONTROL_TYPE_LABELS['open-shock-shocker'],
+      value: 'open-shock-shocker',
+      disabled: !openShockAvailable.value
+    }
+  ],
+  [
+    { type: 'separator' },
+    { type: 'label', label: 'Intiface' },
+    {
+      label: CONTROL_TYPE_LABELS['intiface-toy'],
+      value: 'intiface-toy',
+      disabled: !intifaceAvailable.value
+    },
+    {
+      label: CONTROL_TYPE_LABELS['intiface-pattern'],
+      value: 'intiface-pattern',
+      disabled: !intifaceAvailable.value
+    }
+  ]
 ])
 
 const openShockMode = ref<SelectMenuItemOpenShockMode[]>([

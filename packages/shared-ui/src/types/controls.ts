@@ -32,9 +32,12 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   enum: 'Enum',
   slider: 'Slider',
   'step-enum': 'Step Enum',
-  'open-shock-shocker': 'Open Shock',
-  'intiface-toy': 'Intiface',
-  'intiface-pattern': 'Intiface Pattern'
+  // Named for what each one does rather than the integration it belongs to - the type picker
+  // already groups these under an "OpenShock"/"Intiface" heading (see ControlModal.vue), so
+  // repeating the brand name in the label itself was redundant there.
+  'open-shock-shocker': 'Shocker',
+  'intiface-toy': 'Toy',
+  'intiface-pattern': 'Toy Pattern'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
