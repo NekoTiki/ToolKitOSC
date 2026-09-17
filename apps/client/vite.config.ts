@@ -24,6 +24,16 @@ import { defineConfig } from 'vite'
 const Z_MODAL = 'z-30'
 const Z_OVERLAY = 'z-40'
 
+// TitleBar.vue's own h-9 (2.25rem) bar sits above the whole app. Slideover's `inset` variant only
+// offsets from the viewport edges (inset-y-4 = 1rem from the very top), with no awareness of that
+// bar, so a slideover's top edge lands underneath/behind it instead of starting below it. Forcing
+// the top offset here, once, fixes every slideover - current and future - instead of requiring a
+// per-usage `:ui="{ content: 'top-[3.25rem]!' }"` override each time a new one is added. `!` makes
+// it win over inset-y-4's own top regardless of Tailwind's generated CSS order; its bottom-4 (and
+// left/right-4) are untouched. Only Slideover needs this - Modal's dialogs are centered, not
+// pinned to the top edge.
+const SLIDEOVER_TOP = 'top-[3.25rem]!'
+
 // https://tauri.app/start/frontend/vite/
 export default defineConfig({
   plugins: [
@@ -31,7 +41,7 @@ export default defineConfig({
     ui({
       ui: {
         modal: { slots: { overlay: Z_MODAL, content: Z_MODAL } },
-        slideover: { slots: { overlay: Z_MODAL, content: Z_MODAL } },
+        slideover: { slots: { overlay: Z_MODAL, content: `${Z_MODAL} ${SLIDEOVER_TOP}` } },
         tooltip: { slots: { content: Z_OVERLAY } },
         popover: { slots: { content: Z_OVERLAY } },
         dropdownMenu: { slots: { content: Z_OVERLAY } },
