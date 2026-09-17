@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { ContextMenuItem } from '@nuxt/ui/components/ContextMenu.vue'
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useClientsDb } from '@renderer/composables/useClientsDb'
 import type { Client } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
-import type { CommandWithoutIds, ControlGroup } from '@vrc-osc-toolkit/shared-ui'
+import type { CommandWithoutIds, ControlGroup, ControlType } from '@vrc-osc-toolkit/shared-ui'
 import { Control } from '@vrc-osc-toolkit/shared-ui'
 import { from, useObservable } from '@vueuse/rxjs'
 import { liveQuery } from 'dexie'
@@ -113,6 +114,24 @@ const edit = (): void => {
   editMode.value = true
   groupNameInput.value = props.controlGroup.name
 }
+
+// Right-click access to the same Edit/Delete actions the edit-mode overlay already offers (see
+// Control.vue's `edit` scrim below) - lets a single control be edited/deleted without first
+// toggling the whole group into edit mode, which stays around for drag-reordering.
+const controlContextMenuItems = (control: ControlType): ContextMenuItem[] => [
+  {
+    label: 'Edit',
+    icon: 'i-lucide-pen-line',
+    onSelect: () => openModal(props.controlGroup.id, control.id)
+  },
+  { type: 'separator' },
+  {
+    label: 'Delete',
+    icon: 'i-lucide-trash-2',
+    color: 'error',
+    onSelect: () => handleDeleteControl(control.id)
+  }
+]
 
 const handleDeleteControl = async (controlId: string): Promise<void> => {
   const result = await ausOpenModal({
@@ -262,24 +281,28 @@ watch(open, (value) => {
           :force-fallback="true"
           class="grid grid-cols-[repeat(2,minmax(0,180px))] items-center justify-center-safe gap-4 sm:grid-cols-[repeat(2,minmax(0,220px))] md:grid-cols-[repeat(3,minmax(0,220px))]"
         >
-          <Control
+          <UContextMenu
             v-for="control in controls"
             :key="control.id"
-            :control="control"
-            :edit="editMode"
-            :last-user="commandsLastUser[control.id]"
-            :locked-indicator="control.locked"
-            :unavailable-indicator="control.unavailable"
-            @edit="openModal(controlGroup.id, control.id)"
-            @delete="handleDeleteControl(control.id)"
-            @command="handleCommandEvent(control.id, $event)"
+            :items="controlContextMenuItems(control)"
           >
-            <template #last-user>
-              <UCard :ui="{ body: 'p-2 sm:p-2 space-y-2' }">
-                <CommandDbTest :control-id="control.id" />
-              </UCard>
-            </template>
-          </Control>
+            <Control
+              :control="control"
+              :edit="editMode"
+              :last-user="commandsLastUser[control.id]"
+              :locked-indicator="control.locked"
+              :unavailable-indicator="control.unavailable"
+              @edit="openModal(controlGroup.id, control.id)"
+              @delete="handleDeleteControl(control.id)"
+              @command="handleCommandEvent(control.id, $event)"
+            >
+              <template #last-user>
+                <UCard :ui="{ body: 'p-2 sm:p-2 space-y-2' }">
+                  <CommandDbTest :control-id="control.id" />
+                </UCard>
+              </template>
+            </Control>
+          </UContextMenu>
         </VueDraggable>
       </template>
     </UCollapsible>

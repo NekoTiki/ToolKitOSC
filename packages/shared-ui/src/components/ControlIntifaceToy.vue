@@ -53,6 +53,10 @@ const rotationAngle = computed(() => {
 })
 
 const handleMouseDown = (event: MouseEvent): void => {
+  // button !== 0: ignore right/middle-click - a right-click is meant to open this control's
+  // context menu (see ControlGroup.vue), not jump the value to wherever it landed.
+  if (event.button !== 0) return
+
   event.preventDefault()
   isDragging.value = true
   updateSliderValue(event)
