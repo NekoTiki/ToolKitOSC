@@ -4,26 +4,28 @@ import { useExcludedParametersModal } from '@renderer/composables/useExcludedPar
 import { usePresetModal } from '@renderer/composables/usePresetModal'
 import { usePresets } from '@renderer/composables/usePresets'
 
-const { listOpen, openModal, openCreateFromCurrentState } = usePresetModal()
+const open = defineModel<boolean>('open')
+
+const { openModal } = usePresetModal()
 const { presets, deletePreset, applyPreset } = usePresets()
 const { openModal: ausOpenModal } = useAreYouSureModal()
-const { open: excludedParametersOpen } = useExcludedParametersModal()
+const { openModal: openExcludedParameters } = useExcludedParametersModal()
 
 const handleManageExcluded = (): void => {
-  excludedParametersOpen.value = true
-  listOpen.value = false
+  openExcludedParameters()
+  open.value = false
 }
 
 const toast = useToast()
 
 const handleCreate = (): void => {
-  openCreateFromCurrentState()
-  listOpen.value = false
+  openModal()
+  open.value = false
 }
 
 const handleEdit = (presetId: string): void => {
   openModal(presetId)
-  listOpen.value = false
+  open.value = false
 }
 
 const handleApply = (presetId: string): void => {
@@ -49,7 +51,7 @@ const handleRemove = async (presetId: string): Promise<void> => {
 
 <template>
   <UModal
-    v-model:open="listOpen"
+    v-model:open="open"
     :ui="{ body: 'flex flex-col max-w-lg gap-4' }"
     title="Presets"
   >

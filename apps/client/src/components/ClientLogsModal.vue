@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useClientLogsModal } from '@renderer/composables/useClientLogsModal'
+import type { LogClient } from '@renderer/composables/useClientLogsModal'
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
 import type { ControlTypes, OpenShockCommandResult, UiColor } from '@vrc-osc-toolkit/shared-ui'
@@ -8,21 +8,22 @@ import type { Subscription } from 'dexie'
 import { liveQuery } from 'dexie'
 import { onScopeDispose, ref, watch } from 'vue'
 
-const { open, client } = useClientLogsModal()
+const props = defineProps<{ client: LogClient }>()
+const open = defineModel<boolean>('open')
 
 const LOG_LIMIT = 200
 
 const logs = ref<Command[]>([])
 
 // liveQuery only re-runs its callback when the Dexie tables it touched last time change - it has
-// no idea `client` is a Vue ref, so a single long-lived subscription created at setup time would
-// never notice the selected client changing (and if it first ran while no client was selected,
-// it never even touches `db.commands`, so it would never re-run again at all). Instead, tear down
-// and recreate the subscription every time the selected client changes.
+// no idea `props.client` is reactive, so a single long-lived subscription created at setup time
+// would never re-run on its own. `client` is fixed for this component's whole lifetime in
+// practice (useOverlay mounts a fresh instance per open, see useClientLogsModal.ts), but this still
+// watches it rather than assuming that - a plain immediate watch handles both cases identically.
 let subscription: Subscription | undefined
 
 watch(
-  client,
+  () => props.client,
   (current) => {
     subscription?.unsubscribe()
 

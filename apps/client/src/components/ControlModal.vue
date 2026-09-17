@@ -10,7 +10,7 @@ import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.
 import PresetField from '@renderer/components/control-modal/PresetField.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { getUUID, useControlModal } from '@renderer/composables/useControlModal'
+import { getUUID } from '@renderer/composables/useControlModal'
 import { useControls } from '@renderer/composables/useControls'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
@@ -30,14 +30,43 @@ import type {
   StepEnumControl
 } from '@vrc-osc-toolkit/shared-ui'
 import { Control, CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
+import _ from 'lodash'
 import { computed, ref, watch } from 'vue'
 
-const { model, open, submit } = useControlModal()
+const defaultControl = (): Partial<ControlType> => ({ type: 'boolean', name: '' })
+
+const props = defineProps<{ groupId: string; controlId?: string | null }>()
+const open = defineModel<boolean>('open')
+
+const { getControl, addControl, updateControl, handleCommand } = useControls()
+
+// Snapshotted once at mount, not kept live in sync with the source control - useOverlay mounts a
+// fresh instance of this whole modal per open() (see useControlModal.ts), so there's no case where
+// `controlId` changes under an already-open instance the way the old shared-ref model had to guard
+// against with its own resetForm()/openModal() dance.
+const model = ref<Partial<ControlType>>(
+  props.controlId
+    ? (_.cloneDeep(getControl(props.groupId, props.controlId)) ?? defaultControl())
+    : defaultControl()
+)
+
 const { avatarDetails } = useAvatarDetails()
-const { handleCommand } = useControls()
 const { getShockers, isAvailable: openShockAvailable } = useOpenShock()
 const { devices: intifaceDevices, isAvailable: intifaceAvailable } = useIntiface()
 const { presets } = usePresets()
+
+const submit = (): void => {
+  const modelData = model.value
+
+  if (!modelData.id) {
+    modelData.id = getUUID()
+    addControl(props.groupId, model.value as ControlType)
+  } else {
+    updateControl(props.groupId, model.value as ControlType)
+  }
+
+  open.value = false
+}
 
 type SelectMenuItemType = SelectMenuItem & { value?: ControlType['type']; disabled?: boolean }
 type SelectMenuItemOpenShockMode = SelectMenuItem & { value: OpenShockControl['mode'] }

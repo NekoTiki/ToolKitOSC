@@ -1,9 +1,8 @@
-import { ref } from 'vue'
+import ExcludedParametersModal from '@renderer/components/ExcludedParametersModal.vue'
 
-// Just the open flag - unlike usePresetModal/useLockedControlsModal there's no form/draft model
-// here, this modal edits usePresets.ts's `excludedAddresses` directly, live, one toggle at a time.
-const open = ref(false)
+const overlay = useOverlay()
+const modal = overlay.create(ExcludedParametersModal)
 
-export function useExcludedParametersModal(): { open: typeof open } {
-  return { open }
+export function useExcludedParametersModal(): { openModal: () => void } {
+  return { openModal: () => modal.open() }
 }

@@ -1,14 +1,8 @@
-import { ref } from 'vue'
+import SettingsModal from '@renderer/components/SettingsModal.vue'
 
-const open = ref(false)
+const overlay = useOverlay()
+const modal = overlay.create(SettingsModal)
 
-export function useSettingsModal(): {
-  open: typeof open
-  openModal: () => void
-} {
-  const openModal = (): void => {
-    open.value = true
-  }
-
-  return { open, openModal }
+export function useSettingsModal(): { openModal: () => void } {
+  return { openModal: () => modal.open() }
 }

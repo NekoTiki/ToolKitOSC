@@ -2,9 +2,10 @@
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { useLockedControlGroupListModal } from '@renderer/composables/useLockedControlGroupListModal'
+import { useLockedControlGroupModal } from '@renderer/composables/useLockedControlGroupModal'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
-import { useLockedControlsModal } from '@renderer/composables/useLockedControlsModal'
-import { usePresetModal } from '@renderer/composables/usePresetModal'
+import { usePresetListModal } from '@renderer/composables/usePresetListModal'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
@@ -13,8 +14,9 @@ import { encodeShareCode } from '@vrc-osc-toolkit/shared-ui'
 import { computed, useTemplateRef } from 'vue'
 
 const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
-const { openModal, listOpen } = useLockedControlsModal()
-const { listOpen: presetListOpen } = usePresetModal()
+const { openModal } = useLockedControlGroupModal()
+const { openList: openLockedControlGroupList } = useLockedControlGroupListModal()
+const { openList: openPresetList } = usePresetListModal()
 const { openModal: openSettingsModal } = useSettingsModal()
 const { avatarDetails } = useAvatarDetails()
 const { authUrl } = useWebsocketAuth()
@@ -58,7 +60,7 @@ const items = computed(() => [
   {
     label: 'Edit',
     icon: 'i-lucide-pen',
-    onSelect: () => (listOpen.value = true)
+    onSelect: () => openLockedControlGroupList()
   }
   // Cast needed because @nuxt/ui's generated `ui` slot type (Pick<DropdownMenu['slots'], ...>)
   // requires every picked slot key, not just the ones we actually set (e.g. `label`).
@@ -132,7 +134,7 @@ const items = computed(() => [
             variant="outline"
             :disabled="!avatarDetails?.id"
             aria-label="Manage Presets"
-            @click="presetListOpen = true"
+            @click="openPresetList"
           />
 
           <template #content>

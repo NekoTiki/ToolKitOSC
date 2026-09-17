@@ -1,49 +1,31 @@
-import { ref } from 'vue'
+import AreYouSureModal from '@renderer/components/AreYouSureModal.vue'
 
-const open = ref(false)
-const callback = ref<(result: boolean) => void>()
-
-type Options = {
+export type AreYouSureOptions = {
   title: string
   message: string
   confirmText: string
   cancelText: string
 }
 
-const defaultOptions = (): Options => ({
+const defaultOptions = (): AreYouSureOptions => ({
   title: 'Are you sure?',
   message: 'This action cannot be undone.',
   confirmText: 'Confirm',
   cancelText: 'Cancel'
 })
 
-const options = ref<Options>(defaultOptions())
+// create() once at module scope - reused across every openModal() call rather than registering a
+// new overlay each time, the same singleton-instance shape every other use<Feature>Modal.ts in
+// this app follows.
+const overlay = useOverlay()
+const modal = overlay.create(AreYouSureModal)
 
 export function useAreYouSureModal(): {
-  open: typeof open
-  options: typeof options
-  openModal: (opts?: Partial<Options>) => Promise<boolean>
-  confirm: () => void
-  cancel: () => void
+  openModal: (opts?: Partial<AreYouSureOptions>) => Promise<boolean>
 } {
-  function openModal(opts?: Partial<Options>): Promise<boolean> {
-    open.value = true
-    options.value = { ...defaultOptions(), ...opts }
-
-    return new Promise((resolve) => {
-      callback.value = resolve
-    })
+  const openModal = (opts?: Partial<AreYouSureOptions>): Promise<boolean> => {
+    return modal.open({ ...defaultOptions(), ...opts }).result
   }
 
-  function confirm(): void {
-    open.value = false
-    callback.value?.(true)
-  }
-
-  function cancel(): void {
-    open.value = false
-    callback.value?.(false)
-  }
-
-  return { open, options, openModal, confirm, cancel }
+  return { openModal }
 }

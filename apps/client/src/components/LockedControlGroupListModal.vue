@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
+import { useLockedControlGroupModal } from '@renderer/composables/useLockedControlGroupModal'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
-import { useLockedControlsModal } from '@renderer/composables/useLockedControlsModal'
 
-const { listOpen, openModal } = useLockedControlsModal()
+const open = defineModel<boolean>('open')
+
+const { openModal } = useLockedControlGroupModal()
 const { lockedControlGroups, removeLockedControlGroup } = useLockedControls()
 const { openModal: ausOpenModal } = useAreYouSureModal()
 
 const handleCreate = (): void => {
   openModal()
-  listOpen.value = false
+  open.value = false
 }
 
 const handleEdit = (groupId: string): void => {
   openModal(groupId)
-  listOpen.value = false
+  open.value = false
 }
 
 const handleRemove = async (groupId: string): Promise<void> => {
@@ -35,7 +37,7 @@ const handleRemove = async (groupId: string): Promise<void> => {
 
 <template>
   <UModal
-    v-model:open="listOpen"
+    v-model:open="open"
     :ui="{ body: 'flex flex-col max-w-lg gap-4' }"
     title="Locked Control Groups"
   >

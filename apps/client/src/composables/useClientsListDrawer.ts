@@ -1,14 +1,8 @@
-import { ref } from 'vue'
+import ClientsListSliderover from '@renderer/components/ClientsListSliderover.vue'
 
-const open = ref(false)
+const overlay = useOverlay()
+const modal = overlay.create(ClientsListSliderover)
 
-export function useClientsListDrawer(): {
-  open: typeof open
-  openDrawer: () => void
-} {
-  const openDrawer = (): void => {
-    open.value = true
-  }
-
-  return { open, openDrawer }
+export function useClientsListDrawer(): { openDrawer: () => void } {
+  return { openDrawer: () => modal.open() }
 }

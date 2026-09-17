@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import type { SelectMenuItem } from '@nuxt/ui/components/SelectMenu.vue'
-import { useExcludedParametersModal } from '@renderer/composables/useExcludedParametersModal'
 import { usePresets } from '@renderer/composables/usePresets'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import { computed, ref } from 'vue'
 
-const { open } = useExcludedParametersModal()
+const open = defineModel<boolean>('open')
 const { filterableParameters, setExcluded } = usePresets()
 
 const selected = ref<string>()

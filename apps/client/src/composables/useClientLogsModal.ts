@@ -1,20 +1,11 @@
+import ClientLogsModal from '@renderer/components/ClientLogsModal.vue'
 import type { Client } from '@renderer/db/clients.db'
-import { ref } from 'vue'
 
 export type LogClient = Omit<Client, 'createdAt' | 'uniqueKey'>
 
-const open = ref(false)
-const client = ref<LogClient>()
+const overlay = useOverlay()
+const modal = overlay.create(ClientLogsModal)
 
-export function useClientLogsModal(): {
-  open: typeof open
-  client: typeof client
-  openModal: (target: LogClient) => void
-} {
-  const openModal = (target: LogClient): void => {
-    client.value = target
-    open.value = true
-  }
-
-  return { open, client, openModal }
+export function useClientLogsModal(): { openModal: (target: LogClient) => void } {
+  return { openModal: (target) => modal.open({ client: target }) }
 }

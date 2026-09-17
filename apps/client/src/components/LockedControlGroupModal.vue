@@ -1,10 +1,30 @@
 <script setup lang="ts">
 import { useControls } from '@renderer/composables/useControls'
-import { useLockedControlsModal } from '@renderer/composables/useLockedControlsModal'
+import { getUUID } from '@renderer/composables/useLockedControlGroupModal'
+import type { LockedControlGroup } from '@renderer/composables/useLockedControls'
+import { useLockedControls } from '@renderer/composables/useLockedControls'
 import type { ControlType } from '@vrc-osc-toolkit/shared-ui'
+import _ from 'lodash'
+import { ref } from 'vue'
 
-const { model, open, submit } = useLockedControlsModal()
+type LockedControlGroupData = Omit<LockedControlGroup, 'id'> &
+  Partial<Pick<LockedControlGroup, 'id'>>
+
+const defaultGroup = (): LockedControlGroupData => ({ name: '', lockedControls: {} })
+
+const props = defineProps<{ groupId?: string }>()
+const open = defineModel<boolean>('open')
+
 const { controls } = useControls()
+const { getLockedControlGroup, addLockedControlGroup, updateLockedControlGroup } =
+  useLockedControls()
+
+// Snapshotted once at mount, not kept live in sync - useOverlay mounts a fresh instance per open()
+// (see useLockedControlGroupModal.ts), so there's no case where `groupId` changes under an
+// already-open instance.
+const model = ref<LockedControlGroupData>(
+  props.groupId ? (_.cloneDeep(getLockedControlGroup(props.groupId)) ?? defaultGroup()) : defaultGroup()
+)
 
 const getIcon = (control: ControlType): string | undefined => {
   if (control.type === 'open-shock-shocker') {
@@ -13,6 +33,17 @@ const getIcon = (control: ControlType): string | undefined => {
   }
 
   return control.icon
+}
+
+const submit = (): void => {
+  const modelData = model.value
+
+  if (!modelData.id) {
+    modelData.id = getUUID()
+    addLockedControlGroup(model.value)
+  } else updateLockedControlGroup(modelData.id, model.value)
+
+  open.value = false
 }
 </script>
 

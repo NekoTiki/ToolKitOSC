@@ -1,15 +1,27 @@
 <script setup lang="ts">
-import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { computed } from 'vue'
 
-const { open, options, cancel, confirm } = useAreYouSureModal()
+const props = defineProps<{
+  title: string
+  message: string
+  confirmText: string
+  cancelText: string
+}>()
 
-// `options.message` may contain **bold** markers to call out important bits (an IP, a display
-// name, a ban scope, ...). Split into text/bold segments and interpolate as plain text nodes
-// (never v-html) - message content can ultimately trace back to a remote client's own
-// self-chosen display name, so it must never be parsed as HTML.
+// Resolves useAreYouSureModal.ts's returned promise - explicit on both buttons so it resolves the
+// instant one is clicked, not after the close transition finishes; @after:leave below is only the
+// fallback for every other way to dismiss (Escape, backdrop click, the X button) - useOverlay's own
+// close() is a no-op once the promise has already resolved once, so there's no risk of a button
+// click's `true`/`false` getting overwritten by the leave-transition's own `false`.
+const emit = defineEmits<{ close: [boolean] }>()
+const open = defineModel<boolean>('open')
+
+// `message` may contain **bold** markers to call out important bits (an IP, a display name, a ban
+// scope, ...). Split into text/bold segments and interpolate as plain text nodes (never v-html) -
+// message content can ultimately trace back to a remote client's own self-chosen display name, so
+// it must never be parsed as HTML.
 const messageParts = computed<{ text: string; bold: boolean }[]>(() =>
-  options.value.message
+  props.message
     .split(/(\*\*[^*]+\*\*)/g)
     .filter(Boolean)
     .map((part) =>
@@ -25,17 +37,17 @@ const messageParts = computed<{ text: string; bold: boolean }[]>(() =>
   vite.config.ts), which is normally fine since they don't overlap - but this one is a
   confirmation dialog that's routinely opened from INSIDE another already-open one (e.g. the ban
   confirmation triggered from ClientDetails.vue, itself inside ClientsListSliderover). Two equal
-  z-30 overlays would fall back to DOM/mount order (App.vue mounts this one first, so it would
-  lose), so this is deliberately bumped above that shared tier - and above the z-40 tooltip/
-  popover/dropdown/select tier too, so it wins even if something like that is still open. -->
+  z-30 overlays would fall back to DOM/mount order, so this is deliberately bumped above that
+  shared tier - and above the z-40 tooltip/popover/dropdown/select tier too, so it wins even if
+  something like that is still open. -->
   <UModal
     v-model:open="open"
     class="z-50"
     :ui="{ overlay: 'z-50', header: 'p-4 sm:p-4 text-lg', body: 'p-4 sm:p-4' }"
-    @after:leave="cancel"
+    @after:leave="emit('close', false)"
   >
     <template #header>
-      {{ options.title }}
+      {{ title }}
     </template>
     <template #body>
       <p class="wrap-break-word whitespace-pre-wrap">
@@ -55,15 +67,15 @@ const messageParts = computed<{ text: string; bold: boolean }[]>(() =>
         <UButton
           color="neutral"
           variant="subtle"
-          @click="cancel"
+          @click="emit('close', false)"
         >
-          {{ options.cancelText }}
+          {{ cancelText }}
         </UButton>
         <UButton
           color="error"
-          @click="confirm"
+          @click="emit('close', true)"
         >
-          {{ options.confirmText }}
+          {{ confirmText }}
         </UButton>
       </div>
     </template>

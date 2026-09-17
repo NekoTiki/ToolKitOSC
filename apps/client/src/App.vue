@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import AppHeader from '@renderer/components/AppHeader.vue'
-import AreYouSureModal from '@renderer/components/AreYouSureModal.vue'
 import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
-import ExcludedParametersModal from '@renderer/components/ExcludedParametersModal.vue'
-import PresetListModal from '@renderer/components/PresetListModal.vue'
-import PresetModal from '@renderer/components/PresetModal.vue'
-import SettingsModal from '@renderer/components/SettingsModal.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
@@ -132,16 +127,6 @@ onMounted(() => loadTheme())
         </UCard>
       </div>
     </div>
-    <ControlModal />
-    <LockedControlGroupModal />
-    <LockedControlGroupListModal />
-    <PresetModal />
-    <PresetListModal />
-    <ExcludedParametersModal />
-    <AreYouSureModal />
-    <SettingsModal />
-    <ClientsListSliderover />
-    <ClientLogsModal />
   </UApp>
 </template>
 

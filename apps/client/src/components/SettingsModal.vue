@@ -4,7 +4,6 @@ import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
-import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useSteamVrLaunch } from '@renderer/composables/useSteamVrLaunch'
 import { COLOR_FAMILIES, useTheme } from '@renderer/composables/useTheme'
 import { useTraySettings } from '@renderer/composables/useTraySettings'
@@ -14,7 +13,7 @@ import { isValidServerWsUrl, useWebsocketSettings } from '@renderer/composables/
 import _ from 'lodash'
 import { computed, ref, watch } from 'vue'
 
-const { open } = useSettingsModal()
+const open = defineModel<boolean>('open')
 const { selectedPrimary, setTheme } = useTheme()
 const { clientType, setClient } = useClientType()
 const { serverWsUrl, defaultServerWsUrl, isCustom, setServerWsUrl } = useWebsocketSettings()

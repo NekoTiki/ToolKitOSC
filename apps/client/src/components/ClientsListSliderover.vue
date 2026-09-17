@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
-import { useClientsListDrawer } from '@renderer/composables/useClientsListDrawer'
 import type { Client } from '@renderer/db/clients.db'
 import { db } from '@renderer/db/clients.db'
 import { from, useObservable } from '@vueuse/rxjs'
 import { liveQuery } from 'dexie'
 import { computed } from 'vue'
 
-const { open } = useClientsListDrawer()
+const open = defineModel<boolean>('open')
 const { onlineClients } = useClientsDb()
 const { isBanned } = useBannedClientsDb()
 const clientsObservable = from(liveQuery<Client[]>(() => db.clients.toArray()))
