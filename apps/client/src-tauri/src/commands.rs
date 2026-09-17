@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::osc::codec;
+use crate::presets::{self, PresetStore};
 use crate::state::AppState;
 use crate::types::OscCommand;
 use crate::{steamvr, vrcx};
@@ -176,6 +177,16 @@ pub fn set_minimize_to_tray(state: State<AppState>, enabled: bool) {
     if let Some(tray) = state.tray_icon.lock().unwrap().as_ref() {
         let _ = tray.set_visible(enabled);
     }
+}
+
+#[tauri::command]
+pub fn load_presets(app: AppHandle, avatar_id: String) -> Result<PresetStore, String> {
+    presets::load(&app, &avatar_id)
+}
+
+#[tauri::command]
+pub fn save_presets(app: AppHandle, avatar_id: String, store: PresetStore) -> Result<(), String> {
+    presets::save(&app, &avatar_id, &store)
 }
 
 /// Replays current state to a (re)connecting frontend — equivalent to the original's

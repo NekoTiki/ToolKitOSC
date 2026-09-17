@@ -2,6 +2,8 @@
 import AppHeader from '@renderer/components/AppHeader.vue'
 import AreYouSureModal from '@renderer/components/AreYouSureModal.vue'
 import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
+import PresetListModal from '@renderer/components/PresetListModal.vue'
+import PresetModal from '@renderer/components/PresetModal.vue'
 import SettingsModal from '@renderer/components/SettingsModal.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
@@ -132,6 +134,8 @@ onMounted(() => loadTheme())
     <ControlModal />
     <LockedControlGroupModal />
     <LockedControlGroupListModal />
+    <PresetModal />
+    <PresetListModal />
     <AreYouSureModal />
     <SettingsModal />
     <ClientsListSliderover />

@@ -4,6 +4,7 @@ import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useLockedControlsModal } from '@renderer/composables/useLockedControlsModal'
+import { usePresetModal } from '@renderer/composables/usePresetModal'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
@@ -12,6 +13,7 @@ import { computed, useTemplateRef } from 'vue'
 
 const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
 const { openModal, listOpen } = useLockedControlsModal()
+const { listOpen: presetListOpen } = usePresetModal()
 const { openModal: openSettingsModal } = useSettingsModal()
 const { avatarDetails } = useAvatarDetails()
 const { authUrl } = useWebsocketAuth()
@@ -119,6 +121,21 @@ const items = computed(() => [
             aria-label="Manage Locked Control Profiles"
           />
         </UDropdownMenu>
+
+        <UTooltip>
+          <UButton
+            icon="i-lucide-layers"
+            color="neutral"
+            variant="outline"
+            :disabled="!avatarDetails?.id"
+            aria-label="Manage Presets"
+            @click="presetListOpen = true"
+          />
+
+          <template #content>
+            Manage Avatar Presets
+          </template>
+        </UTooltip>
 
         <UTooltip v-if="loggedIn">
           <UButton

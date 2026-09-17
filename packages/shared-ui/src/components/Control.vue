@@ -9,6 +9,7 @@ import ControlEnum from './ControlEnum.vue'
 import ControlIntifacePattern from './ControlIntifacePattern.vue'
 import ControlIntifaceToy from './ControlIntifaceToy.vue'
 import ControlOpenShock from './ControlOpenShock.vue'
+import ControlPreset from './ControlPreset.vue'
 import ControlSlider from './ControlSlider.vue'
 
 type Props = {
@@ -35,7 +36,8 @@ defineEmits<{
 const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
   'open-shock-shocker': "OpenShock isn't configured",
   'intiface-toy': "Intiface isn't connected, or every toy this control targets is offline",
-  'intiface-pattern': "Intiface isn't connected, or every toy this control targets is offline"
+  'intiface-pattern': "Intiface isn't connected, or every toy this control targets is offline",
+  preset: "This preset no longer exists for the currently loaded avatar"
 }
 
 const unavailableReason = computed(
@@ -105,6 +107,12 @@ const unavailableReason = computed(
       :icon="control.icon"
       :patterns="control.allowedPatterns"
       @update:value="$emit('command', { type: 'intiface-pattern', value: $event })"
+    />
+    <control-preset
+      v-else-if="control.type === 'preset'"
+      :title="control.name"
+      :icon="control.icon"
+      @run="$emit('command', { type: 'preset' })"
     />
     <UPopover
       v-if="lastUser"

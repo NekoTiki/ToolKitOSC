@@ -2,6 +2,7 @@ mod avatar;
 mod commands;
 mod logging;
 mod osc;
+mod presets;
 mod state;
 mod steamvr;
 mod types;
@@ -85,7 +86,9 @@ pub fn run() {
             commands::vrcx_available,
             commands::vrcx_set_auto_launch,
             commands::vrcx_get_auto_launch,
-            commands::set_minimize_to_tray
+            commands::set_minimize_to_tray,
+            commands::load_presets,
+            commands::save_presets
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

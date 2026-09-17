@@ -7,12 +7,15 @@ import EnumOptionsField from '@renderer/components/control-modal/EnumOptionsFiel
 import IntifaceFields from '@renderer/components/control-modal/IntifaceFields.vue'
 import IntifacePatternFields from '@renderer/components/control-modal/IntifacePatternFields.vue'
 import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.vue'
+import PresetField from '@renderer/components/control-modal/PresetField.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { getUUID, useControlModal } from '@renderer/composables/useControlModal'
 import { useControls } from '@renderer/composables/useControls'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
+import { usePresets } from '@renderer/composables/usePresets'
+import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type {
   BooleanControl,
   BooleanEnumControl,
@@ -22,6 +25,7 @@ import type {
   IntifacePatternControl,
   IntifaceToyControl,
   OpenShockControl,
+  PresetControl,
   SliderControl,
   StepEnumControl
 } from '@vrc-osc-toolkit/shared-ui'
@@ -33,6 +37,7 @@ const { avatarDetails } = useAvatarDetails()
 const { handleCommand } = useControls()
 const { getShockers, isAvailable: openShockAvailable } = useOpenShock()
 const { devices: intifaceDevices, isAvailable: intifaceAvailable } = useIntiface()
+const { presets } = usePresets()
 
 type SelectMenuItemType = SelectMenuItem & { value?: ControlType['type']; disabled?: boolean }
 type SelectMenuItemOpenShockMode = SelectMenuItem & { value: OpenShockControl['mode'] }
@@ -72,6 +77,11 @@ const types = computed<SelectMenuItemType[][]>(() => [
       value: 'intiface-pattern',
       disabled: !intifaceAvailable.value
     }
+  ],
+  [
+    { type: 'separator' },
+    { type: 'label', label: 'Presets' },
+    { label: CONTROL_TYPE_LABELS.preset, value: 'preset', disabled: !presets.value.length }
   ]
 ])
 
@@ -138,8 +148,28 @@ const typeDefaults: Record<ControlType['type'], (m: Partial<ControlType>) => voi
 
     intifacePatternModel.actuators = []
     intifacePatternModel.allowedPatterns = []
+  },
+  preset: (m) => {
+    const presetModel = m as Partial<PresetControl>
+
+    presetModel.presetId = ''
   }
 }
+
+const presetControlId = computed<PresetControl['presetId']>({
+  get: () => (model.value as Partial<PresetControl>).presetId ?? '',
+  set: (val) => {
+    const presetModel = model.value as Partial<PresetControl>
+    const preset = presets.value.find((p) => p.id === val)
+
+    presetModel.presetId = val
+
+    // Defaults the control's own name/icon from the preset the first time one is picked, without
+    // overwriting whatever the user already typed.
+    if (preset && !model.value.name) model.value.name = preset.name
+    if (preset && !model.value.icon) model.value.icon = preset.icon
+  }
+})
 
 const modelType = computed({
   get: () => model.value.type,
@@ -150,17 +180,6 @@ const modelType = computed({
 })
 
 const showAllAddresses = ref(false)
-
-const isFilteredAddress = (name: string): boolean => {
-  if (name.startsWith('pcs/')) return true
-  if (name.startsWith('WH Lollipop/')) return true
-  if (name.startsWith('OGB/')) return true
-  if (name.startsWith('Go/')) return true
-  if (name.startsWith('FT/')) return true
-  if (/VF\d+_/.test(name)) return true
-
-  return false
-}
 
 const addresses = computed(() => {
   if (!avatarDetails.value) return []
@@ -182,7 +201,7 @@ const addresses = computed(() => {
 
       if (!typeCheck) return false
 
-      return showAllAddresses.value || !isFilteredAddress(param.name)
+      return showAllAddresses.value || !isNoisyAddress(param.name)
     })
     .map((param) => ({
       label: param.name,
@@ -431,6 +450,10 @@ watch(
               :devices="intifaceDevices"
             />
             <IntifacePatternFields v-model:allowed-patterns="intifaceAllowedPatterns" />
+          </template>
+
+          <template v-if="model.type === 'preset'">
+            <PresetField v-model="presetControlId" />
           </template>
         </UForm>
         <div class="flex flex-col justify-between gap-2">

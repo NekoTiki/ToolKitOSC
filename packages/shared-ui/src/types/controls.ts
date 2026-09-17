@@ -14,6 +14,7 @@ export type ControlTypes =
   | 'open-shock-shocker'
   | 'intiface-toy'
   | 'intiface-pattern'
+  | 'preset'
 
 // Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
 export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -37,7 +38,8 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   // repeating the brand name in the label itself was redundant there.
   'open-shock-shocker': 'Shocker',
   'intiface-toy': 'Toy',
-  'intiface-pattern': 'Toy Pattern'
+  'intiface-pattern': 'Toy Pattern',
+  preset: 'Preset'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
@@ -51,7 +53,10 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   'intiface-toy': 'success',
   // Reuses 'enum''s 'warning' - it's a chip-picker built on the exact same UX, and we're already
   // out of unique semantic colors (see the comment above).
-  'intiface-pattern': 'warning'
+  'intiface-pattern': 'warning',
+  // Reuses 'boolean-group''s 'secondary' - same reasoning, every semantic color is already spoken
+  // for by something functionally closer to it than anything left over.
+  preset: 'secondary'
 }
 
 // Every control type this build of shared-ui's Control.vue can render - derived from
@@ -196,6 +201,23 @@ export interface IntifacePatternControl extends BaseControl {
   allowedPatterns: IntifacePatternRef[]
 }
 
+// A control that applies a preset's captured parameter values in one activation - shares/exports
+// a preset the same way every other control shares/exports: it just rides along inside a
+// ControlGroup, over whatever transport already carries those (see useWebsocketHost.ts), rather
+// than needing any server-side persistence of its own. Unlike IntifaceActuatorRef above, this
+// doesn't denormalize the preset's own data onto the control: a command is only ever executed by
+// the host app that owns both the control and its avatar-scoped preset store (see
+// useControls.ts's handleCommand), so `presetId` can always be resolved live against the current
+// preset list at activation time - which also means editing the preset is instantly reflected by
+// every control pointing at it, with nothing to go stale or need re-syncing. The same live lookup
+// is what marks the control `unavailable` (see useControls.ts) once its preset no longer exists
+// for the currently loaded avatar - deleted, or the avatar was switched - the same way an
+// OpenShock/Intiface control is marked unavailable while its dependency isn't reachable.
+export interface PresetControl extends BaseControl {
+  type: 'preset'
+  presetId: string
+}
+
 export type ControlType =
   | BooleanControl
   | BooleanGroupControl
@@ -206,6 +228,7 @@ export type ControlType =
   | OpenShockControl
   | IntifaceToyControl
   | IntifacePatternControl
+  | PresetControl
 
 export interface BaseControlCommand {
   groupId: string
@@ -258,6 +281,12 @@ export interface IntifacePatternControlCommand extends BaseControlCommand {
   value: string
 }
 
+// No `value` - same shape as OpenShockControlCommand, a fire-and-forget activation. Every
+// parameter it applies is already fixed on the control itself (see PresetControl.parameters).
+export interface PresetControlCommand extends BaseControlCommand {
+  type: 'preset'
+}
+
 export type ControlCommand =
   | BooleanControlCommand
   | BooleanGroupControlCommand
@@ -268,6 +297,7 @@ export type ControlCommand =
   | OpenShockControlCommand
   | IntifaceToyControlCommand
   | IntifacePatternControlCommand
+  | PresetControlCommand
 
 export type CommandWithoutIds =
   | Omit<BooleanControlCommand, 'groupId' | 'controlId'>
@@ -279,6 +309,7 @@ export type CommandWithoutIds =
   | Omit<OpenShockControlCommand, 'groupId' | 'controlId'>
   | Omit<IntifaceToyControlCommand, 'groupId' | 'controlId'>
   | Omit<IntifacePatternControlCommand, 'groupId' | 'controlId'>
+  | Omit<PresetControlCommand, 'groupId' | 'controlId'>
 
 export interface ControlGroup {
   id: string

@@ -7,5 +7,6 @@
 export * from './controls'
 export * from './openShock'
 export * from './osc'
+export * from './presets'
 export * from './protocol'
 export * from './theme'

@@ -5,6 +5,7 @@ import { useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
+import { usePresets } from '@renderer/composables/usePresets'
 import type {
   BooleanEnumControl,
   CommandWithoutIds,
@@ -83,6 +84,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { setValue: setIntifaceValue } = useIntifaceControl()
   const { playPattern, releaseActuators } = useIntifacePatterns()
   const { update } = useOscMessages()
+  const { getPreset } = usePresets()
 
   const controls = computed((): ControlGroup[] => {
     return controlsList.value.map((controlGroup) => ({
@@ -105,7 +107,9 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
                 control.actuators.every(
                   (actuator) => !intifaceDevices.value.has(actuator.deviceIndex)
                 )
-              : false
+              : control.type === 'preset'
+                ? !getPreset(control.presetId)
+                : false
       }))
     }))
   })
@@ -339,6 +343,10 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       if (!intifaceAvailable.value) return undefined
 
       playPattern(control.id, command.value, control.actuators)
+    } else if (command.type === 'preset' && control?.type === 'preset') {
+      const preset = getPreset(control.presetId)
+
+      preset?.parameters.forEach((param) => update({ address: param.address, args: [param.value] }))
     }
 
     return undefined

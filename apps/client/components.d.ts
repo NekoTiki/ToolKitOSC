@@ -12,6 +12,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AddParameterField: typeof import('./src/components/preset-modal/AddParameterField.vue')['default']
     AddressField: typeof import('./src/components/control-modal/AddressField.vue')['default']
     AddressListEditor: typeof import('./src/components/control-modal/AddressListEditor.vue')['default']
     AddressListToggle: typeof import('./src/components/control-modal/AddressListToggle.vue')['default']
@@ -27,6 +28,7 @@ declare module 'vue' {
     ConnectionStatus: typeof import('./src/components/ConnectionStatus.vue')['default']
     ControlGroup: typeof import('./src/components/controls/ControlGroup.vue')['default']
     ControlModal: typeof import('./src/components/ControlModal.vue')['default']
+    CoverageBanner: typeof import('./src/components/preset-modal/CoverageBanner.vue')['default']
     EnumOptionsField: typeof import('./src/components/control-modal/EnumOptionsField.vue')['default']
     IconSelectMenu: typeof import('./src/components/IconSelectMenu.vue')['default']
     IntifaceFields: typeof import('./src/components/control-modal/IntifaceFields.vue')['default']
@@ -37,6 +39,10 @@ declare module 'vue' {
     OpenShockFields: typeof import('./src/components/control-modal/OpenShockFields.vue')['default']
     OpenShockStatus: typeof import('./src/components/OpenShockStatus.vue')['default']
     OscArgsTable: typeof import('./src/components/OscArgsTable.vue')['default']
+    ParameterRow: typeof import('./src/components/preset-modal/ParameterRow.vue')['default']
+    PresetField: typeof import('./src/components/control-modal/PresetField.vue')['default']
+    PresetListModal: typeof import('./src/components/PresetListModal.vue')['default']
+    PresetModal: typeof import('./src/components/PresetModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SettingsModal: typeof import('./src/components/SettingsModal.vue')['default']
@@ -70,6 +76,7 @@ declare module 'vue' {
 
 // For TSX support
 declare global {
+  const AddParameterField: typeof import('./src/components/preset-modal/AddParameterField.vue')['default']
   const AddressField: typeof import('./src/components/control-modal/AddressField.vue')['default']
   const AddressListEditor: typeof import('./src/components/control-modal/AddressListEditor.vue')['default']
   const AddressListToggle: typeof import('./src/components/control-modal/AddressListToggle.vue')['default']
@@ -85,6 +92,7 @@ declare global {
   const ConnectionStatus: typeof import('./src/components/ConnectionStatus.vue')['default']
   const ControlGroup: typeof import('./src/components/controls/ControlGroup.vue')['default']
   const ControlModal: typeof import('./src/components/ControlModal.vue')['default']
+  const CoverageBanner: typeof import('./src/components/preset-modal/CoverageBanner.vue')['default']
   const EnumOptionsField: typeof import('./src/components/control-modal/EnumOptionsField.vue')['default']
   const IconSelectMenu: typeof import('./src/components/IconSelectMenu.vue')['default']
   const IntifaceFields: typeof import('./src/components/control-modal/IntifaceFields.vue')['default']
@@ -95,6 +103,10 @@ declare global {
   const OpenShockFields: typeof import('./src/components/control-modal/OpenShockFields.vue')['default']
   const OpenShockStatus: typeof import('./src/components/OpenShockStatus.vue')['default']
   const OscArgsTable: typeof import('./src/components/OscArgsTable.vue')['default']
+  const ParameterRow: typeof import('./src/components/preset-modal/ParameterRow.vue')['default']
+  const PresetField: typeof import('./src/components/control-modal/PresetField.vue')['default']
+  const PresetListModal: typeof import('./src/components/PresetListModal.vue')['default']
+  const PresetModal: typeof import('./src/components/PresetModal.vue')['default']
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
   const SettingsModal: typeof import('./src/components/SettingsModal.vue')['default']

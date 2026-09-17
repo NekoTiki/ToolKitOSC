@@ -4,7 +4,7 @@
 // apps/client's entry in the monorepo plan for the reasoning.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AvatarDetails, OscCommand, OSCMessage } from '@vrc-osc-toolkit/shared-ui'
+import type { AvatarDetails, OscCommand, OSCMessage, PresetStore } from '@vrc-osc-toolkit/shared-ui'
 
 export const api = {
   ready: (): void => {
@@ -35,7 +35,10 @@ export const api = {
   },
   onAvatarDetails: (callback: (details: AvatarDetails) => void): void => {
     void listen<AvatarDetails>('vrc-avatar-details', (event) => callback(event.payload))
-  }
+  },
+  loadPresets: (avatarId: string): Promise<PresetStore> => invoke('load_presets', { avatarId }),
+  savePresets: (avatarId: string, store: PresetStore): Promise<void> =>
+    invoke('save_presets', { avatarId, store })
 }
 
 export type TauriApiType = typeof api
