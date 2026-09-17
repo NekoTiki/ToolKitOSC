@@ -2,6 +2,7 @@
 import AppHeader from '@renderer/components/AppHeader.vue'
 import AreYouSureModal from '@renderer/components/AreYouSureModal.vue'
 import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
+import ExcludedParametersModal from '@renderer/components/ExcludedParametersModal.vue'
 import PresetListModal from '@renderer/components/PresetListModal.vue'
 import PresetModal from '@renderer/components/PresetModal.vue'
 import SettingsModal from '@renderer/components/SettingsModal.vue'
@@ -136,6 +137,7 @@ onMounted(() => loadTheme())
     <LockedControlGroupListModal />
     <PresetModal />
     <PresetListModal />
+    <ExcludedParametersModal />
     <AreYouSureModal />
     <SettingsModal />
     <ClientsListSliderover />

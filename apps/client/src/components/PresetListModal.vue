@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
+import { useExcludedParametersModal } from '@renderer/composables/useExcludedParametersModal'
 import { usePresetModal } from '@renderer/composables/usePresetModal'
 import { usePresets } from '@renderer/composables/usePresets'
 
 const { listOpen, openModal, openCreateFromCurrentState } = usePresetModal()
 const { presets, deletePreset, applyPreset } = usePresets()
 const { openModal: ausOpenModal } = useAreYouSureModal()
+const { open: excludedParametersOpen } = useExcludedParametersModal()
+
+const handleManageExcluded = (): void => {
+  excludedParametersOpen.value = true
+  listOpen.value = false
+}
 
 const toast = useToast()
 
@@ -55,14 +62,28 @@ const handleRemove = async (presetId: string): Promise<void> => {
           v-else
           class="text-sm text-muted"
         >{{ presets.length }} preset(s)</span>
-        <UButton
-          color="primary"
-          variant="subtle"
-          icon="i-lucide-camera"
-          @click="handleCreate"
-        >
-          Create from Current State
-        </UButton>
+        <div class="flex shrink-0 gap-2">
+          <UTooltip>
+            <UButton
+              icon="i-lucide-eye-off"
+              color="neutral"
+              variant="subtle"
+              @click="handleManageExcluded"
+            />
+
+            <template #content>
+              Manage Excluded Parameters
+            </template>
+          </UTooltip>
+          <UButton
+            color="primary"
+            variant="subtle"
+            icon="i-lucide-camera"
+            @click="handleCreate"
+          >
+            Create from Current State
+          </UButton>
+        </div>
       </div>
       <UCard
         v-for="preset in presets"
