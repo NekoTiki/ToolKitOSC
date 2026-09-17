@@ -11,3 +11,42 @@ html,
 body {
   max-height: 100dvh !important;
 }
+
+/* Themed scrollbars, everywhere - a plain track/thumb using Nuxt UI's own CSS variables
+   (--ui-border-accented, --ui-color-primary) instead of the OS/browser default, so they already
+   follow light/dark mode and the user's chosen primary color (see useTheme.ts's applyThemeColor)
+   with nothing further to keep in sync here.
+
+   Firefox + modern Chromium/WebView2 support `scrollbar-color` natively; :root is enough since
+   it's an inherited property. Older WebKit (this app's macOS build targets safari13 - see
+   vite.config.ts) needs the ::-webkit-scrollbar pseudo-elements instead, which don't inherit, so
+   they're declared on `*` to cover every scrollable element (UScrollArea included - it's still a
+   plain `overflow-y-auto` div under the hood, see packages/shared-ui). */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-border-accented) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--ui-border-accented);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ui-color-primary);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
