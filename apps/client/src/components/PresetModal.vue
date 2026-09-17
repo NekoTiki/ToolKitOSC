@@ -125,21 +125,31 @@ const submit = (): void => {
               </UButton>
             </div>
 
-            <div class="flex max-h-80 flex-col gap-2 overflow-y-auto">
-              <ParameterRow
-                v-for="(parameter, index) in model.parameters"
-                :key="parameter.address"
-                v-model="model.parameters[index]"
-                @remove="removeParameter(parameter.address)"
-              />
-
-              <p
-                v-if="!model.parameters.length"
-                class="text-sm text-muted"
-              >
-                No parameters yet - use "Capture Current State" or add one manually below.
-              </p>
-            </div>
+            <p
+              v-if="!model.parameters.length"
+              class="text-sm text-muted"
+            >
+              No parameters yet - use "Capture Current State" or add one manually below.
+            </p>
+            <!-- virtualize: a preset can hold anywhere from a handful of parameters up to
+            every one an avatar declares, so this is rendered the same way the noisy-parameter
+            list (ExcludedParametersModal.vue) handles a potentially long list. Row spacing comes
+            from the item slot's own padding (`pb-2 last:pb-0`), not a viewport `gap` - virtualized
+            rows are absolutely positioned, which a flex gap has no effect on. -->
+            <UScrollArea
+              v-else
+              :items="model.parameters"
+              virtualize
+              class="h-80"
+              :ui="{ item: 'pb-2 last:pb-0' }"
+            >
+              <template #default="{ item: parameter, index }">
+                <ParameterRow
+                  v-model="model.parameters[index]"
+                  @remove="removeParameter(parameter.address)"
+                />
+              </template>
+            </UScrollArea>
           </UFormField>
 
           <AddParameterField v-model:parameters="model.parameters" />

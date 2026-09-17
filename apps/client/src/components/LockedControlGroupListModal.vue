@@ -55,27 +55,34 @@ const handleRemove = async (groupId: string): Promise<void> => {
           Create New
         </UButton>
       </div>
-      <UCard
-        v-for="group in lockedControlGroups"
-        :key="group.id"
-        :ui="{ body: 'p-2 sm:p-2 flex justify-between items-center gap-2' }"
+      <!-- Locked control groups accumulate over time with no natural cap, so this is bounded and
+      scrollable rather than letting the whole modal grow indefinitely. -->
+      <UScrollArea
+        v-if="lockedControlGroups.length"
+        :items="lockedControlGroups"
+        class="h-96"
+        :ui="{ item: 'pb-2 last:pb-0' }"
       >
-        <span>{{ group.name }}</span>
-        <div class="flex gap-2">
-          <UButton
-            icon="i-lucide-pen"
-            color="secondary"
-            variant="subtle"
-            @click="handleEdit(group.id)"
-          />
-          <UButton
-            icon="i-lucide-trash"
-            color="error"
-            variant="subtle"
-            @click="handleRemove(group.id)"
-          />
-        </div>
-      </UCard>
+        <template #default="{ item: group }">
+          <UCard :ui="{ body: 'p-2 sm:p-2 flex justify-between items-center gap-2' }">
+            <span>{{ group.name }}</span>
+            <div class="flex gap-2">
+              <UButton
+                icon="i-lucide-pen"
+                color="secondary"
+                variant="subtle"
+                @click="handleEdit(group.id)"
+              />
+              <UButton
+                icon="i-lucide-trash"
+                color="error"
+                variant="subtle"
+                @click="handleRemove(group.id)"
+              />
+            </div>
+          </UCard>
+        </template>
+      </UScrollArea>
     </template>
   </UModal>
 </template>

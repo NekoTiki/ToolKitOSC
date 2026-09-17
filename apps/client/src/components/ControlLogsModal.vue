@@ -78,6 +78,7 @@ const typeColor = (type: string): UiColor => CONTROL_TYPE_COLORS[type as Control
     side="right"
     class="w-full max-w-lg"
     :title="`Logs for ${controlName}`"
+    :ui="{ body: 'overflow-hidden' }"
   >
     <template #body>
       <div
@@ -87,40 +88,45 @@ const typeColor = (type: string): UiColor => CONTROL_TYPE_COLORS[type as Control
         No recorded activity for this control yet.
       </div>
 
-      <div
+      <!-- virtualize: up to LOG_LIMIT (200) rows. Row spacing comes from the item slot's own
+      padding (`pb-2 last:pb-0`), not a viewport `gap` - virtualized rows are absolutely
+      positioned, which a flex gap has no effect on. `overflow-hidden` on the slideover's own body
+      (above) cancels its default `overflow-y-auto` so this is the only scroll region, not a
+      redundant nested one. -->
+      <UScrollArea
         v-else
-        class="flex flex-col gap-2 overflow-y-auto"
+        :items="logs"
+        virtualize
+        class="h-full"
+        :ui="{ item: 'pb-2 last:pb-0' }"
       >
-        <UCard
-          v-for="log in logs"
-          :key="log.id"
-          class="shrink-0"
-          :ui="{ body: 'flex items-center justify-between gap-2 p-2 sm:p-2' }"
-        >
-          <div class="flex min-w-0 items-center gap-2">
-            <UAvatar
-              :src="clientFor(log)?.avatar"
-              size="xs"
-            />
-            <div class="flex min-w-0 flex-col">
-              <span class="truncate font-medium">{{ clientFor(log)?.displayName ?? 'Unknown' }}</span>
-              <span class="text-xs text-muted">
-                {{ new Date(log.createdAt).toLocaleString() }}
-              </span>
+        <template #default="{ item: log }">
+          <UCard :ui="{ body: 'flex items-center justify-between gap-2 p-2 sm:p-2' }">
+            <div class="flex min-w-0 items-center gap-2">
+              <UAvatar
+                :src="clientFor(log)?.avatar"
+                size="xs"
+              />
+              <div class="flex min-w-0 flex-col">
+                <span class="truncate font-medium">{{ clientFor(log)?.displayName ?? 'Unknown' }}</span>
+                <span class="text-xs text-muted">
+                  {{ new Date(log.createdAt).toLocaleString() }}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div class="flex shrink-0 items-center gap-2">
-            <UBadge
-              :color="typeColor(log.type)"
-              variant="subtle"
-            >
-              {{ typeLabel(log.type) }}
-            </UBadge>
-            <span class="text-sm font-medium">{{ formatCommandValue(log.value) }}</span>
-          </div>
-        </UCard>
-      </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <UBadge
+                :color="typeColor(log.type)"
+                variant="subtle"
+              >
+                {{ typeLabel(log.type) }}
+              </UBadge>
+              <span class="text-sm font-medium">{{ formatCommandValue(log.value) }}</span>
+            </div>
+          </UCard>
+        </template>
+      </UScrollArea>
     </template>
   </USlideover>
 </template>

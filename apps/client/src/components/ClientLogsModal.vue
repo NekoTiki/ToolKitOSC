@@ -89,6 +89,7 @@ const typeColor = (type: string): UiColor => CONTROL_TYPE_COLORS[type as Control
     inset
     side="right"
     class="z-50 w-full max-w-lg"
+    :ui="{ body: 'overflow-hidden' }"
   >
     <template #title>
       <div class="flex items-center gap-1.5">
@@ -102,28 +103,36 @@ const typeColor = (type: string): UiColor => CONTROL_TYPE_COLORS[type as Control
         No recent activity for this client.
       </div>
 
-      <div v-else class="flex flex-col gap-2 overflow-y-auto">
-        <UCard
-          v-for="log in logs"
-          :key="log.id"
-          class="shrink-0"
-          :ui="{ body: 'flex items-center justify-between gap-2 p-2 sm:p-2' }"
-        >
-          <div class="flex flex-col">
-            <span class="font-medium">{{ title(log) }}</span>
-            <span class="text-xs text-muted">
-              {{ new Date(log.createdAt).toLocaleString() }}
-            </span>
-          </div>
+      <!-- virtualize: up to LOG_LIMIT (200) rows. Row spacing comes from the item slot's own
+      padding (`pb-2 last:pb-0`), not a viewport `gap` - virtualized rows are absolutely
+      positioned, which a flex gap has no effect on. `overflow-hidden` on the slideover's own body
+      (above) cancels its default `overflow-y-auto` so this is the only scroll region, not a
+      redundant nested one. -->
+      <UScrollArea
+        v-else
+        :items="logs"
+        virtualize
+        class="h-full"
+        :ui="{ item: 'pb-2 last:pb-0' }"
+      >
+        <template #default="{ item: log }">
+          <UCard :ui="{ body: 'flex items-center justify-between gap-2 p-2 sm:p-2' }">
+            <div class="flex flex-col">
+              <span class="font-medium">{{ title(log) }}</span>
+              <span class="text-xs text-muted">
+                {{ new Date(log.createdAt).toLocaleString() }}
+              </span>
+            </div>
 
-          <div class="flex items-center gap-2">
-            <UBadge :color="typeColor(log.type)" variant="subtle">
-              {{ typeLabel(log.type) }}
-            </UBadge>
-            <span class="text-sm font-medium">{{ formatCommandValue(log.value) }}</span>
-          </div>
-        </UCard>
-      </div>
+            <div class="flex items-center gap-2">
+              <UBadge :color="typeColor(log.type)" variant="subtle">
+                {{ typeLabel(log.type) }}
+              </UBadge>
+              <span class="text-sm font-medium">{{ formatCommandValue(log.value) }}</span>
+            </div>
+          </UCard>
+        </template>
+      </UScrollArea>
     </template>
   </USlideover>
 </template>

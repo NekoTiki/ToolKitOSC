@@ -39,9 +39,16 @@ const offlineClientsList = computed(() =>
     inset
     title="Clients List"
     class="w-full max-w-xs"
+    :ui="{ body: 'overflow-hidden' }"
   >
     <template #body>
-      <div class="flex flex-col gap-4 overflow-y-auto">
+      <!-- Three separately-headed sub-lists, not one flat array, so this uses UScrollArea's plain
+      default-slot mode rather than its `:items` prop - `overflow-hidden` on the slideover's own
+      body (above) cancels its default `overflow-y-auto` so this is the only scroll region. -->
+      <UScrollArea
+        class="h-full"
+        :ui="{ viewport: 'gap-4' }"
+      >
         <div
           v-if="onlineClientsList.length"
           class="flex flex-col gap-2"
@@ -92,7 +99,7 @@ const offlineClientsList = computed(() =>
             :client="client"
           />
         </div>
-      </div>
+      </UScrollArea>
     </template>
   </USlideover>
 </template>

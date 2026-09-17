@@ -87,52 +87,59 @@ const handleRemove = async (presetId: string): Promise<void> => {
           </UButton>
         </div>
       </div>
-      <UCard
-        v-for="preset in presets"
-        :key="preset.id"
-        :ui="{ body: 'p-2 sm:p-2 flex justify-between items-center gap-2' }"
+      <!-- Presets accumulate over time with no natural cap, so this is bounded and scrollable
+      rather than letting the whole modal grow indefinitely. -->
+      <UScrollArea
+        v-if="presets.length"
+        :items="presets"
+        class="h-96"
+        :ui="{ item: 'pb-2 last:pb-0' }"
       >
-        <div class="flex min-w-0 items-center gap-2">
-          <UIcon
-            v-if="preset.icon"
-            :name="preset.icon"
-          />
-          <div class="min-w-0">
-            <p class="truncate">
-              {{ preset.name }}
-            </p>
-            <p class="truncate text-xs text-muted">
-              {{ preset.parameters.length }} parameter(s) - updated {{ new Date(preset.updatedAt).toLocaleString() }}
-            </p>
-          </div>
-        </div>
-        <div class="flex shrink-0 gap-2">
-          <UTooltip>
-            <UButton
-              icon="i-lucide-play"
-              color="primary"
-              variant="subtle"
-              @click="handleApply(preset.id)"
-            />
+        <template #default="{ item: preset }">
+          <UCard :ui="{ body: 'p-2 sm:p-2 flex justify-between items-center gap-2' }">
+            <div class="flex min-w-0 items-center gap-2">
+              <UIcon
+                v-if="preset.icon"
+                :name="preset.icon"
+              />
+              <div class="min-w-0">
+                <p class="truncate">
+                  {{ preset.name }}
+                </p>
+                <p class="truncate text-xs text-muted">
+                  {{ preset.parameters.length }} parameter(s) - updated {{ new Date(preset.updatedAt).toLocaleString() }}
+                </p>
+              </div>
+            </div>
+            <div class="flex shrink-0 gap-2">
+              <UTooltip>
+                <UButton
+                  icon="i-lucide-play"
+                  color="primary"
+                  variant="subtle"
+                  @click="handleApply(preset.id)"
+                />
 
-            <template #content>
-              Apply this preset now
-            </template>
-          </UTooltip>
-          <UButton
-            icon="i-lucide-pen"
-            color="secondary"
-            variant="subtle"
-            @click="handleEdit(preset.id)"
-          />
-          <UButton
-            icon="i-lucide-trash"
-            color="error"
-            variant="subtle"
-            @click="handleRemove(preset.id)"
-          />
-        </div>
-      </UCard>
+                <template #content>
+                  Apply this preset now
+                </template>
+              </UTooltip>
+              <UButton
+                icon="i-lucide-pen"
+                color="secondary"
+                variant="subtle"
+                @click="handleEdit(preset.id)"
+              />
+              <UButton
+                icon="i-lucide-trash"
+                color="error"
+                variant="subtle"
+                @click="handleRemove(preset.id)"
+              />
+            </div>
+          </UCard>
+        </template>
+      </UScrollArea>
     </template>
   </UModal>
 </template>
