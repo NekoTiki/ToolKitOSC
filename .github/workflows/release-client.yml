@@ -1,0 +1,56 @@
+name: Release client
+
+on:
+  push:
+    tags:
+      - client-v*.*.*
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # The client only ships a Windows (nsis) bundle today — see apps/client/src-tauri/tauri.conf.json.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set app version from tag
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#client-v}"
+          node -e "
+            const fs = require('fs');
+            const path = 'apps/client/src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(path, 'utf8'));
+            conf.version = '$version';
+            fs.writeFileSync(path, JSON.stringify(conf, null, 2) + '\n');
+          "
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/client/src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Release client
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/client
+          tagName: ${{ github.ref_name }}
+          releaseName: 'VRC OSC Toolkit v__VERSION__'
+          releaseDraft: true
