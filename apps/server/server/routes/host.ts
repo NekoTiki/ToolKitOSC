@@ -175,6 +175,8 @@ export default defineWebSocketHandler({
       sendToClient(roomId!, data.message.peerId, message.text())
     } else if (data.type === 'client-banned') {
       sendToClient(roomId!, data.message.peerId, message.text())
+    } else if (data.type === 'rate-limited') {
+      sendToClient(roomId!, data.message.peerId, message.text())
     } else if (data.type === 'theme-update') {
       hostTheme.set(roomId!, data.message)
       sendToEveryoneInRoom(roomId!, message.text())

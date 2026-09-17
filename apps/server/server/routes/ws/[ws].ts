@@ -10,6 +10,7 @@ import {
   sendClientListToHost,
   sendMessageToHost
 } from '~~/server/routes/host'
+import { clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -106,11 +107,25 @@ export default defineWebSocketHandler({
     const roomId = getRoomId(peer.request.url)
 
     const data = JSON.parse(message.text()) as ViewerToServerMessage
-    if (data.type === 'command') {
-      sendMessageToHost(roomId!, data.type, data.message, {
-        from: sessionId
-      })
-    } else if (data.type === 'update-username') {
+
+    if (data.type === 'command' || data.type === 'update-username') {
+      // Ingress-level rate limit: catches a flooding viewer before it ever reaches the host, on
+      // top of (not instead of) the host's own per-executed-command limit (see apps/client's
+      // useWebsocketHost.ts) - the host's limit only sees commands that got this far and passed
+      // ban/validation checks, so this is what actually protects the relay itself. Deliberately no
+      // added delay/throttle here beyond this immediate check - a dragged slider's own displayed
+      // position depends on this exact round trip (see ControlSlider.vue's `get()`), so anything
+      // that buffers a message before forwarding it makes dragging feel laggy for whoever's
+      // holding it. The slider's outgoing rate is instead kept low at the true source (see that
+      // component's own debounce), not sampled down again on the way through.
+      if (isRateLimited(`${roomId}:${sessionId}`)) {
+        peer.send({
+          type: 'rate-limited',
+          message: { peerId: sessionId, reason: 'You are sending messages too quickly - slow down.' }
+        })
+        return
+      }
+
       sendMessageToHost(roomId!, data.type, data.message, {
         from: sessionId
       })
@@ -122,6 +137,7 @@ export default defineWebSocketHandler({
     const roomId = getRoomId(peer.request.url)
 
     removeClient(roomId!, sessionId)
+    clearRateLimit(`${roomId}:${sessionId}`)
   },
   error(peer, error) {
     console.error('[ws] error', peer, error)

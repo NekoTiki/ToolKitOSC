@@ -12,6 +12,7 @@ export { default as ControlIntifaceToy } from './components/ControlIntifaceToy.v
 export { default as ControlOpenShock } from './components/ControlOpenShock.vue'
 export { default as ControlPreset } from './components/ControlPreset.vue'
 export { default as ControlSlider } from './components/ControlSlider.vue'
+export { default as ControlSliderBase } from './components/ControlSliderBase.vue'
 export type { IntifaceControlValue } from './composables/useIntifaceControl'
 export { useIntifaceControl } from './composables/useIntifaceControl'
 export type { IntifacePatternControlValue } from './composables/useIntifacePatternControl'

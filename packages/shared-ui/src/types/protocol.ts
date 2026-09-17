@@ -79,6 +79,19 @@ export interface ClientInvalidMessage {
   type: ClientType
 }
 
+// One shape, sent from either of two chokepoints - the relay itself, when a viewer's raw message
+// rate trips its own ingress limit (apps/server's ws/[ws].ts, straight to that same peer, no host
+// round trip needed), or the host, when a specific client's *executed* commands trip its own
+// per-client limit (apps/client's useWebsocketHost.ts, relayed on to that client the same way
+// client-invalid/client-banned already are - see host.ts). `peerId` is only meaningful for the
+// second case (routing through sendToClient); the relay's own direct send already knows who to
+// reach, but fills it in too so ServerToViewerMessage's handler doesn't need to care which
+// chokepoint a given message came from.
+export interface RateLimitedMessage {
+  peerId: string
+  reason: string
+}
+
 // Mirrors BanScope in apps/client/src/db/clients.db.ts (duplicated rather than imported, same as
 // ClientType above - the desktop app's local db types aren't shared through this package).
 export type BanScope = 'ip' | 'discord'
@@ -115,6 +128,7 @@ export type HostToServerMessage =
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
+  | WsEnvelope<'rate-limited', RateLimitedMessage>
 
 // Server -> desktop client, over /host. `command`/`update-username` are relays of a viewer's
 // message with a `from` (session id) field appended directly onto the envelope, not nested.
@@ -137,6 +151,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
+  | WsEnvelope<'rate-limited', RateLimitedMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>
   | WsEnvelope<'welcome', string>
 

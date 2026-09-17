@@ -9,6 +9,7 @@ import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
+import { isRateLimited } from '@renderer/utils/rateLimit'
 import { getStableIp } from '@renderer/utils/stableIp'
 import type { ControlTypes } from '@vrc-osc-toolkit/shared-ui'
 import {
@@ -272,6 +273,17 @@ export function useWebsocketHost(): {
                 peerId: client.peerId,
                 reason: 'Client failed validation',
                 type: clientType.value
+              })
+            } else if (isRateLimited(client.peerId)) {
+              // Deliberately no added delay/throttle before this check - a dragged slider's own
+              // displayed position depends on this exact round trip (see ControlSlider.vue's
+              // `get()`), so anything that buffers a command before executing it makes dragging
+              // feel laggy for whoever's holding it. The slider's outgoing rate is instead kept
+              // low at the true source (see that component's own debounce), not sampled down
+              // again here.
+              sendMessage('rate-limited', {
+                peerId: client.peerId,
+                reason: 'You are sending commands too quickly - slow down.'
               })
             } else {
               increaseIpCount(ip)

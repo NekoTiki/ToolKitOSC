@@ -72,6 +72,8 @@ export function useWebsocketClient(roomId: string) {
         authRequired.value = data.message.type as 'username' | 'discord'
       } else if (data.type === 'client-banned') {
         banned.value = { scope: data.message.scope, reason: data.message.reason }
+      } else if (data.type === 'rate-limited') {
+        useToast().add({ title: 'Slow down', description: data.message.reason, color: 'warning' })
       } else if (data.type === 'theme-update') {
         if (data.message.primary) setTheme('primary', data.message.primary)
         if (data.message.secondary) setTheme('secondary', data.message.secondary)
