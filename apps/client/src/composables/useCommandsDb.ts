@@ -1,9 +1,24 @@
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
 import _ from 'lodash'
-import { onMounted } from 'vue'
 
 type NewCommand = Omit<Command, 'id' | 'createdAt'>
+
+export const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+// Not tied to any component's lifecycle - see useLogRetention.ts, which is what actually schedules
+// this (once at app startup, then on a recurring interval so it also catches logs that cross the
+// retention window mid-session, not just at the moment some particular component happens to
+// mount).
+export const purgeOldCommands = (): Promise<number> =>
+  db.commands
+    .where('createdAt')
+    .below(Date.now() - LOG_RETENTION_MS)
+    .delete()
+    .catch((error) => {
+      console.error('Failed to purge old command logs:', error)
+      return 0
+    })
 
 // Continuous controls (a slider being dragged) can fire dozens of commands a second. Logging
 // every single one would flood a client's history, so writes for these types are debounced per
@@ -47,15 +62,6 @@ export function useCommandsDb(): {
 
     debouncedWriters.get(key)!(command)
   }
-
-  const purge = (): void => {
-    void db.commands
-      .where('createdAt')
-      .below(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      .delete()
-  }
-
-  onMounted(() => purge())
 
   return { add }
 }

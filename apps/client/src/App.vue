@@ -4,6 +4,7 @@ import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
+import { useLogRetention } from '@renderer/composables/useLogRetention'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
 import { useTheme } from '@renderer/composables/useTheme'
 import { api } from '@renderer/lib/tauri-bridge'
@@ -28,6 +29,7 @@ const ready = computed(() => oscConnected.value && !!avatarDetails.value)
 
 onMounted(() => api.ready())
 onMounted(() => loadTheme())
+useLogRetention()
 </script>
 
 <template>
