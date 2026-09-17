@@ -9,7 +9,7 @@ import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
-import { isRateLimited } from '@renderer/utils/rateLimit'
+import { AUTHENTICATED_MAX_PER_WINDOW, isRateLimited } from '@renderer/utils/rateLimit'
 import { getStableIp } from '@renderer/utils/stableIp'
 import type { ControlTypes } from '@vrc-osc-toolkit/shared-ui'
 import {
@@ -274,7 +274,12 @@ export function useWebsocketHost(): {
                 reason: 'Client failed validation',
                 type: clientType.value
               })
-            } else if (isRateLimited(client.peerId)) {
+            } else if (
+              isRateLimited(
+                client.peerId,
+                client.user?.discord?.id ? AUTHENTICATED_MAX_PER_WINDOW : undefined
+              )
+            ) {
               // Deliberately no added delay/throttle before this check - a dragged slider's own
               // displayed position depends on this exact round trip (see ControlSlider.vue's
               // `get()`), so anything that buffers a command before executing it makes dragging

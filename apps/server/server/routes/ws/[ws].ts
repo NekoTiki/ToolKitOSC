@@ -10,7 +10,7 @@ import {
   sendClientListToHost,
   sendMessageToHost
 } from '~~/server/routes/host'
-import { clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
+import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -102,7 +102,7 @@ export default defineWebSocketHandler({
       return
     }
 
-    const { id: sessionId } = await getUserSession(peer)
+    const { id: sessionId, user } = await getUserSession(peer)
 
     const roomId = getRoomId(peer.request.url)
 
@@ -118,7 +118,9 @@ export default defineWebSocketHandler({
       // that buffers a message before forwarding it makes dragging feel laggy for whoever's
       // holding it. The slider's outgoing rate is instead kept low at the true source (see that
       // component's own debounce), not sampled down again on the way through.
-      if (isRateLimited(`${roomId}:${sessionId}`)) {
+      const maxPerWindow = user?.discord?.id ? AUTHENTICATED_MAX_PER_WINDOW : undefined
+
+      if (isRateLimited(`${roomId}:${sessionId}`, maxPerWindow)) {
         peer.send({
           type: 'rate-limited',
           message: { peerId: sessionId, reason: 'You are sending messages too quickly - slow down.' }

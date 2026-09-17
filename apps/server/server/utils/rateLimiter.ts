@@ -12,6 +12,9 @@
 // dragging feel laggy for whoever's holding it - the rate is kept down at the true source instead.
 const WINDOW_MS = 1000
 const DEFAULT_MAX_PER_WINDOW = 20
+// Logged-in users are identifiable (banning/abuse follow-up can target their Discord id rather
+// than just an IP), so they're worth trusting with more headroom than an anonymous guest.
+export const AUTHENTICATED_MAX_PER_WINDOW = 50
 
 interface Bucket {
   count: number
