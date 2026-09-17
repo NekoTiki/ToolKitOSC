@@ -12,13 +12,13 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    AddParameterField: typeof import('./src/components/preset-modal/AddParameterField.vue')['default']
     AddressField: typeof import('./src/components/control-modal/AddressField.vue')['default']
     AddressListEditor: typeof import('./src/components/control-modal/AddressListEditor.vue')['default']
     AddressListToggle: typeof import('./src/components/control-modal/AddressListToggle.vue')['default']
     AddressSelect: typeof import('./src/components/control-modal/AddressSelect.vue')['default']
     AppHeader: typeof import('./src/components/AppHeader.vue')['default']
     AreYouSureModal: typeof import('./src/components/AreYouSureModal.vue')['default']
+    AvailableParametersList: typeof import('./src/components/preset-modal/AvailableParametersList.vue')['default']
     BooleanEnumFields: typeof import('./src/components/control-modal/BooleanEnumFields.vue')['default']
     BooleanGroupFields: typeof import('./src/components/control-modal/BooleanGroupFields.vue')['default']
     ClientDetails: typeof import('./src/components/ClientDetails.vue')['default']
@@ -81,13 +81,13 @@ declare module 'vue' {
 
 // For TSX support
 declare global {
-  const AddParameterField: typeof import('./src/components/preset-modal/AddParameterField.vue')['default']
   const AddressField: typeof import('./src/components/control-modal/AddressField.vue')['default']
   const AddressListEditor: typeof import('./src/components/control-modal/AddressListEditor.vue')['default']
   const AddressListToggle: typeof import('./src/components/control-modal/AddressListToggle.vue')['default']
   const AddressSelect: typeof import('./src/components/control-modal/AddressSelect.vue')['default']
   const AppHeader: typeof import('./src/components/AppHeader.vue')['default']
   const AreYouSureModal: typeof import('./src/components/AreYouSureModal.vue')['default']
+  const AvailableParametersList: typeof import('./src/components/preset-modal/AvailableParametersList.vue')['default']
   const BooleanEnumFields: typeof import('./src/components/control-modal/BooleanEnumFields.vue')['default']
   const BooleanGroupFields: typeof import('./src/components/control-modal/BooleanGroupFields.vue')['default']
   const ClientDetails: typeof import('./src/components/ClientDetails.vue')['default']

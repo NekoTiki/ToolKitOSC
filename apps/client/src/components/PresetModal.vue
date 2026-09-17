@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
-import AddParameterField from '@renderer/components/preset-modal/AddParameterField.vue'
+import AvailableParametersList from '@renderer/components/preset-modal/AvailableParametersList.vue'
 import CoverageBanner from '@renderer/components/preset-modal/CoverageBanner.vue'
 import ParameterRow from '@renderer/components/preset-modal/ParameterRow.vue'
 import { usePresets } from '@renderer/composables/usePresets'
 import type { PresetParameter } from '@vrc-osc-toolkit/shared-ui'
 import _ from 'lodash'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 type PresetModalModel = {
   id?: string
@@ -21,7 +21,8 @@ type PresetModalModel = {
 const props = defineProps<{ presetId?: string }>()
 const open = defineModel<boolean>('open')
 
-const { getPreset, addPreset, updatePreset, captureParameters, coverage } = usePresets()
+const { getPreset, addPreset, updatePreset, captureParameters, coverage, includedParameters } =
+  usePresets()
 
 const buildInitialModel = (): PresetModalModel => {
   const preset = props.presetId ? getPreset(props.presetId) : undefined
@@ -59,6 +60,20 @@ const captureIntoModel = (): void => {
 const removeParameter = (address: string): void => {
   model.value.parameters = model.value.parameters.filter((param) => param.address !== address)
 }
+
+// Counts against `includedParameters` (the default noisy/excluded filter, no "show all") so the
+// tab label matches what AvailableParametersList.vue shows before the user ever touches its own
+// "show all" toggle.
+const availableCount = computed(() => {
+  const included = new Set(model.value.parameters.map((param) => param.address))
+
+  return includedParameters.value.filter((param) => !included.has(param.address)).length
+})
+
+const parameterTabs = computed(() => [
+  { label: `In Preset (${model.value.parameters.length})`, icon: 'i-lucide-list-checks', slot: 'inPreset' },
+  { label: `Available (${availableCount.value})`, icon: 'i-lucide-plus-circle', slot: 'available' }
+])
 
 const submit = (): void => {
   if (!model.value.name.trim()) return
@@ -125,34 +140,43 @@ const submit = (): void => {
               </UButton>
             </div>
 
-            <p
-              v-if="!model.parameters.length"
-              class="text-sm text-muted"
+            <UTabs
+              :items="parameterTabs"
+              :ui="{ content: 'pt-2' }"
             >
-              No parameters yet - use "Capture Current State" or add one manually below.
-            </p>
-            <!-- virtualize: a preset can hold anywhere from a handful of parameters up to
-            every one an avatar declares, so this is rendered the same way the noisy-parameter
-            list (ExcludedParametersModal.vue) handles a potentially long list. Row spacing comes
-            from the item slot's own padding (`pb-2 last:pb-0`), not a viewport `gap` - virtualized
-            rows are absolutely positioned, which a flex gap has no effect on. -->
-            <UScrollArea
-              v-else
-              :items="model.parameters"
-              virtualize
-              class="h-80"
-              :ui="{ item: 'pb-2 last:pb-0' }"
-            >
-              <template #default="{ item: parameter, index }">
-                <ParameterRow
-                  v-model="model.parameters[index]"
-                  @remove="removeParameter(parameter.address)"
-                />
+              <template #inPreset>
+                <p
+                  v-if="!model.parameters.length"
+                  class="text-sm text-muted"
+                >
+                  No parameters yet - use "Capture Current State" or add one from the "Available" tab.
+                </p>
+                <!-- virtualize: a preset can hold anywhere from a handful of parameters up to
+                every one an avatar declares, so this is rendered the same way the noisy-parameter
+                list (ExcludedParametersModal.vue) handles a potentially long list. Row spacing
+                comes from the item slot's own padding (`pb-2 last:pb-0`), not a viewport `gap` -
+                virtualized rows are absolutely positioned, which a flex gap has no effect on. -->
+                <UScrollArea
+                  v-else
+                  :items="model.parameters"
+                  virtualize
+                  class="h-80"
+                  :ui="{ item: 'pb-2 last:pb-0' }"
+                >
+                  <template #default="{ item: parameter, index }">
+                    <ParameterRow
+                      v-model="model.parameters[index]"
+                      @remove="removeParameter(parameter.address)"
+                    />
+                  </template>
+                </UScrollArea>
               </template>
-            </UScrollArea>
-          </UFormField>
 
-          <AddParameterField v-model:parameters="model.parameters" />
+              <template #available>
+                <AvailableParametersList v-model:parameters="model.parameters" />
+              </template>
+            </UTabs>
+          </UFormField>
         </UForm>
         <div class="flex justify-end gap-2">
           <UButton
