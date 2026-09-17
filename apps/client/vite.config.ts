@@ -24,15 +24,21 @@ import { defineConfig } from 'vite'
 const Z_MODAL = 'z-30'
 const Z_OVERLAY = 'z-40'
 
-// TitleBar.vue's own h-9 (2.25rem) bar sits above the whole app. Slideover's `inset` variant only
-// offsets from the viewport edges (inset-y-4 = 1rem from the very top), with no awareness of that
-// bar, so a slideover's top edge lands underneath/behind it instead of starting below it. Forcing
-// the top offset here, once, fixes every slideover - current and future - instead of requiring a
-// per-usage `:ui="{ content: 'top-[3.25rem]!' }"` override each time a new one is added. `!` makes
-// it win over inset-y-4's own top regardless of Tailwind's generated CSS order; its bottom-4 (and
-// left/right-4) are untouched. Only Slideover needs this - Modal's dialogs are centered, not
-// pinned to the top edge.
+// TitleBar.vue's own h-9 (2.25rem) bar sits above the whole app, and neither Modal nor Slideover
+// knows about it - both center/anchor themselves against the full viewport, so their top edge can
+// land underneath/behind the bar instead of starting below it.
+//
+// Slideover's `inset` variant offsets purely from the viewport edges (inset-y-4 = 1rem from the
+// very top); forcing its top offset here fixes it. `!` makes it win over inset-y-4's own top
+// regardless of Tailwind's generated CSS order; its bottom-4 (and left/right-4) are untouched.
 const SLIDEOVER_TOP = 'top-[3.25rem]!'
+
+// Modal's dialog is centered instead, via `top-1/2 left-1/2 -translate-x/y-1/2` (a center *point*,
+// not a fixed edge) - so rather than pinning its top like the slideover above, this shifts that
+// center point down by half the title bar's height (2.25rem / 2 = 1.125rem), which nudges every
+// modal down under the bar while keeping it perfectly centered - vertically, within the remaining
+// space below the bar - regardless of how tall its content ends up being.
+const MODAL_TOP = 'top-[calc(50%_+_1.125rem)]!'
 
 // https://tauri.app/start/frontend/vite/
 export default defineConfig({
@@ -40,7 +46,12 @@ export default defineConfig({
     vue(),
     ui({
       ui: {
-        modal: { slots: { overlay: Z_MODAL, content: Z_MODAL } },
+        // UButton's own theme only sets `cursor-not-allowed` for its disabled state, leaving the
+        // enabled one at the browser's default `cursor: default` for a <button> element (unlike an
+        // <a>, which is `pointer` natively) - every button in the app was reading as non-clickable
+        // at a glance. Added once here, globally, instead of a per-usage `:ui="{ base: '...' }'"`.
+        button: { slots: { base: 'cursor-pointer' } },
+        modal: { slots: { overlay: Z_MODAL, content: `${Z_MODAL} ${MODAL_TOP}` } },
         slideover: { slots: { overlay: Z_MODAL, content: `${Z_MODAL} ${SLIDEOVER_TOP}` } },
         tooltip: { slots: { content: Z_OVERLAY } },
         popover: { slots: { content: Z_OVERLAY } },

@@ -55,7 +55,7 @@ defineSlots<{
     />
 
     <template #content>
-      <div class="flex min-w-52 flex-col gap-2 p-3">
+      <div class="flex max-w-72 min-w-52 flex-col gap-2 p-3">
         <div
           class="flex items-center gap-1.5 text-sm font-medium"
           :class="iconColor"
