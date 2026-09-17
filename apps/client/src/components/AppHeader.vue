@@ -9,6 +9,7 @@ import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
+import { encodeShareCode } from '@vrc-osc-toolkit/shared-ui'
 import { computed, useTemplateRef } from 'vue'
 
 const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
@@ -29,9 +30,11 @@ const openUrl = (url: string): void => {
 }
 
 // The share page's room is keyed by the host's Discord id (see the server's host.ts
-// `getRoomId`), so there's nothing to share until that's known.
+// `getRoomId`), so there's nothing to share until that's known. The link itself uses the short
+// `/s/<code>` form (see server/routes/s/[code].get.ts) - `code` is a reversible re-encoding of that
+// same id, not a stored/random one, so it needs no round trip to the server to produce.
 const shareUrl = computed<string | null>(() =>
-  user.value?.discord?.id ? `${serverHttpUrl.value}/share/${user.value.discord.id}` : null
+  user.value?.discord?.id ? `${serverHttpUrl.value}/s/${encodeShareCode(user.value.discord.id)}` : null
 )
 
 const copyShareLink = async (): Promise<void> => {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { encodeShareCode } from '#shared/utils/shortLink'
+
 const { loggedIn, user } = useUserSession()
 
 useHead({
@@ -19,9 +21,10 @@ const requestUrl = useRequestURL()
 const serverWsUrl = computed(() => requestUrl.origin.replace(/^http/, 'ws'))
 
 // The share page's room is keyed by the signed-in Discord id (see the server's host.ts
-// getRoomId), so there's nothing to share until that's known.
+// getRoomId), so there's nothing to share until that's known. Uses the short `/s/<code>` form
+// (see server/routes/s/[code].get.ts) - same link the desktop app's own header hands out.
 const shareUrl = computed(() =>
-  user.value?.discord?.id ? `${requestUrl.origin}/share/${user.value.discord.id}` : null
+  user.value?.discord?.id ? `${requestUrl.origin}/s/${encodeShareCode(user.value.discord.id)}` : null
 )
 
 const toast = useToast()
