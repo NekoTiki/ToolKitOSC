@@ -3,6 +3,7 @@ import type { ContextMenuItem } from '@nuxt/ui/components/ContextMenu.vue'
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useClientsDb } from '@renderer/composables/useClientsDb'
+import { useControlLogsModal } from '@renderer/composables/useControlLogsModal'
 import type { Client } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
@@ -29,6 +30,7 @@ const {
 } = useControls()
 const { openModal: ausOpenModal } = useAreYouSureModal()
 const { openModal } = useControlModal()
+const { openModal: openControlLogs } = useControlLogsModal()
 
 const open = ref(localStorage.getItem(`controlGroupOpen_${props.controlGroup.id}`) !== 'false')
 const editMode = ref(false)
@@ -123,6 +125,11 @@ const controlContextMenuItems = (control: ControlType): ContextMenuItem[] => [
     label: 'Edit',
     icon: 'i-lucide-pen-line',
     onSelect: () => openModal(props.controlGroup.id, control.id)
+  },
+  {
+    label: 'View Logs',
+    icon: 'i-lucide-history',
+    onSelect: () => openControlLogs(control.id, control.name)
   },
   { type: 'separator' },
   {

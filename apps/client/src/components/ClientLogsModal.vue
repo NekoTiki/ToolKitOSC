@@ -2,7 +2,8 @@
 import type { LogClient } from '@renderer/composables/useClientLogsModal'
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
-import type { ControlTypes, OpenShockCommandResult, UiColor } from '@vrc-osc-toolkit/shared-ui'
+import { formatCommandValue, isOpenShockCommandValue } from '@renderer/utils/commandLog'
+import type { ControlTypes, UiColor } from '@vrc-osc-toolkit/shared-ui'
 import { CONTROL_TYPE_COLORS, CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
 import type { Subscription } from 'dexie'
 import { liveQuery } from 'dexie'
@@ -60,27 +61,15 @@ watch(
 
 onScopeDispose(() => subscription?.unsubscribe())
 
-const isOpenShockValue = (value: Command['value']): value is OpenShockCommandResult =>
-  typeof value === 'object' && value !== null && 'shockers' in value
-
 // The control name only says which button was pressed, not the actually interesting part of an
 // OpenShock command - which physical shocker(s) it fired. `shockers` is already the display names,
 // resolved and written at command time (see useControls.ts's handleCommand) rather than resolved
 // here from ids on every read, so this only has to fall back when none were known at write time
 // (e.g. the shocker name cache hadn't warmed up yet) or the control didn't resolve at all.
 const title = (log: Command): string => {
-  if (isOpenShockValue(log.value) && log.value.shockers.length) return log.value.shockers.join(', ')
+  if (isOpenShockCommandValue(log.value) && log.value.shockers.length) return log.value.shockers.join(', ')
 
   return log.controlName || log.controlId
-}
-
-const formatValue = (value: Command['value']): string => {
-  if (isOpenShockValue(value)) return `${value.intensity}% • ${(value.duration / 1000).toFixed(1)}s`
-  if (typeof value === 'boolean') return value ? 'On' : 'Off'
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2)
-  if (value === undefined) return '-'
-
-  return String(value)
 }
 
 const typeLabel = (type: string): string => CONTROL_TYPE_LABELS[type as ControlTypes] ?? type
@@ -131,7 +120,7 @@ const typeColor = (type: string): UiColor => CONTROL_TYPE_COLORS[type as Control
             <UBadge :color="typeColor(log.type)" variant="subtle">
               {{ typeLabel(log.type) }}
             </UBadge>
-            <span class="text-sm font-medium">{{ formatValue(log.value) }}</span>
+            <span class="text-sm font-medium">{{ formatCommandValue(log.value) }}</span>
           </div>
         </UCard>
       </div>
