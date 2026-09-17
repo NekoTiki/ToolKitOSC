@@ -9,8 +9,9 @@ const props = defineProps<{
   state: ConnectionState
   // Flags a connection as degraded without changing `state` itself - e.g. the desktop client is
   // talking to the server fine, but the server can't render one of its control types yet (see
-  // StatusBar.vue's use of `unsupportedControlTypes`). Only overrides the color, not the label -
-  // the connection genuinely is 'connected', just not fully.
+  // StatusBar.vue's use of `unsupportedControlTypes`). Shown as a small chip on the trigger icon
+  // rather than recoloring it - the connection genuinely is 'connected' (still green), just not
+  // fully, and the popover content already spells out what's wrong once opened.
   warning?: boolean
   // The shared anchor every header status popover positions against (see StatusBar.vue) - lets
   // them all open with the same left edge/baseline instead of each one centering under its own
@@ -24,7 +25,7 @@ const STATE_COLOR: Record<ConnectionState, string> = {
   disconnected: 'text-error'
 }
 
-const iconColor = computed(() => (props.warning ? 'text-warning' : STATE_COLOR[props.state]))
+const iconColor = computed(() => STATE_COLOR[props.state])
 
 const STATE_TEXT: Record<ConnectionState, string> = {
   connected: 'Connected',
@@ -48,11 +49,21 @@ defineSlots<{
     :reference="reference ?? undefined"
     :content="{ align: 'start', side: 'bottom' }"
   >
-    <UIcon
-      :name="icon"
-      class="size-5"
-      :class="iconColor"
-    />
+    <!-- !!warning, not just `warning`: UChip's `show` defaults to true when left unbound, so a
+    plain `:show="warning"` would show the chip for every consumer that doesn't pass this prop at
+    all (Vue falls back to a component's own default whenever a bound value resolves to
+    undefined) - coercing to a real boolean is what actually keeps it hidden by default. -->
+    <UChip
+      :show="!!warning"
+      color="warning"
+      size="sm"
+    >
+      <UIcon
+        :name="icon"
+        class="size-5"
+        :class="iconColor"
+      />
+    </UChip>
 
     <template #content>
       <div class="flex max-w-72 min-w-52 flex-col gap-2 p-3">
