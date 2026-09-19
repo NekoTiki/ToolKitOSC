@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::osc::codec;
+use crate::osc::{codec, oscquery};
 use crate::presets::{self, PresetStore};
 use crate::state::AppState;
 use crate::types::OscCommand;
@@ -197,6 +197,15 @@ pub fn load_presets(app: AppHandle, avatar_id: String) -> Result<PresetStore, St
 #[tauri::command]
 pub fn save_presets(app: AppHandle, avatar_id: String, store: PresetStore) -> Result<(), String> {
     presets::save(&app, &avatar_id, &store)
+}
+
+/// Fetches every current avatar parameter value from VRChat over OSCQuery and feeds each through
+/// the normal message pipeline (so the frontend just sees ordinary `vrc-osc-message` events) -
+/// see `osc::oscquery::force_pull_parameters` for why this is needed on top of the push
+/// subscription. Returns the number of parameters actually pulled.
+#[tauri::command]
+pub async fn force_pull_parameters(app: AppHandle, missing_only: bool) -> Result<usize, String> {
+    oscquery::force_pull_parameters(&app, missing_only).await
 }
 
 /// Replays current state to a (re)connecting frontend — equivalent to the original's

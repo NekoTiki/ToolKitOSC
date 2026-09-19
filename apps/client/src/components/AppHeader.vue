@@ -5,6 +5,7 @@ import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useLockedControlGroupListModal } from '@renderer/composables/useLockedControlGroupListModal'
 import { useLockedControlGroupModal } from '@renderer/composables/useLockedControlGroupModal'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
+import { useParametersModal } from '@renderer/composables/useParametersModal'
 import { usePresetListModal } from '@renderer/composables/usePresetListModal'
 import { useSettingsModal } from '@renderer/composables/useSettingsModal'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
@@ -17,6 +18,7 @@ const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
 const { openModal } = useLockedControlGroupModal()
 const { openList: openLockedControlGroupList } = useLockedControlGroupListModal()
 const { openList: openPresetList } = usePresetListModal()
+const { openModal: openParametersModal } = useParametersModal()
 const { openModal: openSettingsModal } = useSettingsModal()
 const { avatarDetails } = useAvatarDetails()
 const { authUrl } = useWebsocketAuth()
@@ -139,6 +141,21 @@ const items = computed(() => [
 
           <template #content>
             Manage Avatar Presets
+          </template>
+        </UTooltip>
+
+        <UTooltip>
+          <UButton
+            icon="i-lucide-list-tree"
+            color="neutral"
+            variant="outline"
+            :disabled="!avatarDetails?.id"
+            aria-label="View Avatar Parameters"
+            @click="openParametersModal"
+          />
+
+          <template #content>
+            View Avatar Parameters
           </template>
         </UTooltip>
 

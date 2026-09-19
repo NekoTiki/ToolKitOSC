@@ -24,6 +24,10 @@ pub struct AppState {
     /// succeeds (or forever, on a network where mDNS doesn't work), in which case sending falls
     /// back to the fixed port unchanged.
     pub oscquery_target: Mutex<Option<SocketAddr>>,
+    /// VRChat's OSCQuery HTTP address (distinct from `oscquery_target`, which is the OSC UDP
+    /// address) - lets `commands::force_pull_parameters` issue an on-demand GET without waiting
+    /// for a new discovery event.
+    pub oscquery_http_target: Mutex<Option<SocketAddr>>,
     /// Kept alive for the app's lifetime once `osc::oscquery::run` creates it - see that module.
     pub oscquery: Mutex<Option<Arc<VRChatOSC>>>,
     /// The task polling VRChat's OSCQuery tree for avatar changes (see `osc::oscquery`) - aborted
@@ -48,6 +52,7 @@ impl Default for AppState {
             cache_throttle: CacheThrottle::default(),
             sender_socket: Mutex::new(None),
             oscquery_target: Mutex::new(None),
+            oscquery_http_target: Mutex::new(None),
             oscquery: Mutex::new(None),
             avatar_poll_task: Mutex::new(None),
             minimize_to_tray: AtomicBool::new(false),

@@ -89,7 +89,8 @@ pub fn run() {
             commands::vrcx_get_auto_launch,
             commands::set_minimize_to_tray,
             commands::load_presets,
-            commands::save_presets
+            commands::save_presets,
+            commands::force_pull_parameters
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

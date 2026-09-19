@@ -38,7 +38,9 @@ export const api = {
   },
   loadPresets: (avatarId: string): Promise<PresetStore> => invoke('load_presets', { avatarId }),
   savePresets: (avatarId: string, store: PresetStore): Promise<void> =>
-    invoke('save_presets', { avatarId, store })
+    invoke('save_presets', { avatarId, store }),
+  forcePullParameters: (missingOnly: boolean): Promise<number> =>
+    invoke('force_pull_parameters', { missingOnly })
 }
 
 export type TauriApiType = typeof api

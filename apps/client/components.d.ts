@@ -42,6 +42,7 @@ declare module 'vue' {
     OpenShockStatus: typeof import('./src/components/OpenShockStatus.vue')['default']
     OscArgsTable: typeof import('./src/components/OscArgsTable.vue')['default']
     ParameterRow: typeof import('./src/components/preset-modal/ParameterRow.vue')['default']
+    ParametersModal: typeof import('./src/components/ParametersModal.vue')['default']
     PresetField: typeof import('./src/components/control-modal/PresetField.vue')['default']
     PresetListModal: typeof import('./src/components/PresetListModal.vue')['default']
     PresetModal: typeof import('./src/components/PresetModal.vue')['default']
@@ -74,6 +75,7 @@ declare module 'vue' {
     USlideover: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slideover.vue')['default']
     USlider: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slider.vue')['default']
     USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
+    UTable: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Table.vue')['default']
     UTabs: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tabs.vue')['default']
     UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
   }
@@ -111,6 +113,7 @@ declare global {
   const OpenShockStatus: typeof import('./src/components/OpenShockStatus.vue')['default']
   const OscArgsTable: typeof import('./src/components/OscArgsTable.vue')['default']
   const ParameterRow: typeof import('./src/components/preset-modal/ParameterRow.vue')['default']
+  const ParametersModal: typeof import('./src/components/ParametersModal.vue')['default']
   const PresetField: typeof import('./src/components/control-modal/PresetField.vue')['default']
   const PresetListModal: typeof import('./src/components/PresetListModal.vue')['default']
   const PresetModal: typeof import('./src/components/PresetModal.vue')['default']
@@ -143,6 +146,7 @@ declare global {
   const USlideover: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slideover.vue')['default']
   const USlider: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Slider.vue')['default']
   const USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
+  const UTable: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Table.vue')['default']
   const UTabs: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tabs.vue')['default']
   const UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
 }
