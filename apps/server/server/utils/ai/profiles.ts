@@ -36,18 +36,21 @@ export const PROMPT_PROFILES: Record<PromptProfileId, PromptProfile> = {
   balanced: {
     id: 'balanced',
     label: 'Balanced',
-    description: 'Uses every control type where the relationship between parameters is obvious from their names.',
+    description: 'Uses every control type, including toggle-groups/exclusive-choice sets where the relationship between parameters is reasonably clear from their names.',
     allowedTypes: ['boolean', 'slider', 'step-enum', 'boolean-group', 'boolean-enum'],
-    maxCompletionTokens: 12000,
-    useClusterHints: false,
+    maxCompletionTokens: 14000,
+    // Cheap, deterministic, and genuinely helps Balanced actually use the toggle-group/
+    // exclusive-choice types its schema already allows instead of defaulting to plain booleans
+    // whenever it isn't handed the relationship on a plate (see clustering.ts/prompt.ts).
+    useClusterHints: true,
     creditCost: 2
   },
   heavy: {
     id: 'heavy',
     label: 'Heavy',
-    description: 'Most thorough - pre-detects likely toggle-group/exclusive-choice candidates and pushes the model to use the full control surface. Slower, costs more, higher chance of a wrong grouping call.',
+    description: 'Most thorough - actively hunts for toggle-group/exclusive-choice structure instead of settling for flat lists of separate toggles. Slower, costs more, higher chance of an over-eager grouping call.',
     allowedTypes: ['boolean', 'slider', 'step-enum', 'boolean-group', 'boolean-enum'],
-    maxCompletionTokens: 16000,
+    maxCompletionTokens: 20000,
     useClusterHints: true,
     creditCost: 4
   }
