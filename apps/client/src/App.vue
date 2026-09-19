@@ -2,6 +2,7 @@
 import AppHeader from '@renderer/components/AppHeader.vue'
 import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
+import { useAppUpdater } from '@renderer/composables/useAppUpdater'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { useLogRetention } from '@renderer/composables/useLogRetention'
@@ -30,6 +31,7 @@ const ready = computed(() => oscConnected.value && !!avatarDetails.value)
 onMounted(() => api.ready())
 onMounted(() => loadTheme())
 useLogRetention()
+useAppUpdater()
 </script>
 
 <template>

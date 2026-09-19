@@ -21,6 +21,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2.5.5",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "@vrc-osc-toolkit/shared-ui": "*",
     "@vueuse/core": "^14.4.0",
     "@vueuse/rxjs": "^14.4.0",

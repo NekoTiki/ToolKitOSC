@@ -28,12 +28,21 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
         "displayLanguageSelector": false
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg4NzJDNkY0OTExN0FGMEMKUldRTXJ4ZVI5TVp5aUJWUjAwSkFFZkkvdWtseEMrVEdKUmtTeHFsMHVJRFlxT1kra0tld1pvVlgK",
+      "endpoints": [
+        "https://github.com/NekoTiki/VRC-OSC-Toolkit/releases/latest/download/latest.json"
+      ]
     }
   }
 }

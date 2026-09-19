@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAppUpdater } from '@renderer/composables/useAppUpdater'
 import { useAuth } from '@renderer/composables/useAuth'
 import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
@@ -10,8 +11,9 @@ import { useTraySettings } from '@renderer/composables/useTraySettings'
 import { useVrcxLaunch } from '@renderer/composables/useVrcxLaunch'
 import { hostStatus } from '@renderer/composables/useWebsocketHost'
 import { isValidServerWsUrl, useWebsocketSettings } from '@renderer/composables/useWebsocketSettings'
+import { getVersion } from '@tauri-apps/api/app'
 import _ from 'lodash'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 const open = defineModel<boolean>('open')
 const { selectedPrimary, setTheme } = useTheme()
@@ -49,6 +51,11 @@ const {
   error: vrcxError,
   available: vrcxAvailable
 } = useVrcxLaunch()
+const { checking: checkingForUpdates, checkForUpdates } = useAppUpdater()
+
+const appVersion = ref<string>()
+
+onMounted(() => void getVersion().then((version) => (appVersion.value = version)))
 
 // Editable draft of the WS URL: mirrors the effective URL. In autocomplete mode UInputMenu fires
 // `change` on every keystroke (not just blur/enter like a plain UInput), so committing straight
@@ -452,6 +459,30 @@ const clientTypeOptions: { value: ClientType; label: string; description: string
             </div>
           </div>
 
+          <div class="flex flex-col gap-2">
+            <h3 class="text-xs font-semibold text-highlighted">
+              Updates
+            </h3>
+            <div class="flex items-center justify-between gap-2 rounded-lg border border-default p-3">
+              <div>
+                <p class="text-sm font-medium">
+                  VRC OSC Toolkit
+                </p>
+                <p class="text-xs text-muted">
+                  {{ appVersion ? `Version ${appVersion}` : 'Checking version…' }}
+                </p>
+              </div>
+              <UButton
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="outline"
+                :loading="checkingForUpdates"
+                @click="checkForUpdates()"
+              >
+                Check for Updates
+              </UButton>
+            </div>
+          </div>
         </template>
 
         <template #launch>
