@@ -9,32 +9,30 @@ export interface AiProviderInfo {
   id: string
   label: string
   configured: boolean
-  // Credits left today in this provider's shared pool (see the server's rateLimit.ts) - every
-  // profile spends from the same number at a different rate (AiProfileInfo.cost below), so this
-  // doesn't change when you switch profiles, only when you switch provider or spend some.
-  remainingCredits: number
 }
 
 export interface AiProfileInfo {
   id: string
   label: string
   description: string
-  // Credits one generation at this profile spends from the selected provider's pool.
+  // Credits one generation at this profile spends from the account's overall daily pool.
   cost: number
-}
-
-export interface AiAvatarLimitInfo {
-  max: number
-  // null when no avatar is loaded yet - listOptions() only asks the server for this once an
-  // avatarId is actually known.
-  remaining: number | null
 }
 
 export interface AiOptions {
   providers: AiProviderInfo[]
   profiles: AiProfileInfo[]
+  // One overall pool per account per day (see the server's rateLimit.ts), shared across every
+  // provider - not per-provider, so this doesn't change when you switch provider, only profile or
+  // actually spending some.
+  remainingCredits: number
   dailyCredits: number
-  avatarLimit: AiAvatarLimitInfo
+  // Whether this account is allowed to pick the provider/model itself (see the server's
+  // utils/ai/access.ts) - profile is always the user's own choice regardless. false means
+  // AiControlsModal.vue hides the provider picker and defaultProviderLabel describes what the
+  // server will use automatically instead.
+  canSelectModel: boolean
+  defaultProviderLabel: string | null
 }
 
 // One-shot action + result, not a module-scope singleton like useOpenShock/useAuth - there's
@@ -44,7 +42,7 @@ export function useAiControlSuggestions(): {
   loading: ReturnType<typeof ref<boolean>>
   error: ReturnType<typeof ref<string | null>>
   listOptions: () => Promise<AiOptions>
-  generate: (provider: string, profile: string) => Promise<ControlGroup[]>
+  generate: (provider?: string, profile?: string) => Promise<ControlGroup[]>
 } {
   const { token } = useAuth()
   const { includedParameters } = usePresets()
@@ -61,13 +59,11 @@ export function useAiControlSuggestions(): {
 
   // Model choice is never part of this - the server picks it from (provider, profile) alone (see
   // profiles.ts's resolveModel). This only ever offers the two axes the server actually exposes.
-  // Always re-fetched (never cached here) - credits/avatar-remaining change every time generate()
-  // runs, and the modal that owns this composable's lifetime doesn't get remounted on every open
-  // (see AiControlsModal.vue), so a caller has to explicitly call this again to see fresh numbers.
+  // Always re-fetched (never cached here) - remaining credits change every time generate() runs,
+  // and the modal that owns this composable's lifetime doesn't get remounted on every open (see
+  // AiControlsModal.vue), so a caller has to explicitly call this again to see a fresh number.
   const listOptions = async (): Promise<AiOptions> => {
-    const avatarId = avatarDetails.value?.id
-    const query = avatarId ? `?avatarId=${encodeURIComponent(avatarId)}` : ''
-    const response = await fetch(`${SERVER_URL}/api/ai/providers${query}`, { headers: authHeaders() })
+    const response = await fetch(`${SERVER_URL}/api/ai/providers`, { headers: authHeaders() })
 
     if (!response.ok) throw new Error(`Failed to list AI options (${response.status})`)
 
@@ -77,7 +73,7 @@ export function useAiControlSuggestions(): {
   // Uses the app's existing noisy-address filter + the user's own per-avatar excluded list
   // (usePresets().includedParameters - the same set PresetModal/the coverage banner already
   // treat as "the real parameters") rather than sending every declared parameter to the server.
-  const generate = async (provider: string, profile: string): Promise<ControlGroup[]> => {
+  const generate = async (provider?: string, profile?: string): Promise<ControlGroup[]> => {
     loading.value = true
     error.value = null
 

@@ -2,6 +2,7 @@
 import AppHeader from '@renderer/components/AppHeader.vue'
 import ControlGroup from '@renderer/components/controls/ControlGroup.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
+import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiControlsModal } from '@renderer/composables/useAiControlsModal'
 import { useAppUpdater } from '@renderer/composables/useAppUpdater'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
@@ -19,6 +20,7 @@ const { openModal: openAiControlsModal } = useAiControlsModal()
 const { loadTheme } = useTheme()
 const { connected: oscConnected } = useOscConnection()
 const { avatarDetails } = useAvatarDetails()
+const { access: aiAccess } = useAiAccess()
 
 const groups = computed<ControlGroupType[]>({
   get: () => controls.value,
@@ -84,6 +86,7 @@ useAppUpdater()
               Add Group
             </UButton>
             <button
+              v-if="aiAccess.hasAccess"
               type="button"
               class="ai-generate-btn"
               @click="openAiControlsModal"

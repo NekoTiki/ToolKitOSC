@@ -1,3 +1,4 @@
+import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiCredits } from '@renderer/composables/useAiCredits'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
@@ -197,6 +198,7 @@ export function useWebsocketHost(): {
         serverProtocolVersion.value = data.message.serverVersion
         serverSupportedControlTypes.value = data.message.supportedControlTypes
         protocolMismatchReason.value = null
+        useAiAccess().applyUpdate(data.message.aiAccess)
         sendControls()
         sendTheme()
       } else if (data.type === 'auth-error') {
@@ -356,6 +358,8 @@ export function useWebsocketHost(): {
         })
       } else if (data.type === 'ai-credits-update') {
         useAiCredits().applyUpdate(data.message)
+      } else if (data.type === 'ai-access-update') {
+        useAiAccess().applyUpdate(data.message)
       }
     }
   })
