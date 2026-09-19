@@ -4,9 +4,10 @@ import AvailableParametersList from '@renderer/components/preset-modal/Available
 import CoverageBanner from '@renderer/components/preset-modal/CoverageBanner.vue'
 import ParameterRow from '@renderer/components/preset-modal/ParameterRow.vue'
 import { usePresets } from '@renderer/composables/usePresets'
+import { api } from '@renderer/lib/tauri-bridge'
 import type { PresetParameter } from '@vrc-osc-toolkit/shared-ui'
 import _ from 'lodash'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 type PresetModalModel = {
   id?: string
@@ -56,6 +57,29 @@ const captureIntoModel = (): void => {
 
   model.value.parameters = Array.from(byAddress.values())
 }
+
+// Only for a brand new preset (never when editing an existing one, which keeps its saved
+// parameters until the user explicitly asks to re-capture) - fetches every parameter's actual
+// current value from VRChat over OSCQuery instead of relying on whatever's happened to be pushed
+// so far, then folds the result into the model the same way the "Capture Current State" button
+// does. Best-effort: if OSCQuery can't reach VRChat right now (VPN, firewall, VRChat not running),
+// this just leaves the model at whatever was already captured via push.
+const pullingInitial = ref(false)
+
+onMounted(async () => {
+  if (props.presetId) return
+
+  pullingInitial.value = true
+  try {
+    await api.forcePullParameters(false)
+    captureIntoModel()
+  } catch {
+    // Best-effort, see comment above - nothing to surface here beyond the coverage banner already
+    // reflecting whatever ended up captured.
+  } finally {
+    pullingInitial.value = false
+  }
+})
 
 const removeParameter = (address: string): void => {
   model.value.parameters = model.value.parameters.filter((param) => param.address !== address)
@@ -118,7 +142,18 @@ const submit = (): void => {
             />
           </UFormField>
 
+          <div
+            v-if="pullingInitial"
+            class="flex items-center gap-2 text-sm text-muted"
+          >
+            <UIcon
+              name="i-lucide-loader-2"
+              class="animate-spin"
+            />
+            Fetching current parameter values from VRChat...
+          </div>
           <CoverageBanner
+            v-else
             :captured="coverage.captured"
             :total="coverage.total"
           />

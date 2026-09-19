@@ -2,8 +2,7 @@
 import { computed } from 'vue'
 
 // Mirrors the ratio thresholds `usePresets.ts`'s `coverage` is built from - shown wherever the
-// user is about to snapshot the current state, so they know whether it's worth moving around in
-// VRChat first to fill in more values before capturing.
+// user is about to snapshot the current state, so they can see how complete that snapshot is.
 const props = defineProps<{ captured: number; total: number }>()
 
 const ratio = computed(() => (props.total === 0 ? 0 : props.captured / props.total))
@@ -39,7 +38,6 @@ const title = computed(() => {
     variant="subtle"
     :icon="icon"
     :title="title"
-    description="VRChat only reports a parameter's value once it changes in-game - it doesn't send the full list on load. Move around, toggle expressions, and open menus that touch the parameters you want, then capture or refresh the preset."
   />
 </template>
 
