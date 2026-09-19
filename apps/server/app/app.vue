@@ -9,7 +9,31 @@ const { refresh } = useFetch('/auth/refresh', { immediate: false })
 
 onMounted(() => refresh())
 
-const items = ref<DropdownMenuItem[][]>([
+// Server-decided, not guessed client-side: reuses the same requireAdmin gate every /api/admin/*
+// route uses (see server/api/admin/whoami.get.ts), so the Dashboard link only ever shows for an
+// account the server actually considers an admin right now, not a flag baked into the session.
+const isAdmin = ref(false)
+
+const checkIsAdmin = async (): Promise<void> => {
+  if (!loggedIn.value || !user.value?.discord) {
+    isAdmin.value = false
+    return
+  }
+
+  try {
+    await $fetch('/api/admin/whoami')
+    isAdmin.value = true
+  } catch {
+    isAdmin.value = false
+  }
+}
+
+watch(() => loggedIn.value && !!user.value?.discord, checkIsAdmin, { immediate: true })
+
+// A computed, not a plain ref built once at setup - needs to react to isAdmin resolving
+// asynchronously after the initial render (and to the user's own name/avatar changing), unlike
+// the static array this replaces.
+const items = computed<DropdownMenuItem[][]>(() => [
   [
     {
       label: user.value?.discord?.name,
@@ -24,7 +48,10 @@ const items = ref<DropdownMenuItem[][]>([
       label: 'Connect Desktop App',
       icon: 'i-lucide-link',
       to: '/profile'
-    }
+    },
+    ...(isAdmin.value
+      ? [{ label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/dashboard' }]
+      : [])
   ],
   [
     {
