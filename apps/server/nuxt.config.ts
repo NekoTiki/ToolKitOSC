@@ -15,7 +15,18 @@ export default defineNuxtConfig({
     session: {
       password: '',
       maxAge: 60 * 60 * 24 * 30
-    }
+    },
+    // AI control-suggestion feature (see server/utils/ai) - private (server-only), never exposed
+    // to the client. One key/model pair per supported provider; a provider with no key set is
+    // simply reported unavailable by listProviders() rather than the app failing to boot.
+    groqApiKey: '',
+    groqModel: 'openai/gpt-oss-120b',
+    geminiApiKey: '',
+    // The full '-flash' tier returned transient 503 'high demand' errors in testing against a
+    // fresh key while the lite tier answered reliably (and its free-tier quota is more generous
+    // anyway - see the free-tier comparison this feature was scoped against) - kept as the default
+    // rather than 'gemini-flash-latest' for that reason, override via NUXT_GEMINI_MODEL if needed.
+    geminiModel: 'gemini-flash-lite-latest'
   },
   devServer: {
     port: 3000,
