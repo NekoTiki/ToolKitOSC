@@ -23,10 +23,20 @@ pub fn send_osc_message(state: State<AppState>, msg: OscCommand) -> Result<(), S
     let packet = rosc::OscPacket::Message(codec::encode_command(&msg, avatar_details.as_ref()));
     let bytes = rosc::encoder::encode(&packet).map_err(|e| e.to_string())?;
 
-    // send() on a connected UDP socket is a plain non-blocking syscall in practice; spawn it so
+    // OSCQuery discovery (osc::oscquery) may know VRChat's real address, which can differ from
+    // the fixed send port 9000 (multiple VRChat instances, custom --osc launch args); fall back
+    // to the socket's pre-connected fixed target when discovery hasn't found anything (yet, or
+    // ever, on a network where mDNS doesn't work).
+    let target = *state.oscquery_target.lock().unwrap();
+
+    // send()/send_to() on a UDP socket is a plain non-blocking syscall in practice; spawn it so
     // this command handler never has to be async just to satisfy the socket API.
     tauri::async_runtime::spawn(async move {
-        if let Err(err) = socket.send(&bytes).await {
+        let result = match target {
+            Some(addr) => socket.send_to(&bytes, addr).await.map(|_| ()),
+            None => socket.send(&bytes).await.map(|_| ()),
+        };
+        if let Err(err) = result {
             tracing::warn!("Failed to send OSC message: {err}");
         }
     });

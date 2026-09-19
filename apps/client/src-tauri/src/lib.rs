@@ -115,10 +115,23 @@ pub fn run() {
                 });
             }
 
+            // Fixed-port OSC *sender* only - see osc::udp's module doc comment for why its old
+            // fixed-port receiver was removed (all incoming OSC now arrives via OSCQuery below).
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(err) = osc::udp::run(handle).await {
-                    tracing::error!("OSC bridge stopped with an error: {err:?}");
+                    tracing::error!("OSC sender setup failed: {err:?}");
+                }
+            });
+
+            // The sole OSC *receive* path (see osc::udp's doc comment) - errors here are logged,
+            // not fatal to startup, but unlike a fixed-port receiver there's no fallback if this
+            // never succeeds (e.g. mDNS blocked by a firewall/VPN): incoming OSC simply won't
+            // arrive.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = osc::oscquery::run(handle).await {
+                    tracing::error!("OSCQuery setup failed, no OSC will be received: {err:?}");
                 }
             });
 

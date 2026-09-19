@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// numeric OSC arg as an `f64` (or, when it has no fractional part, still an `f64` that
 /// `serde_json` prints without a decimal point) so the JSON on the wire matches what the
 /// original Node implementation produced — see `osc::codec` for the rounding rule this mirrors.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OscArg {
     Bool(bool),
@@ -14,7 +14,7 @@ pub enum OscArg {
     Str(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OscMessage {
     pub address: String,
     pub args: Vec<OscArg>,
