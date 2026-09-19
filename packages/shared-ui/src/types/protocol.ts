@@ -40,6 +40,19 @@ export interface AuthSuccessMessage {
   supportedControlTypes: ControlTypes[]
 }
 
+// Pushed right after a POST /api/ai/suggest-controls request spends from the account's credit
+// pool and/or the requesting avatar's daily slot (see apps/server's rateLimit.ts) - sent over the
+// same host connection rather than left for the client to notice by polling GET /api/ai/providers
+// again, so the AI modal's displayed numbers update the moment a generation is actually charged
+// for, whether or not the generation itself goes on to succeed.
+export interface AiCreditsUpdateMessage {
+  provider: string
+  remainingCredits: number
+  dailyCredits: number
+  avatarId: string
+  avatarLimit: { max: number; remaining: number }
+}
+
 export type ClientType = 'everyone' | 'username' | 'discord'
 
 export interface ArgUpdateMessage {
@@ -139,6 +152,7 @@ export type ServerToHostMessage =
   | (WsEnvelope<'command', ControlCommand> & { from: string })
   | (WsEnvelope<'update-username', { displayName: string }> & { from: string })
   | WsEnvelope<'client-list', ClientListEntry[]>
+  | WsEnvelope<'ai-credits-update', AiCreditsUpdateMessage>
 
 // Server -> browser viewer, over /ws/[roomId].
 export type ServerToViewerMessage =

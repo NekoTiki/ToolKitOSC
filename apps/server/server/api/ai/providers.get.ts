@@ -1,13 +1,16 @@
 import { getAiProviders } from '~~/server/utils/ai'
 import { ACCOUNT_DAILY_CREDITS, PROMPT_PROFILES } from '~~/server/utils/ai/profiles'
-import { remainingAccountCredits } from '~~/server/utils/ai/rateLimit'
+import { AVATAR_DAILY_LIMIT, remainingAccountCredits, remainingAvatarDaily } from '~~/server/utils/ai/rateLimit'
+import { optionsQuerySchema } from '~~/server/utils/ai/schemas'
 
 // Lets the client build its provider/profile pickers (and grey out/hide combinations with no key
 // configured on this server, or show remaining credits) without hardcoding either list or
-// guessing at availability client-side.
-export default defineEventHandler((event) => {
+// guessing at availability client-side. Also reports the flat per-avatar daily limit up front (and
+// what's left of it, when an avatarId is given) so hitting it is never a surprise from a 429 alone.
+export default defineEventHandler(async (event) => {
   const user = verifyDesktopToken(event)
   const discordId = user.discord?.id
+  const { avatarId } = await getValidatedQuery(event, optionsQuerySchema.parse)
 
   const providers = getAiProviders().map((provider) => ({
     id: provider.id,
@@ -27,5 +30,13 @@ export default defineEventHandler((event) => {
     cost: profile.creditCost
   }))
 
-  return { providers, profiles, dailyCredits: ACCOUNT_DAILY_CREDITS }
+  return {
+    providers,
+    profiles,
+    dailyCredits: ACCOUNT_DAILY_CREDITS,
+    avatarLimit: {
+      max: AVATAR_DAILY_LIMIT,
+      remaining: discordId && avatarId ? remainingAvatarDaily(discordId, avatarId) : null
+    }
+  }
 })

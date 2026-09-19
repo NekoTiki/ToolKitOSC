@@ -1,21 +1,11 @@
 import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
 
+import { sendMessageToHost } from '~~/server/routes/host'
 import { getAiProvider } from '~~/server/utils/ai'
 import { normalizeSuggestion } from '~~/server/utils/ai/normalize'
-import { ACCOUNT_DAILY_CREDITS, getPromptProfile } from '~~/server/utils/ai/profiles'
-import { consumeAccountCredits, consumeAvatarDaily } from '~~/server/utils/ai/rateLimit'
-import type { AiParameterInput } from '~~/server/utils/ai/types'
-
-const MAX_PARAMETERS = 1000
-const VALID_KINDS = new Set(['Bool', 'Float', 'Int'])
-
-interface RequestBody {
-  provider: string
-  profile: string
-  avatarId: string
-  avatarName: string
-  parameters: AiParameterInput[]
-}
+import { ACCOUNT_DAILY_CREDITS, PROMPT_PROFILES } from '~~/server/utils/ai/profiles'
+import { AVATAR_DAILY_LIMIT, consumeAccountCredits, consumeAvatarDaily } from '~~/server/utils/ai/rateLimit'
+import { suggestControlsBodySchema } from '~~/server/utils/ai/schemas'
 
 // Bearer-token-gated (see verifyDesktopToken) so this never sits open as an unauthenticated proxy
 // burning the configured provider keys - the desktop client already holds a token from its normal
@@ -27,43 +17,12 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
 
   if (!discordId) throw createError({ statusCode: 401, statusMessage: 'No Discord identity on token' })
 
-  const body = await readBody<Partial<RequestBody>>(event)
-
-  if (!body?.provider || typeof body.provider !== 'string') {
-    throw createError({ statusCode: 400, statusMessage: 'Missing provider' })
-  }
-
-  const profile = getPromptProfile(body.profile)
-
-  if (!profile) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing or unknown profile' })
-  }
-
-  if (!body.avatarId || typeof body.avatarId !== 'string') {
-    throw createError({ statusCode: 400, statusMessage: 'Missing avatarId' })
-  }
-
-  if (!body.avatarName || typeof body.avatarName !== 'string') {
-    throw createError({ statusCode: 400, statusMessage: 'Missing avatarName' })
-  }
-
-  if (!Array.isArray(body.parameters) || body.parameters.length === 0) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing parameters' })
-  }
-
-  if (body.parameters.length > MAX_PARAMETERS) {
-    throw createError({ statusCode: 400, statusMessage: `Too many parameters (max ${MAX_PARAMETERS})` })
-  }
-
-  for (const param of body.parameters) {
-    if (
-      typeof param.name !== 'string' ||
-      typeof param.address !== 'string' ||
-      !VALID_KINDS.has(param.kind)
-    ) {
-      throw createError({ statusCode: 400, statusMessage: 'Malformed parameter entry' })
-    }
-  }
+  // Shape/type validation (non-empty strings, a known profile id, well-formed parameters) is
+  // entirely zod's job now - readValidatedBody turns a thrown ZodError into a 400 on its own, so
+  // none of that needs hand-written checks here anymore. What's left below is validation zod
+  // can't do: does this provider actually exist/is it configured, and rate limits.
+  const body = await readValidatedBody(event, suggestControlsBodySchema.parse)
+  const profile = PROMPT_PROFILES[body.profile]
 
   const provider = getAiProvider(body.provider)
 
@@ -76,20 +35,37 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
   }
 
   // Two independent limits (see rateLimit.ts) - checked, and consumed, before spending a request
-  // on the provider itself.
-  if (consumeAvatarDaily(discordId, body.avatarId) === null) {
+  // on the provider itself. Both consume*() calls return the fresh remaining count on success, so
+  // there's no need for a separate remaining*() lookup just to build the WS push below.
+  const avatarRemaining = consumeAvatarDaily(discordId, body.avatarId)
+
+  if (avatarRemaining === null) {
     throw createError({
       statusCode: 429,
       statusMessage: "You've reached today's generation limit for this avatar. Try again tomorrow."
     })
   }
 
-  if (consumeAccountCredits(discordId, provider.id, profile.creditCost, ACCOUNT_DAILY_CREDITS) === null) {
+  const creditsRemaining = consumeAccountCredits(discordId, provider.id, profile.creditCost, ACCOUNT_DAILY_CREDITS)
+
+  if (creditsRemaining === null) {
     throw createError({
       statusCode: 429,
       statusMessage: `Not enough ${provider.label} credits left today for a ${profile.label} generation (costs ${profile.creditCost}). Try a lighter profile, a different provider, or again tomorrow.`
     })
   }
+
+  // Pushed the moment both limits are actually spent, not left for the client to notice by
+  // re-polling GET /api/ai/providers - regardless of whether the generation below goes on to
+  // succeed, since the charge already happened. A no-op if this account has no live host
+  // connection right now (sendMessageToHost already handles that - see routes/host.ts).
+  sendMessageToHost(discordId, 'ai-credits-update', {
+    provider: provider.id,
+    remainingCredits: creditsRemaining,
+    dailyCredits: ACCOUNT_DAILY_CREDITS,
+    avatarId: body.avatarId,
+    avatarLimit: { max: AVATAR_DAILY_LIMIT, remaining: avatarRemaining }
+  })
 
   try {
     const suggestion = await provider.suggestControlGroups(body.avatarName, body.parameters, profile)
