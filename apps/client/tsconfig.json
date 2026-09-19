@@ -10,9 +10,8 @@
   "compilerOptions": {
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "preserve",
-    "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/*"]
+      "@renderer/*": ["./src/*"]
     },
     "types": ["vite/client"]
   }
