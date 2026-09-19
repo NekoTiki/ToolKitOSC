@@ -260,9 +260,17 @@ watch(open, (value) => {
       </UDropdownMenu>
     </div>
 
+    <!-- w-full, not a viewport-relative width (this used to be w-[90vw]/sm:w-114/md:w-173 - it
+    tracked the *viewport* breakpoint, which was fine back when each card could always claim close
+    to the full row width under the old flex-wrap layout. Under App.vue's masonry columns, a card's
+    real available width is viewport-width / column-count, which can be narrower than the viewport
+    breakpoint implies once there's more than one column - the card would then claim more width
+    than its column actually has, overflowing into/behind the next column. w-full instead always
+    matches whatever width the card's actual container (its masonry column) gives it; max-w-173
+    just caps it from growing unreasonably wide if that container is ever very large. -->
     <UCollapsible
       v-model:open="openModalValue"
-      class="flex w-[90vw] flex-col gap-2 sm:w-114 md:w-173"
+      class="flex w-full max-w-173 flex-col gap-2"
       :ui="{ content: 'overflow-visible' }"
     >
       <template #content>
@@ -278,7 +286,13 @@ watch(open, (value) => {
         both sides' v-model (removing from the source group, inserting into the destination one)
         on its own; nothing else here needs to change for that. The destination group doesn't need
         to be in edit mode itself to receive a drop - handle only gates starting a drag, not
-        accepting one - it just needs to be expanded (open) to have a visible drop target at all. -->
+        accepting one - it just needs to be expanded (open) to have a visible drop target at all.
+
+        grid-cols: auto-fill/minmax, not the old sm:/md: breakpoint-keyed track counts - those
+        assumed the card always had close to the full viewport width to work with, which broke
+        once App.vue's masonry columns made a card's real width viewport-width / column-count
+        instead. auto-fill sizes off this grid's own actual width, so it wraps correctly no matter
+        how narrow its masonry column is. -->
         <VueDraggable
           v-model.lazy="controls"
           group="control-groups"
@@ -286,7 +300,7 @@ watch(open, (value) => {
           easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
           :animation="200"
           :force-fallback="true"
-          class="grid grid-cols-[repeat(2,minmax(0,180px))] items-center justify-center-safe gap-4 sm:grid-cols-[repeat(2,minmax(0,220px))] md:grid-cols-[repeat(3,minmax(0,220px))]"
+          class="grid grid-cols-[repeat(auto-fill,minmax(160px,220px))] items-center justify-center-safe gap-4"
         >
           <UContextMenu
             v-for="control in controls"
