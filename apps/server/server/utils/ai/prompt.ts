@@ -116,7 +116,7 @@ ${typeGuidance}
 ${iconChoicesForPrompt()}
 6. Every address/addresses/trueAddresses/falseAddresses value must be copied verbatim from the input - never fabricate one, never modify one.${hintsSection}
 
-Respond with ONLY the JSON object matching the given schema. No prose, no markdown fences.`
+Respond with ONLY the JSON object matching the given schema. No prose, no markdown fences. Write each object property exactly once - never repeat a property name within the same object, even if you want to revise an earlier value; get it right the first time instead.`
 }
 
 export function buildUserPrompt(avatarName: string, parameters: AiParameterInput[]): string {

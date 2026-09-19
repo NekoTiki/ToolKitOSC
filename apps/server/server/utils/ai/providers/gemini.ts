@@ -12,6 +12,7 @@ export function createGeminiProvider(apiKey: string, primaryModel: string): AiPr
     id: 'gemini',
     label: 'Google Gemini',
     isConfigured: () => !!apiKey,
+    resolveModelForProfile: (profileId) => resolveModel('gemini', profileId, primaryModel),
 
     async suggestControlGroups(
       avatarName: string,

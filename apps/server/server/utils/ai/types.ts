@@ -61,4 +61,8 @@ export interface AiProvider {
     parameters: AiParameterInput[],
     profile: import('./profiles').PromptProfile
   ) => Promise<AiSuggestionResult>
+  // The exact model id suggestControlGroups will use for a given profile (see profiles.ts's
+  // resolveModel) - exposed so callers can record it (see generationLog.ts) without needing to
+  // duplicate the provider's own primaryModel/resolveModel call themselves.
+  resolveModelForProfile: (profileId: import('./profiles').PromptProfileId) => string
 }

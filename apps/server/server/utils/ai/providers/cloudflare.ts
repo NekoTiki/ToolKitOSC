@@ -3,7 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
-import { throwOpenAiCompatibleError } from '../providerError'
+import { throwOpenAiCompatibleError, tryRecoverFailedGeneration } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 // Workers AI's REST API is scoped under a Cloudflare account, not just an API token - the OpenAI-
@@ -19,6 +19,7 @@ export function createCloudflareProvider(
     id: 'cloudflare',
     label: 'Cloudflare Workers AI',
     isConfigured: () => !!apiKey && !!accountId,
+    resolveModelForProfile: (profileId) => resolveModel('cloudflare', profileId, primaryModel),
 
     async suggestControlGroups(
       avatarName: string,
@@ -60,6 +61,14 @@ export function createCloudflareProvider(
 
       if (!response.ok) {
         const body = await response.text()
+        const recovered = tryRecoverFailedGeneration(body)
+
+        if (recovered) {
+          console.warn('[ai] Cloudflare Workers AI rejected structured output as invalid, but a usable generation was recovered from it')
+
+          return recovered
+        }
+
         throwOpenAiCompatibleError('Cloudflare Workers AI', response.status, body)
       }
 

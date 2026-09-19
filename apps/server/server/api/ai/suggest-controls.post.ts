@@ -60,13 +60,19 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
   const provider = access.canSelectModel && body.provider ? getAiProvider(body.provider) : resolveDefaultProvider()
   const profile = body.profile ? PROMPT_PROFILES[body.profile] : resolveDefaultProfile()
 
-  const logFailure = (failureReason: FailureReason, statusMessage: string, statusCode: number): never => {
+  const logFailure = (
+    failureReason: FailureReason,
+    statusMessage: string,
+    statusCode: number,
+    model?: string
+  ): never => {
     void logGenerationAttempt({
       discordId,
       avatarId: body.avatarId,
       avatarName: body.avatarName,
       provider: provider?.id,
       profile: profile.id,
+      model,
       success: false,
       failureReason
     })
@@ -82,6 +88,11 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
     return logFailure('provider-error', `${provider.label} is not configured on this server`, 503)
   }
 
+  // Known before the request is even sent (see AiProvider.resolveModelForProfile) - recorded on
+  // every attempt below, success or failure, so the admin stats dashboard can report a real
+  // per-model success rate instead of only per-provider.
+  const model = provider.resolveModelForProfile(profile.id)
+
   // Checked, and consumed, before spending a request on the provider itself - consumeAccountCredits
   // returns the fresh remaining count on success, so there's no need for a separate
   // remainingAccountCredits lookup just to build the WS push below.
@@ -91,7 +102,8 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
     return logFailure(
       'credit-limit',
       `Not enough credits left today for a ${profile.label} generation (costs ${profile.creditCost}). Try a lighter profile or again tomorrow.`,
-      429
+      429,
+      model
     )
   }
 
@@ -118,6 +130,7 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
       avatarName: body.avatarName,
       provider: provider.id,
       profile: profile.id,
+      model,
       success: true,
       creditCost: profile.creditCost,
       durationMs: Date.now() - startedAt
@@ -157,6 +170,7 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
       avatarName: body.avatarName,
       provider: provider.id,
       profile: profile.id,
+      model,
       success: false,
       failureReason: 'provider-error',
       errorMessage: error instanceof Error ? error.message : String(error),

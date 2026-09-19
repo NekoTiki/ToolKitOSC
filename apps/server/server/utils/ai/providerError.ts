@@ -1,3 +1,5 @@
+import type { AiSuggestionResult } from './types'
+
 // Thrown by a provider's suggestControlGroups when the upstream rejected the request before any
 // generation actually ran (rate limit, payload too large, bad/expired key, out of quota) - as
 // opposed to a request that reached the model and then failed for some other reason (e.g. output
@@ -12,7 +14,43 @@ export class AiRefundableError extends Error {
 }
 
 interface OpenAiStyleErrorBody {
-  error?: { message?: string; type?: string; code?: string }
+  error?: { message?: string; type?: string; code?: string; failed_generation?: string }
+}
+
+function parseOpenAiErrorBody(rawBody: string): OpenAiStyleErrorBody | undefined {
+  try {
+    return JSON.parse(rawBody) as OpenAiStyleErrorBody
+  } catch {
+    return undefined
+  }
+}
+
+// Groq's (and possibly other OpenAI-compatible providers using the same structured-output
+// validator's) own strict json_schema validator sometimes rejects a response that's still
+// perfectly usable - a stray duplicate JSON key from the model is a known case: JSON.parse
+// tolerates it (silently keeps the last occurrence, per the JSON spec), a schema validator
+// doesn't. The provider includes the raw generation it rejected in the error body specifically for
+// this kind of recovery, and our own normalize.ts is already more lenient than the provider's
+// validator (it drops/repairs malformed controls rather than failing outright), so it's worth
+// trying to use before burning a whole retry over what's often a cosmetic decoding glitch.
+// Conservative: only attempts recovery for the specific error code that means "the JSON just
+// didn't validate," and only returns something if it actually parses into the right rough shape.
+export function tryRecoverFailedGeneration(rawBody: string): AiSuggestionResult | null {
+  const parsed = parseOpenAiErrorBody(rawBody)
+
+  if (parsed?.error?.code !== 'json_validate_failed') return null
+
+  const raw = parsed.error.failed_generation
+
+  if (!raw) return null
+
+  try {
+    const recovered = JSON.parse(raw) as AiSuggestionResult
+
+    return Array.isArray(recovered?.groups) ? recovered : null
+  } catch {
+    return null
+  }
 }
 
 // Shared by every OpenAI-compatible provider (Groq, Cerebras, Cloudflare Workers AI, OpenRouter all
@@ -35,14 +73,7 @@ const REFUNDABLE_ERROR_TYPES = new Set(['tokens', 'rate_limit_exceeded', 'insuff
 
 export function throwOpenAiCompatibleError(providerLabel: string, status: number, rawBody: string): never {
   const message = `${providerLabel} request failed (${status}): ${rawBody}`
-  let parsed: OpenAiStyleErrorBody | undefined
-
-  try {
-    parsed = JSON.parse(rawBody) as OpenAiStyleErrorBody
-  } catch {
-    // Not JSON, or not the expected shape - falls through to the status-only check below.
-  }
-
+  const parsed = parseOpenAiErrorBody(rawBody)
   const code = parsed?.error?.code
   const type = parsed?.error?.type
   const refundable =

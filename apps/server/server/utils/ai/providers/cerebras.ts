@@ -3,7 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
-import { throwOpenAiCompatibleError } from '../providerError'
+import { throwOpenAiCompatibleError, tryRecoverFailedGeneration } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 const CEREBRAS_URL = 'https://api.cerebras.ai/v1/chat/completions'
@@ -16,6 +16,7 @@ export function createCerebrasProvider(apiKey: string, primaryModel: string): Ai
     id: 'cerebras',
     label: 'Cerebras',
     isConfigured: () => !!apiKey,
+    resolveModelForProfile: (profileId) => resolveModel('cerebras', profileId, primaryModel),
 
     async suggestControlGroups(
       avatarName: string,
@@ -50,6 +51,14 @@ export function createCerebrasProvider(apiKey: string, primaryModel: string): Ai
 
       if (!response.ok) {
         const body = await response.text()
+        const recovered = tryRecoverFailedGeneration(body)
+
+        if (recovered) {
+          console.warn('[ai] Cerebras rejected structured output as invalid, but a usable generation was recovered from it')
+
+          return recovered
+        }
+
         throwOpenAiCompatibleError('Cerebras', response.status, body)
       }
 

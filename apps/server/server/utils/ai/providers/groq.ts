@@ -3,7 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
-import { throwOpenAiCompatibleError } from '../providerError'
+import { throwOpenAiCompatibleError, tryRecoverFailedGeneration } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -13,6 +13,7 @@ export function createGroqProvider(apiKey: string, primaryModel: string): AiProv
     id: 'groq',
     label: 'Groq',
     isConfigured: () => !!apiKey,
+    resolveModelForProfile: (profileId) => resolveModel('groq', profileId, primaryModel),
 
     async suggestControlGroups(
       avatarName: string,
@@ -53,6 +54,14 @@ export function createGroqProvider(apiKey: string, primaryModel: string): AiProv
 
       if (!response.ok) {
         const body = await response.text()
+        const recovered = tryRecoverFailedGeneration(body)
+
+        if (recovered) {
+          console.warn('[ai] Groq rejected structured output as invalid, but a usable generation was recovered from it')
+
+          return recovered
+        }
+
         throwOpenAiCompatibleError('Groq', response.status, body)
       }
 

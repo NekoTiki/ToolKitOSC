@@ -3,7 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
-import { throwOpenAiCompatibleError } from '../providerError'
+import { throwOpenAiCompatibleError, tryRecoverFailedGeneration } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -16,6 +16,7 @@ export function createOpenRouterProvider(apiKey: string, primaryModel: string): 
     id: 'openrouter',
     label: 'OpenRouter',
     isConfigured: () => !!apiKey,
+    resolveModelForProfile: (profileId) => resolveModel('openrouter', profileId, primaryModel),
 
     async suggestControlGroups(
       avatarName: string,
@@ -54,6 +55,14 @@ export function createOpenRouterProvider(apiKey: string, primaryModel: string): 
 
       if (!response.ok) {
         const body = await response.text()
+        const recovered = tryRecoverFailedGeneration(body)
+
+        if (recovered) {
+          console.warn('[ai] OpenRouter rejected structured output as invalid, but a usable generation was recovered from it')
+
+          return recovered
+        }
+
         throwOpenAiCompatibleError('OpenRouter', response.status, body)
       }
 
