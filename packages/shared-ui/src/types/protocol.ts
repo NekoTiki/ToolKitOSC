@@ -38,19 +38,30 @@ export interface AuthSuccessMessage {
   // can't display yet, without needing a full protocol-version bump/disconnect over it: the server
   // itself doesn't care what a control's `type` is, it only stores and relays the JSON.
   supportedControlTypes: ControlTypes[]
+  // This account's current AI feature access state (see apps/server's utils/ai/access.ts), so the
+  // client has it the instant it connects instead of needing a separate round trip - kept live
+  // afterward by 'ai-access-update' pushes on this same connection.
+  aiAccess: AiAccessUpdateMessage
 }
 
-// Pushed right after a POST /api/ai/suggest-controls request spends from the account's credit
-// pool and/or the requesting avatar's daily slot (see apps/server's rateLimit.ts) - sent over the
-// same host connection rather than left for the client to notice by polling GET /api/ai/providers
-// again, so the AI modal's displayed numbers update the moment a generation is actually charged
-// for, whether or not the generation itself goes on to succeed.
+// Pushed whenever an admin grants/revokes AI access or changes the model-select permission for
+// this account from /dashboard (see apps/server's api/admin/users/*) - lets the desktop client
+// dynamically show/hide the "AI Generate" button and provider/profile pickers without needing to
+// reconnect or re-poll for it.
+export interface AiAccessUpdateMessage {
+  hasAccess: boolean
+  canSelectModel: boolean
+}
+
+// Pushed right after a POST /api/ai/suggest-controls request spends from the account's credit pool
+// (see apps/server's rateLimit.ts) - sent over the same host connection rather than left for the
+// client to notice by polling GET /api/ai/providers again, so the AI modal's displayed balance
+// updates the moment a generation is actually charged for, whether or not it goes on to succeed.
 export interface AiCreditsUpdateMessage {
-  provider: string
+  // One overall pool per account per day, shared across every provider (see rateLimit.ts) - not
+  // per-provider.
   remainingCredits: number
   dailyCredits: number
-  avatarId: string
-  avatarLimit: { max: number; remaining: number }
 }
 
 export type ClientType = 'everyone' | 'username' | 'discord'
@@ -153,6 +164,7 @@ export type ServerToHostMessage =
   | (WsEnvelope<'update-username', { displayName: string }> & { from: string })
   | WsEnvelope<'client-list', ClientListEntry[]>
   | WsEnvelope<'ai-credits-update', AiCreditsUpdateMessage>
+  | WsEnvelope<'ai-access-update', AiAccessUpdateMessage>
 
 // Server -> browser viewer, over /ws/[roomId].
 export type ServerToViewerMessage =
