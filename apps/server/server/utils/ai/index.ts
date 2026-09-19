@@ -1,3 +1,4 @@
+import { isProviderHealthy, pickNextProvider } from './loadBalancer'
 import { createCerebrasProvider } from './providers/cerebras'
 import { createCloudflareProvider } from './providers/cloudflare'
 import { createGeminiProvider } from './providers/gemini'
@@ -30,26 +31,21 @@ export function getAiProvider(id: string): AiProvider | undefined {
   return getAiProviders().find((p) => p.id === id)
 }
 
-// Fixed fallback order when NUXT_AI_DEFAULT_PROVIDER is unset or points at a provider that isn't
-// actually configured - gemini first since it was the cheapest/most reliable in this feature's own
-// testing (see nuxt.config.ts's geminiModel comment).
-const DEFAULT_PROVIDER_PREFERENCE = ['gemini', 'groq', 'openrouter', 'cerebras', 'cloudflare']
-
 // Provider used for accounts without model-select permission (see utils/ai/access.ts) - the server
-// decides, never the client. Returns undefined only if no provider is configured at all.
+// decides, never the client. NUXT_AI_DEFAULT_PROVIDER, if set, pins a specific provider as long as
+// it's actually usable right now; otherwise every such account spreads across whatever's
+// configured via round-robin + a basic circuit breaker (see loadBalancer.ts) instead of all
+// landing on one fixed preference order. Returns undefined only if no provider is configured, or
+// the pinned one is configured but currently unhealthy with nothing else to fall back to.
 export function resolveDefaultProvider(): AiProvider | undefined {
-  const providers = getAiProviders()
+  const providers = getAiProviders().filter((p) => p.isConfigured())
   const preferred = useRuntimeConfig().aiDefaultProvider
 
-  const preferredMatch = preferred && providers.find((p) => p.id === preferred && p.isConfigured())
+  if (preferred) {
+    const pinned = providers.find((p) => p.id === preferred)
 
-  if (preferredMatch) return preferredMatch
-
-  for (const id of DEFAULT_PROVIDER_PREFERENCE) {
-    const match = providers.find((p) => p.id === id && p.isConfigured())
-
-    if (match) return match
+    if (pinned && isProviderHealthy(pinned.id)) return pinned
   }
 
-  return providers.find((p) => p.isConfigured())
+  return pickNextProvider(providers)
 }

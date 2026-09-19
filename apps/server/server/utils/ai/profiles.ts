@@ -79,7 +79,9 @@ export function resolveDefaultProfile(): PromptProfile {
 const LIGHT_MODEL_OVERRIDE: Partial<Record<AiProviderId, string>> = {
   groq: 'openai/gpt-oss-20b',
   gemini: 'gemini-flash-lite-latest',
-  cerebras: 'llama3.1-8b'
+  // The only other model on this account's Cerebras catalog besides the primary gpt-oss-120b (see
+  // nuxt.config.ts's cerebrasModel comment) - verified live, not guessed.
+  cerebras: 'qwen-3.8-27b'
 }
 
 export function resolveModel(providerId: AiProviderId, profileId: PromptProfileId, primaryModel: string): string {

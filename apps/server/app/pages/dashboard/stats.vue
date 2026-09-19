@@ -54,7 +54,7 @@ async function loadStats(): Promise<void> {
 watch(days, loadStats)
 onMounted(loadStats)
 
-const failuresOnly = ref(true)
+const failuresOnly = ref(false)
 const attempts = ref<Attempt[]>([])
 const attemptsLoading = ref(true)
 const page = ref(1)

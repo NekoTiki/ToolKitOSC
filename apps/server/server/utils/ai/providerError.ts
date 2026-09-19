@@ -22,9 +22,16 @@ interface OpenAiStyleErrorBody {
 // generated output - that means the model DID run) throws a normal, non-refundable error instead.
 // Extend these sets, not the call sites, if a new non-billable case turns up for one of these
 // providers - they all route through here.
-const REFUNDABLE_HTTP_STATUS = new Set([401, 403, 408, 413, 429])
-const REFUNDABLE_ERROR_CODES = new Set(['rate_limit_exceeded', 'context_length_exceeded', 'invalid_api_key', 'insufficient_quota'])
-const REFUNDABLE_ERROR_TYPES = new Set(['tokens', 'rate_limit_exceeded', 'insufficient_quota'])
+const REFUNDABLE_HTTP_STATUS = new Set([401, 402, 403, 404, 408, 413, 429])
+const REFUNDABLE_ERROR_CODES = new Set([
+  'rate_limit_exceeded',
+  'context_length_exceeded',
+  'invalid_api_key',
+  'insufficient_quota',
+  'payment_required',
+  'model_not_found'
+])
+const REFUNDABLE_ERROR_TYPES = new Set(['tokens', 'rate_limit_exceeded', 'insufficient_quota', 'payment_required_error', 'not_found_error'])
 
 export function throwOpenAiCompatibleError(providerLabel: string, status: number, rawBody: string): never {
   const message = `${providerLabel} request failed (${status}): ${rawBody}`

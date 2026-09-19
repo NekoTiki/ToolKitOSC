@@ -6,6 +6,7 @@ import { getAiProvider, resolveDefaultProvider } from '~~/server/utils/ai'
 import { getAiAccess } from '~~/server/utils/ai/access'
 import type { FailureReason } from '~~/server/utils/ai/generationLog'
 import { logGenerationAttempt } from '~~/server/utils/ai/generationLog'
+import { recordProviderFailure, recordProviderSuccess } from '~~/server/utils/ai/loadBalancer'
 import { normalizeSuggestion } from '~~/server/utils/ai/normalize'
 import { ACCOUNT_DAILY_CREDITS, PROMPT_PROFILES, resolveDefaultProfile } from '~~/server/utils/ai/profiles'
 import { AiRefundableError } from '~~/server/utils/ai/providerError'
@@ -109,6 +110,8 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
     const suggestion = await provider.suggestControlGroups(body.avatarName, body.parameters, profile)
     const groups = normalizeSuggestion(suggestion, body.parameters)
 
+    recordProviderSuccess(provider.id)
+
     void logGenerationAttempt({
       discordId,
       avatarId: body.avatarId,
@@ -126,6 +129,11 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
     // server-side only - useful for debugging later, not something to hand back to the client,
     // which gets a generic message instead.
     console.error(`[ai] ${provider.id} request failed for avatar "${body.avatarName}":`, error)
+
+    // Feeds the load balancer's circuit breaker (see loadBalancer.ts) - repeated failures take
+    // this provider out of resolveDefaultProvider()'s rotation for a cooldown period, regardless
+    // of whether this particular request had it auto-selected or explicitly picked.
+    recordProviderFailure(provider.id)
 
     // A provider throws AiRefundableError specifically for failures that mean the request was
     // rejected before any generation actually ran (rate limit, payload too large, bad key, out of
