@@ -26,7 +26,20 @@ export default defineNuxtConfig({
     // fresh key while the lite tier answered reliably (and its free-tier quota is more generous
     // anyway - see the free-tier comparison this feature was scoped against) - kept as the default
     // rather than 'gemini-flash-latest' for that reason, override via NUXT_GEMINI_MODEL if needed.
-    geminiModel: 'gemini-flash-lite-latest'
+    geminiModel: 'gemini-flash-lite-latest',
+    openrouterApiKey: '',
+    openrouterModel: 'openai/gpt-oss-120b',
+    cerebrasApiKey: '',
+    cerebrasModel: 'llama-3.3-70b',
+    cloudflareApiKey: '',
+    // Workers AI is scoped under a Cloudflare account, not just an API token - both are required
+    // for this provider to report itself configured (see providers/cloudflare.ts).
+    cloudflareAccountId: '',
+    // '@cf/meta/llama-3.1-8b-instruct' initially seemed reasonable but turned out to route to a
+    // deprecated internal model ("infire-llama-3.1-8b-instruct") and 410'd - verified against the
+    // account's live model catalog (GET /accounts/{id}/ai/models/search) instead of guessing
+    // again; gpt-oss-120b is also already the default elsewhere (Groq, OpenRouter).
+    cloudflareModel: '@cf/openai/gpt-oss-120b'
   },
   devServer: {
     port: 3000,

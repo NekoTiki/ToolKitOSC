@@ -5,12 +5,15 @@ import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
-export function createGroqProvider(apiKey: string, primaryModel: string): AiProvider {
+// OpenAI-compatible, same request shape as Groq (see providers/groq.ts) - OpenRouter proxies many
+// underlying models, so json_schema strict-mode support isn't guaranteed for every model it
+// offers, only for the one actually configured here (NUXT_OPENROUTER_MODEL).
+export function createOpenRouterProvider(apiKey: string, primaryModel: string): AiProvider {
   return {
-    id: 'groq',
-    label: 'Groq',
+    id: 'openrouter',
+    label: 'OpenRouter',
     isConfigured: () => !!apiKey,
 
     async suggestControlGroups(
@@ -18,17 +21,21 @@ export function createGroqProvider(apiKey: string, primaryModel: string): AiProv
       parameters: AiParameterInput[],
       profile: PromptProfile
     ): Promise<AiSuggestionResult> {
-      if (!apiKey) throw new Error('Groq is not configured (missing NUXT_GROQ_API_KEY)')
+      if (!apiKey) throw new Error('OpenRouter is not configured (missing NUXT_OPENROUTER_API_KEY)')
 
-      const model = resolveModel('groq', profile.id, primaryModel)
+      const model = resolveModel('openrouter', profile.id, primaryModel)
       const clusterHints = profile.useClusterHints ? detectClusterHints(parameters) : []
       const schema = toStrictJsonSchema(buildControlSuggestionSchema(profile))
 
-      const response = await fetch(GROQ_URL, {
+      const response = await fetch(OPENROUTER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
+          Authorization: `Bearer ${apiKey}`,
+          // OpenRouter asks for these on every request for their own analytics/attribution - not
+          // load-bearing for the API call itself, just good citizenship.
+          'HTTP-Referer': 'https://github.com/NekoTiki/VRC-OSC-Toolkit',
+          'X-Title': 'VRC OSC Toolkit'
         },
         body: JSON.stringify({
           model,
@@ -36,13 +43,7 @@ export function createGroqProvider(apiKey: string, primaryModel: string): AiProv
             { role: 'system', content: buildSystemPrompt(profile, clusterHints) },
             { role: 'user', content: buildUserPrompt(avatarName, parameters) }
           ],
-          // Left at the API default (much too low for a few dozen grouped controls plus this
-          // model's reasoning tokens), a real parameter list gets silently truncated mid-response -
-          // strict-schema decoding still closes it out into syntactically valid but near-empty
-          // JSON, so there's no error to catch, just a suspiciously small result. Verified against
-          // a real 79-parameter avatar. Budget is now per-profile (see profiles.ts) since the
-          // richer schema needs more headroom the more control types a profile allows.
-          max_completion_tokens: profile.maxCompletionTokens,
+          max_tokens: profile.maxCompletionTokens,
           response_format: {
             type: 'json_schema',
             json_schema: { name: 'control_groups', strict: true, schema }
@@ -52,7 +53,7 @@ export function createGroqProvider(apiKey: string, primaryModel: string): AiProv
 
       if (!response.ok) {
         const body = await response.text()
-        throw new Error(`Groq request failed (${response.status}): ${body}`)
+        throw new Error(`OpenRouter request failed (${response.status}): ${body}`)
       }
 
       const data = (await response.json()) as {
@@ -60,7 +61,7 @@ export function createGroqProvider(apiKey: string, primaryModel: string): AiProv
       }
       const content = data.choices?.[0]?.message?.content
 
-      if (!content) throw new Error('Groq returned no content')
+      if (!content) throw new Error('OpenRouter returned no content')
 
       return JSON.parse(content) as AiSuggestionResult
     }
