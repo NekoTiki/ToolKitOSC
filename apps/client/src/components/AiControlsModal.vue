@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import type { AiProfileInfo, AiProviderInfo } from '@renderer/composables/useAiControlSuggestions'
+import type { AiAvatarLimitInfo, AiProfileInfo, AiProviderInfo } from '@renderer/composables/useAiControlSuggestions'
 import { useAiControlSuggestions } from '@renderer/composables/useAiControlSuggestions'
+import { useAiCredits } from '@renderer/composables/useAiCredits'
+import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
 import { CONTROL_TYPE_COLORS, CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const open = defineModel<boolean>('open')
 
 const { loading, error, listOptions, generate } = useAiControlSuggestions()
 const { controls, setGroups } = useControls()
+const { avatarDetails } = useAvatarDetails()
+const { latestByProvider } = useAiCredits()
 const toast = useToast()
 
 const providers = ref<AiProviderInfo[]>([])
 const profiles = ref<AiProfileInfo[]>([])
 const dailyCredits = ref(0)
+const avatarLimit = ref<AiAvatarLimitInfo | null>(null)
 const optionsLoading = ref(true)
 const optionsError = ref<string | null>(null)
 const selectedProvider = ref<string>()
@@ -22,14 +27,18 @@ const selectedProvider = ref<string>()
 const selectedProfile = ref<string>('balanced')
 const result = ref<ControlGroup[] | null>(null)
 
-onMounted(async () => {
+const loadOptions = async (): Promise<void> => {
+  optionsLoading.value = true
+
   try {
     const options = await listOptions()
 
     providers.value = options.providers
     profiles.value = options.profiles
     dailyCredits.value = options.dailyCredits
-    selectedProvider.value = providers.value.find((p) => p.configured)?.id
+    avatarLimit.value = options.avatarLimit
+    if (!selectedProvider.value) selectedProvider.value = providers.value.find((p) => p.configured)?.id
+    optionsError.value = null
   } catch (err) {
     // Previously swallowed silently, which looked identical to "no providers configured" - an
     // empty list with no clue why (e.g. the CORS preflight this route didn't use to answer, or
@@ -38,7 +47,48 @@ onMounted(async () => {
   } finally {
     optionsLoading.value = false
   }
-})
+}
+
+// `immediate: true` matters here, not just style: whether useOverlay() keeps this component
+// mounted across opens (so `open` flips false->true on a later re-open) or remounts it fresh each
+// time (so `open` is already true at setup), a plain non-immediate watch only catches the first
+// case - it never fires at all on a value that's already true when the watcher is created, which
+// left the modal stuck on its loading spinner forever the one time this ran without `immediate`.
+// Covers both cases and keeps credits/avatar-remaining from going stale either way; handleGenerate
+// below refreshes them again afterward too, since a generation (successful or not - the
+// avatar-limit check still consumes even when the credit check that runs after it then fails, see
+// the server's suggest-controls.post.ts) always changes at least one of them.
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) void loadOptions()
+  },
+  { immediate: true }
+)
+
+// Applies a server-pushed credit/avatar-limit update (see useWebsocketHost.ts's
+// 'ai-credits-update' handler) the instant it arrives, for whichever provider it's for - not
+// gated to the currently-selected one, so switching providers later still shows a number that was
+// kept fresh in the background. Only a fallback of last resort now: handleGenerate below still
+// refetches via REST too, for whenever this client has no live host WS connection to push over.
+watch(
+  latestByProvider,
+  (updates) => {
+    for (const update of Object.values(updates)) {
+      const provider = providers.value.find((p) => p.id === update.provider)
+
+      if (provider) provider.remainingCredits = update.remainingCredits
+      dailyCredits.value = update.dailyCredits
+
+      // avatarLimit is per-avatar - only applied when it matches whatever avatar is currently
+      // loaded, so switching avatars between request and push doesn't show a stale-avatar number.
+      if (update.avatarId === avatarDetails.value?.id) {
+        avatarLimit.value = { max: update.avatarLimit.max, remaining: update.avatarLimit.remaining }
+      }
+    }
+  },
+  { deep: true }
+)
 
 // Credits left today in the selected provider's shared pool - stable across profile switches,
 // only the selected profile's own cost (below) changes what a generation would spend from it.
@@ -67,6 +117,10 @@ const handleGenerate = async (): Promise<void> => {
     result.value = await generate(selectedProvider.value, selectedProfile.value)
   } catch {
     // error.value is already set by generate() - surfaced in the template below.
+  } finally {
+    // Refreshes credits/avatar-remaining regardless of outcome - even a failed attempt can have
+    // spent the avatar-limit check (see loadOptions's comment above).
+    void loadOptions()
   }
 }
 
@@ -141,6 +195,18 @@ const handleApply = (): void => {
         {{ remainingCredits }} / {{ dailyCredits }} credits left today for this provider
         <template v-if="estimatedRunsLeft !== undefined">
           - ≈{{ estimatedRunsLeft }} more at this profile's cost
+        </template>
+      </p>
+
+      <!-- Surfaced up front, not just as a 429 message after the fact - this limit is per avatar
+      and separate from the credit pool above, so it can be hit even with plenty of credits left. -->
+      <p
+        v-if="avatarLimit"
+        class="text-xs text-muted"
+      >
+        Max {{ avatarLimit.max }} generations/day for this avatar
+        <template v-if="avatarLimit.remaining !== null">
+          ({{ avatarLimit.remaining }} left today)
         </template>
       </p>
 

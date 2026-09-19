@@ -1,3 +1,4 @@
+import { useAiCredits } from '@renderer/composables/useAiCredits'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
@@ -353,6 +354,8 @@ export function useWebsocketHost(): {
             ip
           })
         })
+      } else if (data.type === 'ai-credits-update') {
+        useAiCredits().applyUpdate(data.message)
       }
     }
   })

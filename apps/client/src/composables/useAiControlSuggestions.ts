@@ -11,9 +11,7 @@ export interface AiProviderInfo {
   configured: boolean
   // Credits left today in this provider's shared pool (see the server's rateLimit.ts) - every
   // profile spends from the same number at a different rate (AiProfileInfo.cost below), so this
-  // doesn't change when you switch profiles, only when you switch provider or spend some. Doesn't
-  // reflect the separate per-avatar limit, which isn't known until an avatar is picked - that one
-  // only surfaces as generate()'s error if it's already exhausted.
+  // doesn't change when you switch profiles, only when you switch provider or spend some.
   remainingCredits: number
 }
 
@@ -25,13 +23,27 @@ export interface AiProfileInfo {
   cost: number
 }
 
+export interface AiAvatarLimitInfo {
+  max: number
+  // null when no avatar is loaded yet - listOptions() only asks the server for this once an
+  // avatarId is actually known.
+  remaining: number | null
+}
+
+export interface AiOptions {
+  providers: AiProviderInfo[]
+  profiles: AiProfileInfo[]
+  dailyCredits: number
+  avatarLimit: AiAvatarLimitInfo
+}
+
 // One-shot action + result, not a module-scope singleton like useOpenShock/useAuth - there's
 // nothing here that needs to be shared/reactive across every caller at once, unlike a
 // connection's live status.
 export function useAiControlSuggestions(): {
   loading: ReturnType<typeof ref<boolean>>
   error: ReturnType<typeof ref<string | null>>
-  listOptions: () => Promise<{ providers: AiProviderInfo[]; profiles: AiProfileInfo[]; dailyCredits: number }>
+  listOptions: () => Promise<AiOptions>
   generate: (provider: string, profile: string) => Promise<ControlGroup[]>
 } {
   const { token } = useAuth()
@@ -49,20 +61,17 @@ export function useAiControlSuggestions(): {
 
   // Model choice is never part of this - the server picks it from (provider, profile) alone (see
   // profiles.ts's resolveModel). This only ever offers the two axes the server actually exposes.
-  const listOptions = async (): Promise<{
-    providers: AiProviderInfo[]
-    profiles: AiProfileInfo[]
-    dailyCredits: number
-  }> => {
-    const response = await fetch(`${SERVER_URL}/api/ai/providers`, { headers: authHeaders() })
+  // Always re-fetched (never cached here) - credits/avatar-remaining change every time generate()
+  // runs, and the modal that owns this composable's lifetime doesn't get remounted on every open
+  // (see AiControlsModal.vue), so a caller has to explicitly call this again to see fresh numbers.
+  const listOptions = async (): Promise<AiOptions> => {
+    const avatarId = avatarDetails.value?.id
+    const query = avatarId ? `?avatarId=${encodeURIComponent(avatarId)}` : ''
+    const response = await fetch(`${SERVER_URL}/api/ai/providers${query}`, { headers: authHeaders() })
 
     if (!response.ok) throw new Error(`Failed to list AI options (${response.status})`)
 
-    return (await response.json()) as {
-      providers: AiProviderInfo[]
-      profiles: AiProfileInfo[]
-      dailyCredits: number
-    }
+    return (await response.json()) as AiOptions
   }
 
   // Uses the app's existing noisy-address filter + the user's own per-avatar excluded list
