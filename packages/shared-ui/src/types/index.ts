@@ -4,6 +4,7 @@
 // or a DOM-touching composable (e.g. useTheme.ts's `document` usage) from that project would
 // break its typecheck even for a type-only import, because TypeScript still has to resolve and
 // check the whole imported module to know its shape.
+export * from '../constants/controlIcons'
 export * from './controls'
 export * from './openShock'
 export * from './osc'

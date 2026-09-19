@@ -28,6 +28,7 @@ export {
   NEUTRAL_COLOR_FAMILIES,
   SHADES
 } from './composables/useTheme'
+export * from './constants/controlIcons'
 export * from './types/controls'
 export type { OpenShockCommandResult } from './types/openShock'
 export * from './types/osc'
