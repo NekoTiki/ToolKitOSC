@@ -1,44 +1,70 @@
 <script setup lang="ts">
-import type { AiProviderInfo } from '@renderer/composables/useAiControlSuggestions'
+import type { AiProfileInfo, AiProviderInfo } from '@renderer/composables/useAiControlSuggestions'
 import { useAiControlSuggestions } from '@renderer/composables/useAiControlSuggestions'
 import { useControls } from '@renderer/composables/useControls'
 import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
 import { CONTROL_TYPE_COLORS, CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const open = defineModel<boolean>('open')
 
-const { loading, error, listProviders, generate } = useAiControlSuggestions()
+const { loading, error, listOptions, generate } = useAiControlSuggestions()
 const { controls, setGroups } = useControls()
 const toast = useToast()
 
 const providers = ref<AiProviderInfo[]>([])
-const providersLoading = ref(true)
-const providersError = ref<string | null>(null)
+const profiles = ref<AiProfileInfo[]>([])
+const dailyCredits = ref(0)
+const optionsLoading = ref(true)
+const optionsError = ref<string | null>(null)
 const selectedProvider = ref<string>()
+// 'balanced' is the sensible middle default - matches profiles.ts's own default tier.
+const selectedProfile = ref<string>('balanced')
 const result = ref<ControlGroup[] | null>(null)
 
 onMounted(async () => {
   try {
-    providers.value = await listProviders()
+    const options = await listOptions()
+
+    providers.value = options.providers
+    profiles.value = options.profiles
+    dailyCredits.value = options.dailyCredits
     selectedProvider.value = providers.value.find((p) => p.configured)?.id
   } catch (err) {
     // Previously swallowed silently, which looked identical to "no providers configured" - an
     // empty list with no clue why (e.g. the CORS preflight this route didn't use to answer, or
     // the desktop client not being logged in). Surfaced the same way generate()'s own failure is.
-    providersError.value = err instanceof Error ? err.message : String(err)
+    optionsError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    providersLoading.value = false
+    optionsLoading.value = false
   }
 })
 
+// Credits left today in the selected provider's shared pool - stable across profile switches,
+// only the selected profile's own cost (below) changes what a generation would spend from it.
+const remainingCredits = computed<number | undefined>(
+  () => providers.value.find((p) => p.id === selectedProvider.value)?.remainingCredits
+)
+
+const selectedCost = computed<number | undefined>(
+  () => profiles.value.find((p) => p.id === selectedProfile.value)?.cost
+)
+
+// How many more generations at the currently selected profile's cost the remaining balance
+// actually buys - a convenience derived from the two numbers above, not tracked separately.
+const estimatedRunsLeft = computed<number | undefined>(() => {
+  if (remainingCredits.value === undefined || !selectedCost.value) return undefined
+
+  return Math.floor(remainingCredits.value / selectedCost.value)
+})
+
 const handleGenerate = async (): Promise<void> => {
-  if (!selectedProvider.value) return
+  if (!selectedProvider.value || !selectedProfile.value) return
 
   result.value = null
 
   try {
-    result.value = await generate(selectedProvider.value)
+    result.value = await generate(selectedProvider.value, selectedProfile.value)
   } catch {
     // error.value is already set by generate() - surfaced in the template below.
   }
@@ -66,12 +92,12 @@ const handleApply = (): void => {
 <template>
   <UModal
     v-model:open="open"
-    :ui="{ body: 'flex flex-col max-w-2xl gap-4' }"
+    :ui="{ content: 'max-w-4xl', body: 'flex flex-col gap-4' }"
     title="AI: Suggest Controls"
     description="Groups and controls are proposed from this avatar's current parameters (filtered the same way presets are) - nothing is applied until you review and confirm."
   >
     <template #body>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <USelect
           v-model="selectedProvider"
           :items="
@@ -81,15 +107,22 @@ const handleApply = (): void => {
               disabled: !p.configured
             }))
           "
-          :loading="providersLoading"
-          placeholder="Select a provider"
-          class="min-w-48"
+          :loading="optionsLoading"
+          placeholder="Provider"
+          class="min-w-40"
+        />
+        <USelect
+          v-model="selectedProfile"
+          :items="profiles.map((p) => ({ label: `${p.label} (${p.cost} cr)`, value: p.id }))"
+          :loading="optionsLoading"
+          placeholder="Profile"
+          class="min-w-40"
         />
         <button
           type="button"
           class="ai-generate-btn"
           :class="{ 'is-generating': loading }"
-          :disabled="!selectedProvider || loading"
+          :disabled="!selectedProvider || !selectedProfile || loading"
           @click="handleGenerate"
         >
           <UIcon
@@ -101,11 +134,28 @@ const handleApply = (): void => {
         </button>
       </div>
 
+      <p
+        v-if="remainingCredits !== undefined"
+        class="text-xs text-muted"
+      >
+        {{ remainingCredits }} / {{ dailyCredits }} credits left today for this provider
+        <template v-if="estimatedRunsLeft !== undefined">
+          - ≈{{ estimatedRunsLeft }} more at this profile's cost
+        </template>
+      </p>
+
+      <p
+        v-if="selectedProfile"
+        class="text-xs text-muted"
+      >
+        {{ profiles.find((p) => p.id === selectedProfile)?.description }}
+      </p>
+
       <UAlert
-        v-if="providersError"
+        v-if="optionsError"
         color="error"
         variant="subtle"
-        :title="`Couldn't load providers: ${providersError}`"
+        :title="`Couldn't load providers: ${optionsError}`"
       />
 
       <UAlert

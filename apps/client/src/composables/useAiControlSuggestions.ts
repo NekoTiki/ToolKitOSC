@@ -9,6 +9,20 @@ export interface AiProviderInfo {
   id: string
   label: string
   configured: boolean
+  // Credits left today in this provider's shared pool (see the server's rateLimit.ts) - every
+  // profile spends from the same number at a different rate (AiProfileInfo.cost below), so this
+  // doesn't change when you switch profiles, only when you switch provider or spend some. Doesn't
+  // reflect the separate per-avatar limit, which isn't known until an avatar is picked - that one
+  // only surfaces as generate()'s error if it's already exhausted.
+  remainingCredits: number
+}
+
+export interface AiProfileInfo {
+  id: string
+  label: string
+  description: string
+  // Credits one generation at this profile spends from the selected provider's pool.
+  cost: number
 }
 
 // One-shot action + result, not a module-scope singleton like useOpenShock/useAuth - there's
@@ -17,8 +31,8 @@ export interface AiProviderInfo {
 export function useAiControlSuggestions(): {
   loading: ReturnType<typeof ref<boolean>>
   error: ReturnType<typeof ref<string | null>>
-  listProviders: () => Promise<AiProviderInfo[]>
-  generate: (provider: string) => Promise<ControlGroup[]>
+  listOptions: () => Promise<{ providers: AiProviderInfo[]; profiles: AiProfileInfo[]; dailyCredits: number }>
+  generate: (provider: string, profile: string) => Promise<ControlGroup[]>
 } {
   const { token } = useAuth()
   const { includedParameters } = usePresets()
@@ -33,18 +47,28 @@ export function useAiControlSuggestions(): {
     return { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' }
   }
 
-  const listProviders = async (): Promise<AiProviderInfo[]> => {
+  // Model choice is never part of this - the server picks it from (provider, profile) alone (see
+  // profiles.ts's resolveModel). This only ever offers the two axes the server actually exposes.
+  const listOptions = async (): Promise<{
+    providers: AiProviderInfo[]
+    profiles: AiProfileInfo[]
+    dailyCredits: number
+  }> => {
     const response = await fetch(`${SERVER_URL}/api/ai/providers`, { headers: authHeaders() })
 
-    if (!response.ok) throw new Error(`Failed to list AI providers (${response.status})`)
+    if (!response.ok) throw new Error(`Failed to list AI options (${response.status})`)
 
-    return (await response.json()) as AiProviderInfo[]
+    return (await response.json()) as {
+      providers: AiProviderInfo[]
+      profiles: AiProfileInfo[]
+      dailyCredits: number
+    }
   }
 
   // Uses the app's existing noisy-address filter + the user's own per-avatar excluded list
   // (usePresets().includedParameters - the same set PresetModal/the coverage banner already
   // treat as "the real parameters") rather than sending every declared parameter to the server.
-  const generate = async (provider: string): Promise<ControlGroup[]> => {
+  const generate = async (provider: string, profile: string): Promise<ControlGroup[]> => {
     loading.value = true
     error.value = null
 
@@ -62,6 +86,8 @@ export function useAiControlSuggestions(): {
         headers: authHeaders(),
         body: JSON.stringify({
           provider,
+          profile,
+          avatarId: avatarDetails.value.id,
           avatarName: avatarDetails.value.name,
           parameters
         })
@@ -83,5 +109,5 @@ export function useAiControlSuggestions(): {
     }
   }
 
-  return { loading, error, listProviders, generate }
+  return { loading, error, listOptions, generate }
 }

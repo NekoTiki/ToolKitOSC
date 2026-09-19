@@ -1,109 +1,28 @@
 <script setup lang="ts">
 import type { SelectMenuItem } from '@nuxt/ui/components/SelectMenu.vue'
-import { ref } from 'vue'
+import { CONTROL_ICONS } from '@vrc-osc-toolkit/shared-ui'
+import { computed } from 'vue'
 
-const getIconItem = (icon: string): { value: string; icon: string } => {
-  return { value: icon, icon }
-}
+// Grouped by category from the single shared list (see packages/shared-ui's
+// constants/controlIcons.ts) - the AI control-suggestion feature reads the exact same list server
+// side, so a control it picks an icon for always matches one this picker also offers.
+const icons = computed<SelectMenuItem[]>(() => {
+  const categories: SelectMenuItem[][] = []
+  let current: SelectMenuItem[] | null = null
+  let currentCategory: string | null = null
 
-const icons = ref<SelectMenuItem[]>([
-  [
-    { type: 'label', label: 'Clothes' },
-    { label: 'Top', ...getIconItem('game-icons:tank-top') },
-    { label: 'T-Shirt', ...getIconItem('ion:shirt') },
-    { label: 'Hoode', ...getIconItem('i-hugeicons:hoodie') },
-    { label: 'Body', ...getIconItem('solar:body-bold') },
-    { label: 'Corset', ...getIconItem('game-icons:corset') },
-    { label: 'Skirt', ...getIconItem('solar:skirt-bold') },
-    { label: 'Pants', ...getIconItem('icon-park-solid:baby-pants') },
-    { label: 'Shorts', ...getIconItem('icon-park-solid:shorts') },
-    { label: 'Underwear', ...getIconItem('hugeicons:underpants-01') },
-    { label: 'Panties', ...getIconItem('icon-park-outline:panties') },
-    { label: 'Bra', ...getIconItem('i-lucide-lab:bra-sports') },
-    { label: 'Bikini', ...getIconItem('temaki:bikini') },
-    { label: 'Bikini Color', ...getIconItem('emojione-v1:bikini') },
-    { label: 'Sock', ...getIconItem('mingcute:sock-fill') },
-    { label: 'Stocking', ...getIconItem('mdi:stocking') },
-    { label: 'Dress', ...getIconItem('mingcute:dress-fill') },
-    { label: 'Kimono', ...getIconItem('game-icons:kimono') },
-    { label: 'Sweater', ...getIconItem('icon-park-solid:sweater') },
-    { label: 'Coat', ...getIconItem('icon-park-outline:women-coat') },
-    { label: 'Vest', ...getIconItem('icon-park-solid:vest') },
-    { label: 'Swimsuit', ...getIconItem('icon-park-solid:swimsuit') },
-    { label: 'Onesie', ...getIconItem('icon-park-solid:onesies') },
-    { label: 'Cape', ...getIconItem('game-icons:cape') },
-    { label: 'Apron', ...getIconItem('hugeicons:apron') }
-  ],
-  [
-    { type: 'label', label: 'Accessories' },
-    { label: 'Shoe', ...getIconItem('mdi:shoe-formal') },
-    { label: 'Heels', ...getIconItem('game-icons:high-heel') },
-    { label: 'Boots', ...getIconItem('game-icons:steeltoe-boots') },
-    { label: 'Running Shoes', ...getIconItem('hugeicons:running-shoes') },
-    { label: 'Collar', ...getIconItem('game-icons:heavy-collar') },
-    { label: 'Gloves', ...getIconItem('streamline-ultimate:chef-gear-gloves-bold') },
-    { label: 'Watch', ...getIconItem('material-symbols:watch') },
-    { label: 'Gun', ...getIconItem('fa7-solid:gun') },
-    { label: 'Ribbon', ...getIconItem('streamline-sharp:medical-ribbon-1-solid') },
-    { label: 'Ring', ...getIconItem('ri:diamond-ring-fill') },
-    { label: 'Scarf', ...getIconItem('mingcute:scarf-fill') },
-    { label: 'Mask', ...getIconItem('material-symbols:masks-rounded') },
-    { label: 'Glasses', ...getIconItem('material-symbols:eyeglasses') },
-    { label: 'Goggles', ...getIconItem('mdi:safety-googles') },
-    { label: 'Horns', ...getIconItem('i-game-icons:bull-horns') },
-    { label: 'Hat', ...getIconItem('icon-park-solid:hat') },
-    { label: 'Cap', ...getIconItem('hugeicons:cap') },
-    { label: 'Crown', ...getIconItem('solar:crown-bold') },
-    { label: 'Necklace', ...getIconItem('game-icons:necklace') },
-    { label: 'Earrings', ...getIconItem('game-icons:earrings') },
-    { label: 'Bandana', ...getIconItem('game-icons:bandana') },
-    { label: 'Belt', ...getIconItem('game-icons:belt') },
-    { label: 'Bow Tie', ...getIconItem('mdi:bow-tie') },
-    { label: 'Backpack', ...getIconItem('solar:backpack-bold') },
-    { label: 'Headphones', ...getIconItem('material-symbols:headphones') },
-    { label: 'Hair', ...getIconItem('mingcute:hair-fill') },
-    { label: 'Eyepatch', ...getIconItem('game-icons:eyepatch') },
-    { label: 'Chain', ...getIconItem('fa7-solid:chain') },
-    { label: 'Feather', ...getIconItem('ph:feather-fill') },
-    { label: 'Halo', ...getIconItem('icon-park-solid:halo') }
-  ],
-  [
-    { type: 'label', label: 'Body' },
-    { label: 'Body', ...getIconItem('solar:body-shape-minimalistic-bold-duotone') },
-    { label: 'Breast', ...getIconItem('healthicons:breasts') },
-    { label: 'Breast', value: 'healthicons:breasts-outline', icon: 'healthicons:breasts-outline' },
-    { label: 'Arm', ...getIconItem('game-icons:forearm') },
-    { label: 'Legs', ...getIconItem('game-icons:female-legs') },
-    { label: 'Feet', ...getIconItem('streamline-ultimate:medical-specialty-feet-bold') },
-    { label: 'Animal Ears', ...getIconItem('emojione-monotone:cat-face') },
-    { label: 'Ears', ...getIconItem('i-famicons:ear-outline') },
-    { label: 'Tail', ...getIconItem('game-icons:fox-tail') },
-    { label: 'Angel Wings', ...getIconItem('game-icons:feathered-wing') },
-    { label: 'Bat Wings', ...getIconItem('game-icons:bat-wing') },
-    { label: 'Paw', ...getIconItem('mdi:paw') },
-    { label: 'Claw', ...getIconItem('game-icons:claw') },
-    { label: 'Fangs', ...getIconItem('game-icons:fangs') },
-    { label: 'Hoof', ...getIconItem('game-icons:hoof') },
-    { label: 'Fin', ...getIconItem('mdi:shark-fin') },
-    { label: 'Mustache', ...getIconItem('game-icons:mustache') },
-    { label: 'Beard', ...getIconItem('game-icons:beard') }
-  ],
-  [
-    { type: 'label', label: 'Others' },
-    { label: 'Contrast', ...getIconItem('mingcute:shadow-fill') },
-    { label: 'Contrast', ...getIconItem('material-symbols:contrast') },
-    { label: 'Draw', ...getIconItem('material-symbols:draw-abstract') },
-    { label: 'Makeup', ...getIconItem('icon-park-twotone:foundation-makeup') },
-    { label: 'Dryer', ...getIconItem('ph:hair-dryer-fill') },
-    { label: 'Eye Blind', ...getIconItem('streamline-flex:visual-blind-1') },
-    { label: 'Tattoo', ...getIconItem('temaki:tattoo-machine') },
-    { label: 'Lipstick', ...getIconItem('icon-park-solid:lipstick') },
-    { label: 'Sparkle', ...getIconItem('ph:sparkle-bold') },
-    { label: 'Flame', ...getIconItem('solar:flame-bold') },
-    { label: 'Lightning', ...getIconItem('solar:lightning-bold') },
-    { label: 'LED', ...getIconItem('icon-park-solid:led-diode') }
-  ]
-])
+  for (const { category, label, icon } of CONTROL_ICONS) {
+    if (category !== currentCategory) {
+      current = [{ type: 'label', label: category }]
+      categories.push(current)
+      currentCategory = category
+    }
+
+    current!.push({ label, value: icon, icon })
+  }
+
+  return categories
+})
 
 const model = defineModel<string>()
 </script>
