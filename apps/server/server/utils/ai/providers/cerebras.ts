@@ -3,6 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
+import { throwOpenAiCompatibleError } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 const CEREBRAS_URL = 'https://api.cerebras.ai/v1/chat/completions'
@@ -49,7 +50,7 @@ export function createCerebrasProvider(apiKey: string, primaryModel: string): Ai
 
       if (!response.ok) {
         const body = await response.text()
-        throw new Error(`Cerebras request failed (${response.status}): ${body}`)
+        throwOpenAiCompatibleError('Cerebras', response.status, body)
       }
 
       const data = (await response.json()) as {

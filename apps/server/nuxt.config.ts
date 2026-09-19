@@ -39,7 +39,20 @@ export default defineNuxtConfig({
     // deprecated internal model ("infire-llama-3.1-8b-instruct") and 410'd - verified against the
     // account's live model catalog (GET /accounts/{id}/ai/models/search) instead of guessing
     // again; gpt-oss-120b is also already the default elsewhere (Groq, OpenRouter).
-    cloudflareModel: '@cf/openai/gpt-oss-120b'
+    cloudflareModel: '@cf/openai/gpt-oss-120b',
+    // Invite-only gate for the whole AI feature (see server/utils/ai/access.ts) - comma-separated
+    // Discord ids, checked by isAdmin.ts. Admins implicitly have full AI access + model-select
+    // permission on top of being able to manage the allowlist from /dashboard.
+    aiAdminDiscordIds: '',
+    // Provider/profile used for every generation from an account without model-select permission
+    // (see profiles.ts's resolveModel and the admin-managed `can_select_model` flag) - falls back
+    // to the first configured provider in a fixed preference order if left unset.
+    aiDefaultProvider: '',
+    aiDefaultProfile: 'balanced',
+    // Where the sqlite file (drizzle + node:sqlite, see server/db/index.ts) lives - relative to
+    // Nitro's cwd (apps/server in dev, /app in the production Docker image, where docker-compose.yml
+    // mounts a host volume at this same path so it survives image rebuilds).
+    sqlitePath: './data/app.db'
   },
   devServer: {
     port: 3000,

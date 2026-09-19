@@ -27,3 +27,6 @@ apps/client/src-tauri/gen
 
 # Machine-specific server deploy script (ssh host/path baked in, not shared)
 apps/server/deploy.mjs
+
+# Local sqlite db (see apps/server/server/db) - persisted via a docker-compose volume in prod
+apps/server/data/

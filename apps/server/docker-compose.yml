@@ -19,3 +19,5 @@ services:
       - .env
     ports:
       - '3131:3000'
+    volumes:
+      - ./data:/app/data

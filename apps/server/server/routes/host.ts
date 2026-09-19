@@ -8,7 +8,9 @@ import {
   MIN_SUPPORTED_PROTOCOL_VERSION,
   PROTOCOL_VERSION
 } from '#shared/types/protocol'
+import { upsertUserFromAuth } from '~~/server/db/users'
 import { clientList, sendToClient, sendToEveryoneInRoom } from '~~/server/routes/ws/[ws]'
+import { getAiAccess } from '~~/server/utils/ai/access'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -83,7 +85,7 @@ export const sendMessageToHost = (
 }
 
 export default defineWebSocketHandler({
-  message(_peer, message) {
+  async message(_peer, message) {
     const peer: Peer = _peer as unknown as Peer
 
     if (message.text().includes('ping')) {
@@ -125,16 +127,21 @@ export default defineWebSocketHandler({
           runtimeConfig.session.password
         ) as jwt.JwtPayload & { sub: string; user: User }
 
+        const roomId = user.discord?.id
+
+        await upsertUserFromAuth(user)
+        const aiAccess = await getAiAccess(roomId!)
+
         peer.send({
           type: 'auth-success',
           message: {
             message: 'Authentication successful',
             serverVersion: PROTOCOL_VERSION,
-            supportedControlTypes: KNOWN_CONTROL_TYPES
+            supportedControlTypes: KNOWN_CONTROL_TYPES,
+            aiAccess
           }
         })
 
-        const roomId = user.discord?.id
         const userIp = useWsIp(peer)
 
         addClient(roomId!, peer.id, { peer, user, ip: userIp })

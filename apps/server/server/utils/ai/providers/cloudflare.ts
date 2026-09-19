@@ -3,6 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
+import { throwOpenAiCompatibleError } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 // Workers AI's REST API is scoped under a Cloudflare account, not just an API token - the OpenAI-
@@ -59,7 +60,7 @@ export function createCloudflareProvider(
 
       if (!response.ok) {
         const body = await response.text()
-        throw new Error(`Cloudflare Workers AI request failed (${response.status}): ${body}`)
+        throwOpenAiCompatibleError('Cloudflare Workers AI', response.status, body)
       }
 
       const data = (await response.json()) as {

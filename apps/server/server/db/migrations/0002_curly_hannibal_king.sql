@@ -1,0 +1,1 @@
+ALTER TABLE `ai_generation_log` ADD `refunded` integer DEFAULT false NOT NULL;

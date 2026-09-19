@@ -29,3 +29,27 @@ export function getAiProviders(): AiProvider[] {
 export function getAiProvider(id: string): AiProvider | undefined {
   return getAiProviders().find((p) => p.id === id)
 }
+
+// Fixed fallback order when NUXT_AI_DEFAULT_PROVIDER is unset or points at a provider that isn't
+// actually configured - gemini first since it was the cheapest/most reliable in this feature's own
+// testing (see nuxt.config.ts's geminiModel comment).
+const DEFAULT_PROVIDER_PREFERENCE = ['gemini', 'groq', 'openrouter', 'cerebras', 'cloudflare']
+
+// Provider used for accounts without model-select permission (see utils/ai/access.ts) - the server
+// decides, never the client. Returns undefined only if no provider is configured at all.
+export function resolveDefaultProvider(): AiProvider | undefined {
+  const providers = getAiProviders()
+  const preferred = useRuntimeConfig().aiDefaultProvider
+
+  const preferredMatch = preferred && providers.find((p) => p.id === preferred && p.isConfigured())
+
+  if (preferredMatch) return preferredMatch
+
+  for (const id of DEFAULT_PROVIDER_PREFERENCE) {
+    const match = providers.find((p) => p.id === id && p.isConfigured())
+
+    if (match) return match
+  }
+
+  return providers.find((p) => p.isConfigured())
+}

@@ -3,6 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
+import { throwOpenAiCompatibleError } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -53,7 +54,7 @@ export function createOpenRouterProvider(apiKey: string, primaryModel: string): 
 
       if (!response.ok) {
         const body = await response.text()
-        throw new Error(`OpenRouter request failed (${response.status}): ${body}`)
+        throwOpenAiCompatibleError('OpenRouter', response.status, body)
       }
 
       const data = (await response.json()) as {

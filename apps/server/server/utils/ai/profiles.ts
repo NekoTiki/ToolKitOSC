@@ -65,6 +65,12 @@ export function getPromptProfile(id: unknown): PromptProfile | undefined {
     : undefined
 }
 
+// Used for accounts without model-select permission (see utils/ai/access.ts) - NUXT_AI_DEFAULT_PROFILE
+// falls back to 'balanced' if unset or misconfigured, rather than failing a generation over it.
+export function resolveDefaultProfile(): PromptProfile {
+  return getPromptProfile(useRuntimeConfig().aiDefaultProfile) ?? PROMPT_PROFILES.balanced
+}
+
 // The model choice is entirely server-decided (never a client-supplied string) - each provider's
 // "primary" model is whatever's configured via its NUXT_*_MODEL env var (see nuxt.config.ts) and
 // used for 'balanced'/'heavy'; 'light' gets a hardcoded smaller/cheaper model per provider instead

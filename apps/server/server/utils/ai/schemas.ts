@@ -20,16 +20,46 @@ const parameterSchema = z.object({
 // (called after validation) already does that lookup against whatever providers actually exist,
 // dynamically, and returns a clean 400/503 itself; duplicating that as a second static list here
 // would just be one more place for the two to drift apart.
+// Both optional, but for different reasons: `provider` is ignored entirely (regardless of what's
+// sent) unless this account has model-select permission (see utils/ai/access.ts) - that's the
+// actual enforcement point for that permission, not just a client convenience. `profile` is always
+// honored when sent - every account picks its own profile, permission or not - optional here only
+// as a safe fallback to resolveDefaultProfile() if it's ever omitted.
 export const suggestControlsBodySchema = z.object({
-  provider: z.string().min(1),
-  profile: z.enum(PROFILE_IDS),
+  provider: z.string().min(1).optional(),
+  profile: z.enum(PROFILE_IDS).optional(),
   avatarId: z.string().min(1),
   avatarName: z.string().min(1),
   parameters: z.array(parameterSchema).min(1).max(MAX_PARAMETERS)
 })
 
-export const optionsQuerySchema = z.object({
-  // Optional - GET /api/ai/providers is still useful without one (provider/profile listing,
-  // credit balances), it just can't also report the per-avatar limit until an avatar is known.
-  avatarId: z.string().min(1).optional()
+// Admin routes (server/api/admin/*) - all gated by requireAdmin, but still validated the same way.
+export const grantAccessBodySchema = z.object({
+  discordId: z.string().min(1),
+  canSelectModel: z.boolean().optional().default(false),
+  note: z.string().max(500).optional()
+})
+
+export const setCanSelectModelBodySchema = z.object({
+  canSelectModel: z.boolean()
+})
+
+// One overall pool per account per day (see rateLimit.ts) - not per-provider.
+export const creditBonusBodySchema = z.object({
+  amount: z.number().int().min(1).max(1000)
+})
+
+export const searchUsersQuerySchema = z.object({
+  q: z.string().min(1).max(100)
+})
+
+export const statsQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).optional().default(14)
+})
+
+export const recentAttemptsQuerySchema = z.object({
+  discordId: z.string().min(1).optional(),
+  provider: z.string().min(1).optional(),
+  success: z.enum(['true', 'false']).optional(),
+  page: z.coerce.number().int().min(1).optional().default(1)
 })

@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789845420943,
+      "tag": "0000_skinny_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789846354070,
+      "tag": "0001_exotic_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789846845924,
+      "tag": "0002_curly_hannibal_king",
+      "breakpoints": true
+    }
+  ]
+}

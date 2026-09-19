@@ -2,6 +2,7 @@ import { detectClusterHints } from '../clustering'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
+import { throwGeminiError } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
@@ -41,7 +42,7 @@ export function createGeminiProvider(apiKey: string, primaryModel: string): AiPr
 
       if (!response.ok) {
         const body = await response.text()
-        throw new Error(`Gemini request failed (${response.status}): ${body}`)
+        throwGeminiError(response.status, body)
       }
 
       const data = (await response.json()) as {

@@ -3,6 +3,7 @@ import { toStrictJsonSchema } from '../jsonSchema'
 import type { PromptProfile } from '../profiles'
 import { resolveModel } from '../profiles'
 import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from '../prompt'
+import { throwOpenAiCompatibleError } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -52,7 +53,7 @@ export function createGroqProvider(apiKey: string, primaryModel: string): AiProv
 
       if (!response.ok) {
         const body = await response.text()
-        throw new Error(`Groq request failed (${response.status}): ${body}`)
+        throwOpenAiCompatibleError('Groq', response.status, body)
       }
 
       const data = (await response.json()) as {

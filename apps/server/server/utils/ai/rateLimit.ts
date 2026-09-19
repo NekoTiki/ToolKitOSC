@@ -1,73 +1,103 @@
-// Two independent limits, not one - a user could otherwise burn their whole daily budget
-// re-rolling the same avatar over and over, or spread it thin across many. In-memory, day-window
-// counters (mirrors server/utils/rateLimiter.ts's fixed-window approach, just a day instead of a
-// second) - resets on server restart, which is an accepted tradeoff here the same way it already
-// is for that module, not something this adds new.
-const DAY_MS = 24 * 60 * 60 * 1000
+import { and, eq } from 'drizzle-orm'
 
-// A user can generate for the same avatar at most this many times a day, regardless of which
-// provider/profile they switch between - independent of the account credit pool below, and not
-// itself profile-costed (see the project's conceptual writeup: this is meant as exactly two
-// knobs, not a cross product with every profile) - a flat anti-spam count, not a resource cost.
-export const AVATAR_DAILY_LIMIT = 3
+import { getDb } from '~~/server/db'
+import { aiCreditBonus, aiCreditUsage } from '~~/server/db/schema'
 
-interface Bucket {
-  spent: number
-  windowStart: number
+// UTC calendar day, not a rolling 24h window - every counter below is keyed by this, so a new day
+// starts everything at zero with no explicit reset write needed (see server/plugins/dailyMaintenance.ts
+// for the actual daily job, which only prunes old rows).
+function today(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
-const buckets = new Map<string, Bucket>()
+async function creditBonus(discordId: string, day: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ bonus: aiCreditBonus.bonus })
+    .from(aiCreditBonus)
+    .where(and(eq(aiCreditBonus.discordId, discordId), eq(aiCreditBonus.day, day)))
+    .limit(1)
 
-// Returns the remaining pool size if `cost` fits within what's left today (and spends it), or
-// null if it doesn't - checked, not just incremented-and-reported, so a caller can't accidentally
-// race past the pool by calling this more than once for what should be a single consumption.
-function consume(key: string, poolSize: number, cost: number): number | null {
-  const now = Date.now()
-  const bucket = buckets.get(key)
-
-  if (!bucket || now - bucket.windowStart >= DAY_MS) {
-    if (cost > poolSize) return null
-
-    buckets.set(key, { spent: cost, windowStart: now })
-
-    return poolSize - cost
-  }
-
-  if (bucket.spent + cost > poolSize) return null
-
-  bucket.spent += cost
-
-  return poolSize - bucket.spent
+  return row?.bonus ?? 0
 }
 
-// Read-only - for reporting remaining quota (see GET /api/ai/options) without spending anything.
-function remaining(key: string, poolSize: number): number {
-  const bucket = buckets.get(key)
+async function creditSpent(discordId: string, day: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ spent: aiCreditUsage.spent })
+    .from(aiCreditUsage)
+    .where(and(eq(aiCreditUsage.discordId, discordId), eq(aiCreditUsage.day, day)))
+    .limit(1)
 
-  if (!bucket || Date.now() - bucket.windowStart >= DAY_MS) return poolSize
-
-  return Math.max(0, poolSize - bucket.spent)
+  return row?.spent ?? 0
 }
 
-// Shared per-(account, provider) credit pool, spent at whatever rate the calling profile costs
-// (see profiles.ts's `creditCost`) - fungible across profiles, unlike the old per-profile caps.
-export function consumeAccountCredits(
-  discordUserId: string,
-  provider: string,
-  cost: number,
-  poolSize: number
-): number | null {
-  return consume(`account:${discordUserId}:${provider}`, poolSize, cost)
+// Read-only - for reporting remaining quota (GET /api/ai/providers) without spending anything.
+export async function remainingAccountCredits(discordId: string, basePoolSize: number): Promise<number> {
+  const day = today()
+  const [spent, bonus] = await Promise.all([creditSpent(discordId, day), creditBonus(discordId, day)])
+
+  return Math.max(0, basePoolSize + bonus - spent)
 }
 
-export function remainingAccountCredits(discordUserId: string, provider: string, poolSize: number): number {
-  return remaining(`account:${discordUserId}:${provider}`, poolSize)
+// One overall daily credit pool per account, shared across every provider - not per-(account,
+// provider) - spent at whatever rate the calling profile costs (see profiles.ts's `creditCost`),
+// fungible across profiles AND providers. `basePoolSize` is ACCOUNT_DAILY_CREDITS; an admin's
+// addCreditBonus top-up for today is added on top of it here. Returns the fresh remaining count on
+// success, or null if `cost` doesn't fit what's left today - not just increment-and-report, so a
+// caller can't race past the pool with repeat calls.
+export async function consumeAccountCredits(discordId: string, cost: number, basePoolSize: number): Promise<number | null> {
+  const day = today()
+  const [spent, bonus] = await Promise.all([creditSpent(discordId, day), creditBonus(discordId, day)])
+  const poolSize = basePoolSize + bonus
+
+  if (spent + cost > poolSize) return null
+
+  const newSpent = spent + cost
+
+  await getDb()
+    .insert(aiCreditUsage)
+    .values({ discordId, day, spent: newSpent })
+    .onConflictDoUpdate({
+      target: [aiCreditUsage.discordId, aiCreditUsage.day],
+      set: { spent: newSpent }
+    })
+
+  return poolSize - newSpent
 }
 
-export function consumeAvatarDaily(discordUserId: string, avatarId: string): number | null {
-  return consume(`avatar:${discordUserId}:${avatarId}`, AVATAR_DAILY_LIMIT, 1)
+// Un-spends credits after a request that got charged but turned out to never actually run a
+// generation (see providerError.ts's AiRefundableError) - reduces today's `spent`, not a bonus
+// top-up, so it stays out of the admin-granted-credits audit trail (addCreditBonus below) and
+// tomorrow's fresh pool isn't affected either way. Floors at 0 instead of going negative if this
+// is ever called for more than what's actually recorded as spent today. Returns the fresh
+// remaining count, same as consumeAccountCredits, so the caller can push a live WS update with it.
+export async function refundAccountCredits(discordId: string, amount: number, basePoolSize: number): Promise<number> {
+  const day = today()
+  const [spent, bonus] = await Promise.all([creditSpent(discordId, day), creditBonus(discordId, day)])
+  const newSpent = Math.max(0, spent - amount)
+
+  await getDb()
+    .insert(aiCreditUsage)
+    .values({ discordId, day, spent: newSpent })
+    .onConflictDoUpdate({
+      target: [aiCreditUsage.discordId, aiCreditUsage.day],
+      set: { spent: newSpent }
+    })
+
+  return basePoolSize + bonus - newSpent
 }
 
-export function remainingAvatarDaily(discordUserId: string, avatarId: string): number {
-  return remaining(`avatar:${discordUserId}:${avatarId}`, AVATAR_DAILY_LIMIT)
+// Admin "increase credits for today" (see api/admin/users/[discordId]/credits.post.ts) - additive,
+// not a replacement, and only ever applies to today's UTC day (tomorrow starts fresh again).
+export async function addCreditBonus(discordId: string, amount: number): Promise<void> {
+  const day = today()
+  const current = await creditBonus(discordId, day)
+  const newBonus = current + amount
+
+  await getDb()
+    .insert(aiCreditBonus)
+    .values({ discordId, day, bonus: newBonus })
+    .onConflictDoUpdate({
+      target: [aiCreditBonus.discordId, aiCreditBonus.day],
+      set: { bonus: newBonus }
+    })
 }

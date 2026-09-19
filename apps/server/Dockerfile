@@ -28,6 +28,17 @@ ENV PORT=3000
 
 COPY --from=build /app/apps/server/.output ./.output
 
+# Raw migration SQL files (server/db/migrations) are read from disk at startup (see
+# server/db/index.ts's ensureMigrated) rather than bundled into the JS output like imported code,
+# so they're copied in separately here, at the same `server/db/migrations` path relative to this
+# stage's WORKDIR that dev uses relative to apps/server's own cwd.
+COPY --from=build /app/apps/server/server/db/migrations ./server/db/migrations
+
+# docker-compose.yml mounts a host volume at /app/data (see runtimeConfig.sqlitePath) so the
+# sqlite file survives image rebuilds - created and owned by the non-root `node` user up front,
+# since the volume mount itself won't pick up ownership from an image layer created after it.
+RUN mkdir -p /app/data && chown node:node /app/data
+
 USER node
 
 EXPOSE 3000
