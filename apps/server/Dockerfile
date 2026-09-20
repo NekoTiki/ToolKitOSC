@@ -28,6 +28,15 @@ ENV PORT=3000
 
 COPY --from=build /app/apps/server/.output ./.output
 
+# @libsql/client (server/db/index.ts) picks its native binary (e.g. @libsql/linux-arm64-musl) at
+# require-time based on process.platform/arch, not through a static import - Nitro's dependency
+# tracer only follows static imports when deciding what to copy into .output/server/node_modules,
+# so it silently drops the one that's actually needed and the server crashes at startup with
+# MODULE_NOT_FOUND. Copying the whole @libsql/* install from the build stage (which ran on this
+# same architecture, so it already has the right one) patches that gap directly instead of relying
+# on the tracer to find it.
+COPY --from=build /app/node_modules/@libsql ./.output/server/node_modules/@libsql
+
 # Raw migration SQL files (server/db/migrations) are read from disk at startup (see
 # server/db/index.ts's ensureMigrated) rather than bundled into the JS output like imported code,
 # so they're copied in separately here, at the same `server/db/migrations` path relative to this
