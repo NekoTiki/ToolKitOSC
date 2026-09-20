@@ -1,7 +1,7 @@
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { usePresets } from '@renderer/composables/usePresets'
-import { SERVER_URL } from '@renderer/constants'
+import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
 import { ref } from 'vue'
 
@@ -63,7 +63,7 @@ export function useAiControlSuggestions(): {
   // and the modal that owns this composable's lifetime doesn't get remounted on every open (see
   // AiControlsModal.vue), so a caller has to explicitly call this again to see a fresh number.
   const listOptions = async (): Promise<AiOptions> => {
-    const response = await fetch(`${SERVER_URL}/api/ai/providers`, { headers: authHeaders() })
+    const response = await fetch(`${serverHttpUrl.value}/api/ai/providers`, { headers: authHeaders() })
 
     if (!response.ok) throw new Error(`Failed to list AI options (${response.status})`)
 
@@ -86,7 +86,7 @@ export function useAiControlSuggestions(): {
         kind: param.kind
       }))
 
-      const response = await fetch(`${SERVER_URL}/api/ai/suggest-controls`, {
+      const response = await fetch(`${serverHttpUrl.value}/api/ai/suggest-controls`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({

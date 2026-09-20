@@ -17,7 +17,7 @@ package). Requires the Rust toolchain (`rustup`) in addition to Node — see
 ### Development
 
 ```bash
-npm run dev              # tauri dev, points at a local server (SERVER_URL/SERVER_WS_URL default to localhost:3000)
+npm run dev              # tauri dev, points at a local server (SERVER_WS_URL defaults to localhost:3000)
 npm run dev:prod         # tauri dev, points at the deployed server instead
 ```
 
