@@ -1,5 +1,6 @@
 import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiCredits } from '@renderer/composables/useAiCredits'
+import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
@@ -360,6 +361,12 @@ export function useWebsocketHost(): {
         useAiCredits().applyUpdate(data.message)
       } else if (data.type === 'ai-access-update') {
         useAiAccess().applyUpdate(data.message)
+      } else if (data.type === 'ai-generate-progress') {
+        useAiGenerationStatus().applyProgress(data.message)
+      } else if (data.type === 'ai-generate-result') {
+        useAiGenerationStatus().applyResult(data.message)
+      } else if (data.type === 'ai-generate-error') {
+        useAiGenerationStatus().applyError(data.message)
       }
     }
   })

@@ -64,6 +64,27 @@ export interface AiCreditsUpdateMessage {
   dailyCredits: number
 }
 
+// POST /api/ai/suggest-controls now only kicks a generation off and returns { requestId } right
+// away - a Cloudflare tunnel in front of the server enforces a ~2.1 minute request timeout,
+// comfortably shorter than a Heavy-profile generation can take, so the actual result is delivered
+// asynchronously over this same host connection instead, correlated by that requestId. Progress
+// messages are purely cosmetic flavor text (see apps/server's suggest-controls.post.ts) so the
+// client's "Generating…" state doesn't look frozen for however long the upstream provider takes.
+export interface AiGenerateProgressMessage {
+  requestId: string
+  message: string
+}
+
+export interface AiGenerateResultMessage {
+  requestId: string
+  groups: ControlGroup[]
+}
+
+export interface AiGenerateErrorMessage {
+  requestId: string
+  message: string
+}
+
 export type ClientType = 'everyone' | 'username' | 'discord'
 
 export interface ArgUpdateMessage {
@@ -165,6 +186,9 @@ export type ServerToHostMessage =
   | WsEnvelope<'client-list', ClientListEntry[]>
   | WsEnvelope<'ai-credits-update', AiCreditsUpdateMessage>
   | WsEnvelope<'ai-access-update', AiAccessUpdateMessage>
+  | WsEnvelope<'ai-generate-progress', AiGenerateProgressMessage>
+  | WsEnvelope<'ai-generate-result', AiGenerateResultMessage>
+  | WsEnvelope<'ai-generate-error', AiGenerateErrorMessage>
 
 // Server -> browser viewer, over /ws/[roomId].
 export type ServerToViewerMessage =

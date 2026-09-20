@@ -1,4 +1,4 @@
-import { getAiProviders, resolveDefaultProvider } from '~~/server/utils/ai'
+import { getAiProviders } from '~~/server/utils/ai'
 import { getAiAccess } from '~~/server/utils/ai/access'
 import { ACCOUNT_DAILY_CREDITS, PROMPT_PROFILES } from '~~/server/utils/ai/profiles'
 import { remainingAccountCredits } from '~~/server/utils/ai/rateLimit'
@@ -32,8 +32,6 @@ export default defineEventHandler(async (event) => {
     cost: profile.creditCost
   }))
 
-  const defaultProvider = resolveDefaultProvider()
-
   return {
     providers,
     profiles,
@@ -43,9 +41,7 @@ export default defineEventHandler(async (event) => {
     remainingCredits: await remainingAccountCredits(discordId, ACCOUNT_DAILY_CREDITS),
     dailyCredits: ACCOUNT_DAILY_CREDITS,
     // Profile is always the client's own choice (see suggest-controls.post.ts) - only the
-    // provider/model is gated by this, and only meaningful for display when it's false
-    // ("Using Gemini automatically" - see AiControlsModal.vue).
-    canSelectModel: access.canSelectModel,
-    defaultProviderLabel: defaultProvider?.label ?? null
+    // provider/model is gated by this.
+    canSelectModel: access.canSelectModel
   }
 })

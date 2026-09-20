@@ -1,4 +1,4 @@
-import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
+import { randomUUID } from 'node:crypto'
 
 import { upsertUserFromAuth } from '~~/server/db/users'
 import { sendMessageToHost } from '~~/server/routes/host'
@@ -8,17 +8,141 @@ import type { FailureReason } from '~~/server/utils/ai/generationLog'
 import { logGenerationAttempt } from '~~/server/utils/ai/generationLog'
 import { recordProviderFailure, recordProviderSuccess } from '~~/server/utils/ai/loadBalancer'
 import { normalizeSuggestion } from '~~/server/utils/ai/normalize'
+import type { PromptProfile } from '~~/server/utils/ai/profiles'
 import { ACCOUNT_DAILY_CREDITS, PROMPT_PROFILES, resolveDefaultProfile } from '~~/server/utils/ai/profiles'
 import { AiRefundableError } from '~~/server/utils/ai/providerError'
 import { consumeAccountCredits, refundAccountCredits } from '~~/server/utils/ai/rateLimit'
 import { suggestControlsBodySchema } from '~~/server/utils/ai/schemas'
+import type { AiParameterInput, AiProvider } from '~~/server/utils/ai/types'
+
+// Purely cosmetic flavor text, pushed over the host WS on a timer while a generation is still in
+// flight (see runGeneration below) - there's no real progress to report mid-request (it's one
+// blocking call to the provider), this just keeps the modal from looking frozen for however long
+// that call actually takes.
+const THINKING_MESSAGES = [
+  "Reviewing this avatar's parameters…",
+  'Looking for related toggles and sliders…',
+  'Sketching out control groups…',
+  'Double-checking names and groupings…',
+  'Still working on it…'
+]
+const PROGRESS_INTERVAL_MS = 6000
+
+interface GenerationContext {
+  requestId: string
+  discordId: string
+  avatarId: string
+  avatarName: string
+  parameters: AiParameterInput[]
+  provider: AiProvider
+  profile: PromptProfile
+  model: string
+}
+
+// Runs after the HTTP response has already gone out (see the handler below, which fires this
+// without awaiting it) - a Cloudflare tunnel in front of this server enforces a ~2.1 minute
+// request timeout, comfortably shorter than a Heavy-profile generation can take, so the request
+// itself is now just "accepted" instantly and the real result is delivered over the existing host
+// WS connection instead (same channel 'ai-credits-update' already uses), correlated by requestId -
+// see useAiGenerationStatus.ts/useWebsocketHost.ts on the client for the other end of this.
+async function runGeneration(ctx: GenerationContext): Promise<void> {
+  const { requestId, discordId, avatarId, avatarName, parameters, provider, profile, model } = ctx
+  const startedAt = Date.now()
+
+  let messageIndex = 0
+  const pushProgress = (): void => {
+    sendMessageToHost(discordId, 'ai-generate-progress', {
+      requestId,
+      message: THINKING_MESSAGES[messageIndex % THINKING_MESSAGES.length]
+    })
+    messageIndex++
+  }
+
+  // Fires once immediately (so the client sees something right away instead of a blank ~6s wait
+  // for the first tick) and then on the interval below until the provider call settles.
+  pushProgress()
+  const progressTimer = setInterval(pushProgress, PROGRESS_INTERVAL_MS)
+
+  try {
+    const suggestion = await provider.suggestControlGroups(avatarName, parameters, profile)
+    const groups = normalizeSuggestion(suggestion, parameters)
+
+    recordProviderSuccess(provider.id)
+
+    void logGenerationAttempt({
+      discordId,
+      avatarId,
+      avatarName,
+      provider: provider.id,
+      profile: profile.id,
+      model,
+      success: true,
+      creditCost: profile.creditCost,
+      durationMs: Date.now() - startedAt
+    })
+
+    sendMessageToHost(discordId, 'ai-generate-result', { requestId, groups })
+  } catch (error) {
+    // Full detail (provider error text, which can include the raw upstream response body) stays
+    // server-side only - useful for debugging later, not something to hand back to the client,
+    // which gets a generic message instead.
+    console.error(`[ai] ${provider.id} request failed for avatar "${avatarName}":`, error)
+
+    // Feeds the load balancer's circuit breaker (see loadBalancer.ts) - repeated failures take
+    // this provider out of resolveDefaultProvider()'s rotation for a cooldown period, regardless
+    // of whether this particular request had it auto-selected or explicitly picked.
+    recordProviderFailure(provider.id)
+
+    // A provider throws AiRefundableError specifically for failures that mean the request was
+    // rejected before any generation actually ran (rate limit, payload too large, bad key, out of
+    // quota - see providerError.ts) - nothing was delivered for that spend, so give it back.
+    const refunded = error instanceof AiRefundableError
+
+    if (refunded) {
+      const remainingAfterRefund = await refundAccountCredits(discordId, profile.creditCost, ACCOUNT_DAILY_CREDITS)
+
+      sendMessageToHost(discordId, 'ai-credits-update', {
+        remainingCredits: remainingAfterRefund,
+        dailyCredits: ACCOUNT_DAILY_CREDITS
+      })
+    }
+
+    void logGenerationAttempt({
+      discordId,
+      avatarId,
+      avatarName,
+      provider: provider.id,
+      profile: profile.id,
+      model,
+      success: false,
+      failureReason: 'provider-error',
+      errorMessage: error instanceof Error ? error.message : String(error),
+      creditCost: profile.creditCost,
+      refunded,
+      durationMs: Date.now() - startedAt
+    })
+
+    sendMessageToHost(discordId, 'ai-generate-error', {
+      requestId,
+      message: refunded
+        ? "AI generation failed before it started - you weren't charged for this attempt. Please try again later."
+        : 'AI generation failed. Please try again later.'
+    })
+  } finally {
+    clearInterval(progressTimer)
+  }
+}
 
 // Bearer-token-gated (see verifyDesktopToken) so this never sits open as an unauthenticated proxy
 // burning the configured provider keys - the desktop client already holds a token from its normal
 // Discord auth flow (see apps/client's useAuth.ts). Model choice is entirely server-side (see
 // profiles.ts's resolveModel) - the client only ever picks a provider + profile, and only when
 // it's actually allowed to (see the canSelectModel check below).
-export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[] }> => {
+//
+// Everything here up to and including the credit spend still runs synchronously (it's cheap, and
+// the client needs a real 401/403/429/503 for those, not a fire-and-forget accept) - only the
+// actual provider call moves to runGeneration() above, unawaited.
+export default defineEventHandler(async (event): Promise<{ requestId: string }> => {
   const user = verifyDesktopToken(event)
   const discordId = user.discord?.id
 
@@ -116,74 +240,21 @@ export default defineEventHandler(async (event): Promise<{ groups: ControlGroup[
     dailyCredits: ACCOUNT_DAILY_CREDITS
   })
 
-  const startedAt = Date.now()
+  const requestId = randomUUID()
 
-  try {
-    const suggestion = await provider.suggestControlGroups(body.avatarName, body.parameters, profile)
-    const groups = normalizeSuggestion(suggestion, body.parameters)
+  // Not awaited on purpose - see runGeneration's own comment for why. Every outcome from here on
+  // (progress, result, error, the credit refund) is reported over the host WS connection, never
+  // through this HTTP response, which has already gone out by the time any of it settles.
+  void runGeneration({
+    requestId,
+    discordId,
+    avatarId: body.avatarId,
+    avatarName: body.avatarName,
+    parameters: body.parameters,
+    provider,
+    profile,
+    model
+  })
 
-    recordProviderSuccess(provider.id)
-
-    void logGenerationAttempt({
-      discordId,
-      avatarId: body.avatarId,
-      avatarName: body.avatarName,
-      provider: provider.id,
-      profile: profile.id,
-      model,
-      success: true,
-      creditCost: profile.creditCost,
-      durationMs: Date.now() - startedAt
-    })
-
-    return { groups }
-  } catch (error) {
-    // Full detail (provider error text, which can include the raw upstream response body) stays
-    // server-side only - useful for debugging later, not something to hand back to the client,
-    // which gets a generic message instead.
-    console.error(`[ai] ${provider.id} request failed for avatar "${body.avatarName}":`, error)
-
-    // Feeds the load balancer's circuit breaker (see loadBalancer.ts) - repeated failures take
-    // this provider out of resolveDefaultProvider()'s rotation for a cooldown period, regardless
-    // of whether this particular request had it auto-selected or explicitly picked.
-    recordProviderFailure(provider.id)
-
-    // A provider throws AiRefundableError specifically for failures that mean the request was
-    // rejected before any generation actually ran (rate limit, payload too large, bad key, out of
-    // quota - see providerError.ts) - nothing was delivered for that spend, so give it back. A
-    // second WS push here is deliberate, not a dedupe of the one above: the first told the client
-    // what it was charged, this one tells it what it got back.
-    const refunded = error instanceof AiRefundableError
-
-    if (refunded) {
-      const remainingAfterRefund = await refundAccountCredits(discordId, profile.creditCost, ACCOUNT_DAILY_CREDITS)
-
-      sendMessageToHost(discordId, 'ai-credits-update', {
-        remainingCredits: remainingAfterRefund,
-        dailyCredits: ACCOUNT_DAILY_CREDITS
-      })
-    }
-
-    void logGenerationAttempt({
-      discordId,
-      avatarId: body.avatarId,
-      avatarName: body.avatarName,
-      provider: provider.id,
-      profile: profile.id,
-      model,
-      success: false,
-      failureReason: 'provider-error',
-      errorMessage: error instanceof Error ? error.message : String(error),
-      creditCost: profile.creditCost,
-      refunded,
-      durationMs: Date.now() - startedAt
-    })
-
-    throw createError({
-      statusCode: 502,
-      statusMessage: refunded
-        ? "AI generation failed before it started - you weren't charged for this attempt. Please try again later."
-        : 'AI generation failed. Please try again later.'
-    })
-  }
+  return { requestId }
 })

@@ -3,6 +3,7 @@ import { useAiAccess } from '@renderer/composables/useAiAccess'
 import type { AiProfileInfo, AiProviderInfo } from '@renderer/composables/useAiControlSuggestions'
 import { useAiControlSuggestions } from '@renderer/composables/useAiControlSuggestions'
 import { useAiCredits } from '@renderer/composables/useAiCredits'
+import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
 import { useControls } from '@renderer/composables/useControls'
 import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
 import { CONTROL_TYPE_COLORS, CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
@@ -13,6 +14,10 @@ const open = defineModel<boolean>('open')
 const { loading, error, listOptions, generate } = useAiControlSuggestions()
 const { controls, setGroups } = useControls()
 const { latest: latestCredits } = useAiCredits()
+// Rotating flavor text pushed by the server while a generation is in flight (see
+// suggest-controls.post.ts's runGeneration) - null once nothing is running, whether that's
+// because nothing was ever started or because the result/error already arrived.
+const { statusMessage } = useAiGenerationStatus()
 // Live, not a one-shot REST snapshot: access.canSelectModel is pushed the instant an admin changes
 // it (see useWebsocketHost.ts's 'ai-access-update' handler), so the provider/profile pickers below
 // show/hide immediately even if this modal is already open when that happens - not just on the
@@ -22,10 +27,11 @@ const toast = useToast()
 
 const providers = ref<AiProviderInfo[]>([])
 const profiles = ref<AiProfileInfo[]>([])
-// One overall pool per account per day (see the server's rateLimit.ts), not per-provider.
+// One overall pool per account per day (see the server's rateLimit.ts), not per-provider - shown
+// as a plain remaining count, not "X / Y", since an admin can top an account up mid-day (see
+// server/api/admin/users/[discordId]/credits.post.ts), so there's no single fixed daily cap to
+// show as the denominator.
 const remainingCredits = ref<number | undefined>(undefined)
-const dailyCredits = ref(0)
-const defaultProviderLabel = ref<string | null>(null)
 const optionsLoading = ref(true)
 const optionsError = ref<string | null>(null)
 const selectedProvider = ref<string>()
@@ -42,8 +48,6 @@ const loadOptions = async (): Promise<void> => {
     providers.value = options.providers
     profiles.value = options.profiles
     remainingCredits.value = options.remainingCredits
-    dailyCredits.value = options.dailyCredits
-    defaultProviderLabel.value = options.defaultProviderLabel
     if (!selectedProvider.value) selectedProvider.value = providers.value.find((p) => p.configured)?.id
     optionsError.value = null
   } catch (err) {
@@ -78,7 +82,6 @@ watch(latestCredits, (update) => {
   if (!update) return
 
   remainingCredits.value = update.remainingCredits
-  dailyCredits.value = update.dailyCredits
 })
 
 const selectedCost = computed<number | undefined>(
@@ -180,20 +183,22 @@ const handleApply = (): void => {
         </button>
       </div>
 
-      <!-- No model-select permission - the provider is never sent from here at all (handleGenerate
-      omits it), this is purely informational about which one the server will pick. -->
+      <!-- Live progress flavor text (see useAiGenerationStatus.ts) - only meaningful while loading
+      is true, but gated on statusMessage too since a stale value could otherwise flash for a
+      frame between this modal re-opening and loadOptions/handleGenerate resetting things. -->
       <p
-        v-if="!aiAccess.canSelectModel && defaultProviderLabel"
-        class="text-xs text-muted"
+        v-if="loading && statusMessage"
+        class="flex items-center gap-1.5 text-xs text-muted"
       >
-        Using {{ defaultProviderLabel }} automatically
+        <span class="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
+        {{ statusMessage }}
       </p>
 
       <p
         v-if="remainingCredits !== undefined"
         class="text-xs text-muted"
       >
-        {{ remainingCredits }} / {{ dailyCredits }} credits left today
+        {{ remainingCredits }} credit{{ remainingCredits === 1 ? '' : 's' }} left today
         <template v-if="estimatedRunsLeft !== undefined">
           - ≈{{ estimatedRunsLeft }} more at this profile's cost
         </template>

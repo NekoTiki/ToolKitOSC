@@ -1,3 +1,4 @@
+import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { usePresets } from '@renderer/composables/usePresets'
@@ -29,10 +30,10 @@ export interface AiOptions {
   dailyCredits: number
   // Whether this account is allowed to pick the provider/model itself (see the server's
   // utils/ai/access.ts) - profile is always the user's own choice regardless. false means
-  // AiControlsModal.vue hides the provider picker and defaultProviderLabel describes what the
-  // server will use automatically instead.
+  // AiControlsModal.vue hides the provider picker; the server still picks one on its own,
+  // it's just not surfaced to the user (see resolveDefaultProvider's load-balancing comment -
+  // there's no single fixed answer to show anyway).
   canSelectModel: boolean
-  defaultProviderLabel: string | null
 }
 
 // One-shot action + result, not a module-scope singleton like useOpenShock/useAuth - there's
@@ -47,6 +48,7 @@ export function useAiControlSuggestions(): {
   const { token } = useAuth()
   const { includedParameters } = usePresets()
   const { avatarDetails } = useAvatarDetails()
+  const { waitForResult } = useAiGenerationStatus()
 
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -73,6 +75,12 @@ export function useAiControlSuggestions(): {
   // Uses the app's existing noisy-address filter + the user's own per-avatar excluded list
   // (usePresets().includedParameters - the same set PresetModal/the coverage banner already
   // treat as "the real parameters") rather than sending every declared parameter to the server.
+  //
+  // This POST only ever kicks the generation off and gets back a requestId - the actual result
+  // arrives asynchronously over the host WS connection (see useAiGenerationStatus.ts), since a
+  // Cloudflare tunnel in front of the server enforces a ~2.1 minute request timeout that a real
+  // generation (especially Heavy) can easily exceed. waitForResult resolves/rejects once that
+  // matching 'ai-generate-result'/'ai-generate-error' push arrives.
   const generate = async (provider?: string, profile?: string): Promise<ControlGroup[]> => {
     loading.value = true
     error.value = null
@@ -103,9 +111,9 @@ export function useAiControlSuggestions(): {
         throw new Error(body.statusMessage || `Request failed (${response.status})`)
       }
 
-      const { groups } = (await response.json()) as { groups: ControlGroup[] }
+      const { requestId } = (await response.json()) as { requestId: string }
 
-      return groups
+      return await waitForResult(requestId)
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       throw err

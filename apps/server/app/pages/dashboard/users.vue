@@ -12,7 +12,7 @@ interface AccessEntry {
   note: string | null
   // One overall pool per account per day (see the server's rateLimit.ts), not per-provider - null
   // for a user with no access yet.
-  credits: { remaining: number; max: number } | null
+  credits: { remaining: number } | null
 }
 
 const { adminFetch } = useAdminApi()
@@ -147,7 +147,7 @@ async function addCredits(discordId: string): Promise<void> {
                   color="neutral"
                   variant="subtle"
                 >
-                  Credits: {{ user.credits.remaining }}/{{ user.credits.max }}
+                  Credits: {{ user.credits.remaining }}
                 </UBadge>
                 <UButton
                   size="xs"
