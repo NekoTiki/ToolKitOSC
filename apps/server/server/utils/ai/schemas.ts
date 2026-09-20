@@ -16,6 +16,23 @@ const parameterSchema = z.object({
   kind: z.enum(['Bool', 'Float', 'Int'])
 })
 
+// Shared leaf validators used across every control-suggestion shape in normalize.ts, not just
+// step-enum's - a provider's raw JSON is untrusted the same way regardless of which control type
+// it's for, so every name/address the model hands back gets the same trim-and-require-non-empty
+// treatment before it's used, rather than each control type re-implementing its own truthy check.
+export const aiControlNameSchema = z.string().trim().min(1)
+export const aiAddressSchema = z.string().trim().min(1)
+
+// A single 'step-enum' option as a provider actually returns it - validated in normalize.ts before
+// it's trusted into a real StepEnumControl. `value` is clamped to 0-255: VRChat Int parameters are
+// a single byte, so anything outside that range could never actually be reached from OSC and would
+// just render as a permanently-dead option rather than a working one.
+export const stepEnumOptionSchema = z.object({
+  name: aiControlNameSchema,
+  value: z.number().int().min(0).max(255),
+  icon: z.string().optional()
+})
+
 // provider is intentionally a plain non-empty string, not a matching enum here - getAiProvider()
 // (called after validation) already does that lookup against whatever providers actually exist,
 // dynamically, and returns a clean 400/503 itself; duplicating that as a second static list here

@@ -13,7 +13,8 @@ import type {
   ControlType,
   EnumControl,
   LastUser,
-  OpenShockCommandResult
+  OpenShockCommandResult,
+  StepEnumControl
 } from '@vrc-osc-toolkit/shared-ui'
 import { useIntifaceControl, useOpenShockControl } from '@vrc-osc-toolkit/shared-ui'
 import type { ComputedRef } from 'vue'
@@ -290,6 +291,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       }
     } else if (command.type === 'enum' && control?.type === 'enum') {
       const selectedOption: EnumControl['options'][number] =
+        control.options[command.value as number]
+
+      if (selectedOption) update({ address: control.inputAddress, args: [selectedOption.value] })
+    } else if (command.type === 'step-enum' && control?.type === 'step-enum') {
+      const selectedOption: StepEnumControl['options'][number] =
         control.options[command.value as number]
 
       if (selectedOption) update({ address: control.inputAddress, args: [selectedOption.value] })

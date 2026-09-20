@@ -84,6 +84,19 @@ const unavailableReason = computed(
       :address="control.inputAddress"
       @update:value="$emit('command', { type: 'slider', value: $event })"
     />
+    <!-- Same picker UI as 'enum' - StepEnumControl is structurally identical to EnumControl (an
+    address + named integer options), just the AI-suggestible variant of it (see server's ai/
+    normalize.ts). This case was missing entirely, so an AI-generated step-enum control silently
+    rendered nothing at all - the same class of bug migrateControlGroups (useControls.ts) already
+    has to work around for the old 'intiface-vibrator' rename. -->
+    <control-enum
+      v-else-if="control.type === 'step-enum'"
+      :icon="control.icon"
+      :title="control.name"
+      :address="control.inputAddress"
+      :items="control.options"
+      @update:value="$emit('command', { type: 'step-enum', value: $event })"
+    />
     <control-open-shock
       v-else-if="control.type === 'open-shock-shocker'"
       :control-id="control.id"

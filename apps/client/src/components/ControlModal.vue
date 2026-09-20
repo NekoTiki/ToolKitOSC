@@ -138,6 +138,7 @@ const typeDefaults: Record<ControlType['type'], (m: Partial<ControlType>) => voi
     const stepEnumModel = m as Partial<StepEnumControl>
 
     stepEnumModel.inputAddress = ''
+    stepEnumModel.options = [{ name: '', value: 0, icon: '' }]
   },
   enum: (m) => {
     const enumModel = m as Partial<EnumControl>
@@ -422,7 +423,7 @@ watch(
           />
 
           <UFormField
-            v-if="model.type === 'enum'"
+            v-if="model.type === 'enum' || model.type === 'step-enum'"
             label="Options"
             required
             :ui="{ container: 'grid gap-2' }"
