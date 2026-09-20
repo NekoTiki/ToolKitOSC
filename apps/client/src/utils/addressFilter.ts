@@ -2,7 +2,16 @@
 // OSCGoodies-style prefixes), shared between the control editor's address picker (ControlModal.vue)
 // and the preset creator (usePresets.ts) - previously duplicated as ControlModal.vue's own private
 // `isFilteredAddress`, now the one definition both read from.
-const NOISY_ADDRESS_PREFIXES = ['pcs/', 'WH Lollipop/', 'OGB/', 'Go/', 'FT/']
+const NOISY_ADDRESS_PREFIXES = [
+  'pcs/',
+  'WH Lollipop/',
+  'OGB/',
+  'Go/',
+  'FT/',
+  '_ShockButton',
+  'Cam/',
+  'Dor/',
+]
 const NOISY_ADDRESS_PATTERN = /VF\d+_/
 
 // VRChat auto-generates these five per PhysBone component, appended to whichever parameter name
