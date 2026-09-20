@@ -277,6 +277,7 @@ const handleApply = (): void => {
   line-height: 1.25rem;
   font-weight: 500;
   color: white;
+  cursor: pointer;
   background-image: linear-gradient(
     115deg,
     var(--ui-color-primary-500),
@@ -286,7 +287,6 @@ const handleApply = (): void => {
   background-size: 200% 100%;
   background-position: 0% 0%;
   transition:
-    transform 0.15s ease,
     box-shadow 0.15s ease,
     background-position 0.6s ease,
     opacity 0.15s ease;
@@ -294,7 +294,6 @@ const handleApply = (): void => {
 
 .ai-generate-btn:hover:not(:disabled):not(.is-generating) {
   background-position: 100% 0%;
-  transform: translateY(-1px);
   box-shadow: 0 4px 14px color-mix(in oklab, var(--ui-color-primary-500) 45%, transparent);
 }
 
@@ -303,8 +302,8 @@ const handleApply = (): void => {
   cursor: default;
   /* Disabled while generating (see :disabled="... || loading" above) - without this, hovering a
   disabled button can still visually register in some engines, and the base `transition` on
-  background-position/transform/box-shadow would then race the shimmer keyframe animation below
-  for the same properties, fighting/stalling it right as the mouse moves over the button. */
+  background-position/box-shadow would then race the shimmer keyframe animation below for the
+  same properties, fighting/stalling it right as the mouse moves over the button. */
   pointer-events: none;
 }
 

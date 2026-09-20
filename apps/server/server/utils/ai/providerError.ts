@@ -53,7 +53,7 @@ export function tryRecoverFailedGeneration(rawBody: string): AiSuggestionResult 
   }
 }
 
-// Shared by every OpenAI-compatible provider (Groq, Cerebras, Cloudflare Workers AI, OpenRouter all
+// Shared by every OpenAI-compatible provider (Groq, Mistral, Cloudflare Workers AI, OpenRouter all
 // use this same {error:{message,type,code}} response shape on failure) - conservative by design:
 // only status/code combinations we're confident mean "the request was rejected before the model
 // ever ran" are refundable. Everything else (including a strict-schema validation failure on real

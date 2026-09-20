@@ -15,13 +15,6 @@ interface AccessEntry {
   credits: { remaining: number; max: number } | null
 }
 
-interface KnownUser {
-  discordId: string
-  username: string | null
-  displayName: string | null
-  avatarUrl: string | null
-}
-
 const { adminFetch } = useAdminApi()
 const toast = useToast()
 
@@ -56,36 +49,6 @@ async function load(): Promise<void> {
 
 onMounted(load)
 
-// "Add user" - a raw Discord id input with a small search-as-you-type assist against known users
-// (searchUsers on the server - anyone who's ever connected), so an admin doesn't have to hunt down
-// a snowflake by hand for someone who's already shown up once.
-const newDiscordId = ref('')
-const newCanSelectModel = ref(false)
-const suggestions = ref<KnownUser[]>([])
-let searchTimeout: ReturnType<typeof setTimeout> | undefined
-
-watch(newDiscordId, (value) => {
-  clearTimeout(searchTimeout)
-
-  if (value.trim().length < 2) {
-    suggestions.value = []
-    return
-  }
-
-  searchTimeout = setTimeout(async () => {
-    const res = await adminFetch<{ users: KnownUser[] }>(
-      `/api/admin/search-users?q=${encodeURIComponent(value.trim())}`
-    )
-
-    suggestions.value = res.users
-  }, 250)
-})
-
-function pickSuggestion(user: KnownUser): void {
-  newDiscordId.value = user.discordId
-  suggestions.value = []
-}
-
 async function grantAccess(discordId: string, canSelectModel: boolean): Promise<void> {
   if (!discordId.trim()) return
 
@@ -94,9 +57,6 @@ async function grantAccess(discordId: string, canSelectModel: boolean): Promise<
     body: { discordId: discordId.trim(), canSelectModel }
   })
   toast.add({ title: 'Access granted', icon: 'i-lucide-check', color: 'success' })
-  newDiscordId.value = ''
-  newCanSelectModel.value = false
-  suggestions.value = []
   await load()
 }
 
@@ -137,51 +97,6 @@ async function addCredits(discordId: string): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-4">
-    <UCard>
-      <p class="mb-2 text-sm font-medium">
-        Grant access
-      </p>
-      <div class="relative flex flex-wrap items-center gap-2">
-        <UInput
-          v-model="newDiscordId"
-          placeholder="Discord id"
-          class="min-w-56"
-        />
-        <UCheckbox
-          v-model="newCanSelectModel"
-          label="Can select model"
-        />
-        <UButton
-          icon="i-lucide-user-plus"
-          :disabled="!newDiscordId.trim()"
-          @click="grantAccess(newDiscordId, newCanSelectModel)"
-        >
-          Grant access
-        </UButton>
-
-        <div
-          v-if="suggestions.length"
-          class="absolute top-full left-0 z-10 mt-1 w-72 rounded-md border border-default bg-default shadow-lg"
-        >
-          <button
-            v-for="user in suggestions"
-            :key="user.discordId"
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated"
-            @click="pickSuggestion(user)"
-          >
-            <UAvatar
-              :src="user.avatarUrl ?? undefined"
-              :alt="user.displayName ?? user.discordId"
-              size="xs"
-            />
-            <span>{{ user.displayName || user.username || user.discordId }}</span>
-            <span class="text-xs text-muted">{{ user.discordId }}</span>
-          </button>
-        </div>
-      </div>
-    </UCard>
-
     <UCard>
       <div class="mb-3 flex items-center justify-between gap-2">
         <p class="text-sm font-medium">

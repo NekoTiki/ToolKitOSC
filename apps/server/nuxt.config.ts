@@ -29,13 +29,12 @@ export default defineNuxtConfig({
     geminiModel: 'gemini-flash-lite-latest',
     openrouterApiKey: '',
     openrouterModel: 'openai/gpt-oss-120b',
-    cerebrasApiKey: '',
-    // 'llama-3.3-70b'/'llama3.1-8b' (the old defaults here and for the 'light' profile override
-    // below) were removed from Cerebras' catalog at some point - verified against the account's
-    // live model list (GET https://api.cerebras.ai/v1/models) instead of guessing again, same as
-    // the Cloudflare default was fixed earlier. gpt-oss-120b is also already the default elsewhere
-    // (Groq, OpenRouter).
-    cerebrasModel: 'gpt-oss-120b',
+    mistralApiKey: '',
+    // mistral-medium-latest/mistral-small-latest both 429 with a hard 0 req/minute quota on a
+    // free-tier key (verified live against this account) - ministral-14b-latest is the largest
+    // model that's actually usable without a paid workspace, and still supports strict
+    // json_schema mode. Reverify against GET https://api.mistral.ai/v1/models if upgrading plans.
+    mistralModel: 'ministral-14b-latest',
     cloudflareApiKey: '',
     // Workers AI is scoped under a Cloudflare account, not just an API token - both are required
     // for this provider to report itself configured (see providers/cloudflare.ts).

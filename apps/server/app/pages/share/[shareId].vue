@@ -131,55 +131,76 @@ onBeforeUnmount(removeTheme)
         class="h-min self-center min-w-92"
         :ui="{ avatar: 'animate-spin' }"
       />
-      <UCard
-        v-for="controlGroup in controlGroups"
-        v-else
-        :key="controlGroup.id"
-        :ui="{ root: 'h-min', body: 'p-4 sm:p-4 space-y-4' }"
-      >
-        <UCollapsible
-          v-model:open="useControlGroupOpen(controlGroup.id).value"
-          class="flex flex-col gap-2 min-w-[90vw] sm:min-w-[456px] md:min-w-[692px]"
-          :ui="{ content: 'overflow-visible' }"
+      <!-- Same fixed-width flex-wrap layout as the desktop client's own control panel (App.vue) -
+      each card sits at a definite, breakpoint-driven width (see the UCollapsible's
+      w-108/2xl:w-164 below) rather than being stretched to fill a column, which is what a CSS
+      multi-column masonry (tried first here too) forces every child to do. flex-wrap just packs cards
+      left-to-right at their own natural width and wraps once one doesn't fit - the outer flex
+      container above already provides the wrap/gap behavior, so these are its direct children
+      rather than a nested container. -->
+      <template v-else>
+        <UCard
+          v-for="controlGroup in controlGroups"
+          :key="controlGroup.id"
+          class="w-fit max-w-full"
+          :ui="{ root: 'h-min', body: 'p-4 sm:p-4 space-y-4' }"
         >
-          <template #default="{ open: cOpen }">
-            <UButton
-              :label="controlGroup.name"
-              color="neutral"
-              variant="subtle"
-              trailing-icon="i-lucide-chevron-down"
-              block
-              :ui="{
-                trailingIcon: ['transition-transform', cOpen ? 'duration-200 rotate-180' : '']
-              }"
-            />
-          </template>
-
-          <template #content>
-            <div
-              class="grid grid-cols-[repeat(2,minmax(0,180px))] sm:grid-cols-[repeat(2,minmax(0,220px))] md:grid-cols-[repeat(3,minmax(0,220px))] items-center justify-center-safe gap-4"
-            >
-              <Control
-                v-for="control in controlGroup.controls"
-                :key="control.id"
-                :control="control"
-                :locked="control.locked"
-                :unavailable="control.unavailable"
-                :offline="hostStatus !== 'online'"
-                :disconnected="wsOffline"
-                @command="
-                  sendMessage('command', {
-                    groupId: controlGroup.id,
-                    controlId: control.id,
-                    controlName: control.name,
-                    ...$event
-                  })
-                "
+          <!-- A definite width (w-108/2xl:w-164), not max-w-full/w-full - snug-fits exactly 2
+          controls below 2xl (2*w-52 + 1*gap-4 = 27rem = w-108) and exactly 3 at 2xl and up
+          (3*w-52 + 2*gap-4 = 41rem = w-164), matching ControlGroup.vue's own reasoning in the
+          desktop client - including why it's 2xl and not the narrower lg first tried (the jump
+          to 3 columns lands right where the outer row also drops from 2 group cards side by side
+          to 1, at lg but not at 2xl, so lg compounded two reflows into one jarring resize range)
+          and why it has to be a real width, not a max-width, for the card to stay the same size
+          once #content is collapsed. -->
+          <UCollapsible
+            v-model:open="useControlGroupOpen(controlGroup.id).value"
+            class="flex w-108 2xl:w-164 flex-col gap-2"
+            :ui="{ content: 'overflow-visible' }"
+          >
+            <template #default="{ open: cOpen }">
+              <UButton
+                :label="controlGroup.name"
+                color="neutral"
+                variant="subtle"
+                trailing-icon="i-lucide-chevron-down"
+                block
+                :ui="{
+                  trailingIcon: ['transition-transform', cOpen ? 'duration-200 rotate-180' : '']
+                }"
               />
-            </div>
-          </template>
-        </UCollapsible>
-      </UCard>
+            </template>
+
+            <!-- flex-wrap + a fixed width per control, not CSS grid's auto-fit/auto-fill - see
+            ControlGroup.vue's matching comment in the desktop client: the UCollapsible above does
+            have a definite width (w-108/2xl:w-164), but flex-wrap already packs fixed-width
+            controls left-to-right and wraps once that width doesn't fit another one, with no
+            per-breakpoint column-count math to keep in sync by hand. -->
+            <template #content>
+              <div class="flex flex-wrap items-center justify-start gap-4">
+                <Control
+                  v-for="control in controlGroup.controls"
+                  :key="control.id"
+                  class="w-52 shrink-0"
+                  :control="control"
+                  :locked="control.locked"
+                  :unavailable="control.unavailable"
+                  :offline="hostStatus !== 'online'"
+                  :disconnected="wsOffline"
+                  @command="
+                    sendMessage('command', {
+                      groupId: controlGroup.id,
+                      controlId: control.id,
+                      controlName: control.name,
+                      ...$event
+                    })
+                  "
+                />
+              </div>
+            </template>
+          </UCollapsible>
+        </UCard>
+      </template>
     </div>
     <AuthModal
       v-model:open="authRequiredOpen"

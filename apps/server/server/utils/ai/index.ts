@@ -1,8 +1,8 @@
 import { isProviderHealthy, pickNextProvider } from './loadBalancer'
-import { createCerebrasProvider } from './providers/cerebras'
 import { createCloudflareProvider } from './providers/cloudflare'
 import { createGeminiProvider } from './providers/gemini'
 import { createGroqProvider } from './providers/groq'
+import { createMistralProvider } from './providers/mistral'
 import { createOpenRouterProvider } from './providers/openrouter'
 import type { AiProvider } from './types'
 
@@ -22,7 +22,7 @@ export function getAiProviders(): AiProvider[] {
     createGroqProvider(config.groqApiKey, config.groqModel),
     createGeminiProvider(config.geminiApiKey, config.geminiModel),
     createOpenRouterProvider(config.openrouterApiKey, config.openrouterModel),
-    createCerebrasProvider(config.cerebrasApiKey, config.cerebrasModel),
+    createMistralProvider(config.mistralApiKey, config.mistralModel),
     createCloudflareProvider(config.cloudflareApiKey, config.cloudflareAccountId, config.cloudflareModel)
   ]
 }

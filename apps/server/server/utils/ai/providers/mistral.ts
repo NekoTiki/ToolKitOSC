@@ -6,30 +6,28 @@ import { buildControlSuggestionSchema, buildSystemPrompt, buildUserPrompt } from
 import { throwOpenAiCompatibleError, tryRecoverFailedGeneration } from '../providerError'
 import type { AiParameterInput, AiProvider, AiSuggestionResult } from '../types'
 
-const CEREBRAS_URL = 'https://api.cerebras.ai/v1/chat/completions'
+const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions'
 
-// OpenAI-compatible, same request shape as Groq (see providers/groq.ts) - Cerebras' main draw is
-// inference speed, not model variety, so the default model is deliberately a plain, broadly-
-// capable one rather than anything exotic.
-export function createCerebrasProvider(apiKey: string, primaryModel: string): AiProvider {
+// OpenAI-compatible, same request/response shape as Groq (see providers/groq.ts).
+export function createMistralProvider(apiKey: string, primaryModel: string): AiProvider {
   return {
-    id: 'cerebras',
-    label: 'Cerebras',
+    id: 'mistral',
+    label: 'Mistral',
     isConfigured: () => !!apiKey,
-    resolveModelForProfile: (profileId) => resolveModel('cerebras', profileId, primaryModel),
+    resolveModelForProfile: (profileId) => resolveModel('mistral', profileId, primaryModel),
 
     async suggestControlGroups(
       avatarName: string,
       parameters: AiParameterInput[],
       profile: PromptProfile
     ): Promise<AiSuggestionResult> {
-      if (!apiKey) throw new Error('Cerebras is not configured (missing NUXT_CEREBRAS_API_KEY)')
+      if (!apiKey) throw new Error('Mistral is not configured (missing NUXT_MISTRAL_API_KEY)')
 
-      const model = resolveModel('cerebras', profile.id, primaryModel)
+      const model = resolveModel('mistral', profile.id, primaryModel)
       const clusterHints = profile.useClusterHints ? detectClusterHints(parameters) : []
       const schema = toStrictJsonSchema(buildControlSuggestionSchema(profile))
 
-      const response = await fetch(CEREBRAS_URL, {
+      const response = await fetch(MISTRAL_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -54,12 +52,12 @@ export function createCerebrasProvider(apiKey: string, primaryModel: string): Ai
         const recovered = tryRecoverFailedGeneration(body)
 
         if (recovered) {
-          console.warn('[ai] Cerebras rejected structured output as invalid, but a usable generation was recovered from it')
+          console.warn('[ai] Mistral rejected structured output as invalid, but a usable generation was recovered from it')
 
           return recovered
         }
 
-        throwOpenAiCompatibleError('Cerebras', response.status, body)
+        throwOpenAiCompatibleError('Mistral', response.status, body)
       }
 
       const data = (await response.json()) as {
@@ -67,7 +65,7 @@ export function createCerebrasProvider(apiKey: string, primaryModel: string): Ai
       }
       const content = data.choices?.[0]?.message?.content
 
-      if (!content) throw new Error('Cerebras returned no content')
+      if (!content) throw new Error('Mistral returned no content')
 
       return JSON.parse(content) as AiSuggestionResult
     }

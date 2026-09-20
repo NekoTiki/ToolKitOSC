@@ -47,7 +47,7 @@ export interface AiSuggestionResult {
   groups: AiGroupSuggestion[]
 }
 
-export type AiProviderId = 'groq' | 'gemini' | 'openrouter' | 'cerebras' | 'cloudflare'
+export type AiProviderId = 'groq' | 'gemini' | 'openrouter' | 'mistral' | 'cloudflare'
 
 export interface AiProvider {
   id: AiProviderId

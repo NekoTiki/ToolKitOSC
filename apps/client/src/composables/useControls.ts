@@ -53,6 +53,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   addGroup: () => void
   updateGroup: (groupId: string, name: string) => void
   deleteGroup: (groupId: string) => void
+  deleteGroups: (groupIds: string[]) => void
   setGroups: (groups: ControlGroup[]) => void
   setGroupHidden: (groupId: string, hidden: boolean) => void
   isGroupHidden: (groupId: string) => boolean
@@ -168,6 +169,17 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
   const deleteGroup = (groupId: string): void => {
     controlsList.value = controls.value.filter((g) => g.id !== groupId)
+
+    saveControls()
+  }
+
+  // One state update + one save, not deleteGroup() looped per id - looping would otherwise fire
+  // the deep `controls` watch (onControlsChange, saveControls) once per group instead of once for
+  // the whole bulk action.
+  const deleteGroups = (groupIds: string[]): void => {
+    const idsToDelete = new Set(groupIds)
+
+    controlsList.value = controls.value.filter((g) => !idsToDelete.has(g.id))
 
     saveControls()
   }
@@ -371,6 +383,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     addGroup,
     updateGroup,
     deleteGroup,
+    deleteGroups,
     setGroups,
     setGroupHidden,
     isGroupHidden,

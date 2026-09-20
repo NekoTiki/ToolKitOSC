@@ -3,6 +3,7 @@ import type { ContextMenuItem } from '@nuxt/ui/components/ContextMenu.vue'
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useClientsDb } from '@renderer/composables/useClientsDb'
+import { useControlGroupOpenState } from '@renderer/composables/useControlGroupOpenState'
 import { useControlLogsModal } from '@renderer/composables/useControlLogsModal'
 import type { Client } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
@@ -11,7 +12,7 @@ import type { CommandWithoutIds, ControlGroup, ControlType } from '@vrc-osc-tool
 import { Control } from '@vrc-osc-toolkit/shared-ui'
 import { from, useObservable } from '@vueuse/rxjs'
 import { liveQuery } from 'dexie'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 
 import { useControlModal } from '../../composables/useControlModal'
@@ -31,8 +32,14 @@ const {
 const { openModal: ausOpenModal } = useAreYouSureModal()
 const { openModal } = useControlModal()
 const { openModal: openControlLogs } = useControlLogsModal()
+const { isOpen, setOpen } = useControlGroupOpenState()
 
-const open = ref(localStorage.getItem(`controlGroupOpen_${props.controlGroup.id}`) !== 'false')
+// Shared reactive state (see useControlGroupOpenState.ts), not a local ref - ManageGroupsModal.vue's
+// bulk collapse/expand needs to change this from outside this component instance.
+const open = computed({
+  get: () => isOpen(props.controlGroup.id),
+  set: (value: boolean) => setOpen(props.controlGroup.id, value)
+})
 const editMode = ref(false)
 const groupNameInput = ref<string>('')
 
@@ -157,10 +164,6 @@ const handleCommandEvent = (controlId: string, command: CommandWithoutIds): void
 
   if (control) handleCommand(control, command)
 }
-
-watch(open, (value) => {
-  localStorage.setItem(`controlGroupOpen_${props.controlGroup.id}`, String(value))
-})
 </script>
 
 <template>
@@ -260,17 +263,27 @@ watch(open, (value) => {
       </UDropdownMenu>
     </div>
 
-    <!-- w-full, not a viewport-relative width (this used to be w-[90vw]/sm:w-114/md:w-173 - it
-    tracked the *viewport* breakpoint, which was fine back when each card could always claim close
-    to the full row width under the old flex-wrap layout. Under App.vue's masonry columns, a card's
-    real available width is viewport-width / column-count, which can be narrower than the viewport
-    breakpoint implies once there's more than one column - the card would then claim more width
-    than its column actually has, overflowing into/behind the next column. w-full instead always
-    matches whatever width the card's actual container (its masonry column) gives it; max-w-173
-    just caps it from growing unreasonably wide if that container is ever very large. -->
+    <!-- A definite width (w-108/2xl:w-164), not max-w-full/w-full - snug-fits exactly 2 controls
+    below 2xl (2*w-52 + 1*gap-4 = 27rem = w-108) and exactly 3 at 2xl and up (3*w-52 + 2*gap-4 =
+    41rem = w-164), so there's never leftover slack past the last control in a row. Being a
+    definite width rather than a max-width capping w-full also matters for the *collapsed* state:
+    a max-width only caps whatever size the box would otherwise take from its (visible) content,
+    so with the controls row hidden behind the UCollapsible's #content, the box - and the w-fit
+    UCard around it (see App.vue) - used to shrink down to just the header row's width. A real
+    width doesn't depend on what's currently visible inside it, so the card now stays the same
+    size whether the group is open or collapsed.
+
+    2xl (1536px), not lg (1024px) - at 1024, this box's own 2-col->3-col jump (432px->656px)
+    lands almost exactly where App.vue's outer flex-wrap also flips from fitting 2 group cards per
+    row down to 1 (2*432+gap fits under ~992px of content width, but 2*656+gap doesn't), so both
+    reflows fired in the same narrow resize range - a group's own column count changing *and* how
+    many sibling groups share its row changing at once, which read as several layout jumps in
+    quick succession. 2xl leaves enough room (2*656+gap ≈ 1328px, comfortably under 2xl's ~1504px
+    of content width) that 2 group cards per row is still stable right as this box grows to 3
+    columns, so the two reflows no longer land on top of each other. -->
     <UCollapsible
       v-model:open="openModalValue"
-      class="flex w-full max-w-173 flex-col gap-2"
+      class="flex w-108 flex-col gap-2 2xl:w-164"
       :ui="{ content: 'overflow-visible' }"
     >
       <template #content>
@@ -288,11 +301,11 @@ watch(open, (value) => {
         to be in edit mode itself to receive a drop - handle only gates starting a drag, not
         accepting one - it just needs to be expanded (open) to have a visible drop target at all.
 
-        grid-cols: auto-fill/minmax, not the old sm:/md: breakpoint-keyed track counts - those
-        assumed the card always had close to the full viewport width to work with, which broke
-        once App.vue's masonry columns made a card's real width viewport-width / column-count
-        instead. auto-fill sizes off this grid's own actual width, so it wraps correctly no matter
-        how narrow its masonry column is. -->
+        flex-wrap + a fixed width per control (not CSS grid's auto-fit/auto-fill): the UCollapsible
+        above does now have a definite width (w-108/2xl:w-164), but a grid's repeat(auto-fit/
+        auto-fill, ...) still isn't worth it here since flex-wrap already does exactly what's
+        needed - pack fixed-width controls left-to-right and wrap once w-108/w-164 doesn't fit
+        another one, with no per-breakpoint column-count math to keep in sync by hand. -->
         <VueDraggable
           v-model.lazy="controls"
           group="control-groups"
@@ -300,11 +313,12 @@ watch(open, (value) => {
           easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
           :animation="200"
           :force-fallback="true"
-          class="grid grid-cols-[repeat(auto-fill,minmax(160px,220px))] items-center justify-center-safe gap-4"
+          class="flex flex-wrap items-center justify-start gap-4"
         >
           <UContextMenu
             v-for="control in controls"
             :key="control.id"
+            class="w-52 shrink-0"
             :items="controlContextMenuItems(control)"
           >
             <Control
