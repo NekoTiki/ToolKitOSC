@@ -22,6 +22,7 @@ interface StatsResult {
 
 interface Attempt {
   id: number
+  requestId?: string
   discordId: string
   displayName: string | null
   avatarName: string | null
@@ -36,52 +37,112 @@ interface Attempt {
   createdAt: string
 }
 
-const { adminFetch } = useAdminApi()
+// A generation still in flight (see the server's liveGenerations.ts) - no `id`/`success`/duration
+// yet, since those only exist once ai_generation_log actually has a row for it.
+interface LiveAttempt {
+  requestId: string
+  discordId: string
+  displayName: string | null
+  avatarName: string
+  provider: string
+  profile: string
+  model: string
+  startedAt: string
+}
+
+const { adminFetch, redirectIfUnauthorized } = useAdminApi()
 
 // Matches the server's listRecentAttempts default (server/utils/ai/generationLog.ts) - used to
 // trim the list back down to a page's worth after splicing in a live-pushed row.
 const ATTEMPTS_PAGE_SIZE = 25
 
+// useFetch (not adminFetch/onMounted) so these actually run during SSR - the middleware only
+// checks "logged in" (see middleware/admin.ts), the real admin check is each request's own
+// response, and awaiting these here means the initial HTML an admin gets already has real charts/
+// rows in it instead of a guaranteed-empty shell that fills in after hydration. `query` takes refs
+// directly - useFetch already re-fetches on its own whenever one of them changes, so there's no
+// need for a manual watch(...) triggering the same reload by hand.
 const days = ref(14)
-const stats = ref<StatsResult | null>(null)
-const statsLoading = ref(true)
+const {
+  data: stats,
+  pending: statsLoading,
+  error: statsError,
+  refresh: refreshStats
+} = await useFetch<StatsResult>('/api/admin/stats', { query: { days } })
 
-async function loadStats(): Promise<void> {
-  statsLoading.value = true
-
-  try {
-    stats.value = await adminFetch<StatsResult>(`/api/admin/stats?days=${days.value}`)
-  } finally {
-    statsLoading.value = false
-  }
-}
-
-watch(days, loadStats)
-onMounted(loadStats)
+if (statsError.value) await redirectIfUnauthorized(statsError.value)
 
 const failuresOnly = ref(false)
-const attempts = ref<Attempt[]>([])
-const attemptsLoading = ref(true)
 const page = ref(1)
+const {
+  data: attemptsResponse,
+  pending: attemptsLoading,
+  error: attemptsError,
+  refresh: refreshAttempts
+} = await useFetch<{ attempts: Attempt[] }>('/api/admin/attempts', {
+  query: computed(() => ({ page: page.value, success: failuresOnly.value ? 'false' : undefined }))
+})
 
-async function loadAttempts(): Promise<void> {
-  attemptsLoading.value = true
+if (attemptsError.value) await redirectIfUnauthorized(attemptsError.value)
 
-  try {
-    const query = new URLSearchParams({ page: String(page.value) })
+// A plain, freely-mutable copy, not attemptsResponse itself - the WS live-update splicing below
+// (applyGenerationLogged) needs to add a row without that then getting clobbered the next time
+// attemptsResponse's own reactive query changes and refetches from the server.
+const attempts = ref<Attempt[]>([])
 
-    if (failuresOnly.value) query.set('success', 'false')
+watch(attemptsResponse, (res) => (attempts.value = res?.attempts ?? []), { immediate: true })
 
-    const res = await adminFetch<{ attempts: Attempt[] }>(`/api/admin/attempts?${query.toString()}`)
+// useFetch here too, for the same SSR reason as stats/attempts above - a page loaded (or an admin
+// WS reconnected, see refreshLiveAttempts below) while a generation is already minutes into
+// running should still be able to show it as live, not just from the next one that starts.
+const {
+  data: liveAttemptsResponse,
+  error: liveAttemptsError,
+  refresh: refreshLiveAttempts
+} = await useFetch<{ attempts: LiveAttempt[] }>('/api/admin/live-attempts')
 
-    attempts.value = res.attempts
-  } finally {
-    attemptsLoading.value = false
-  }
+if (liveAttemptsError.value) await redirectIfUnauthorized(liveAttemptsError.value)
+
+const liveAttempts = ref<Map<string, LiveAttempt>>(new Map())
+
+// Keyed by requestId, not an array - both this and applyGenerationLogged (remove, once the real
+// row replaces it) below need direct lookup. Only ever adds/updates entries here, never removes
+// ones missing from a given response: that can race a 'generation-started' WS push that already
+// landed locally for an even-newer request the snapshot predates, and any entry that's genuinely
+// gone stale (finished between the snapshot and now) is cleaned up by its own 'generation-logged'
+// push regardless, which always eventually arrives.
+watch(
+  liveAttemptsResponse,
+  (res) => {
+    for (const attempt of res?.attempts ?? []) liveAttempts.value.set(attempt.requestId, attempt)
+  },
+  { immediate: true }
+)
+
+// Drives every live row's ticking duration (see the template below) - one shared interval for all
+// of them rather than one per row. Simplicity over micro-optimizing an otherwise idle interval:
+// this is a low-traffic admin-only page, and pausing/resuming the interval based on whether any
+// live rows currently exist isn't worth the extra state for what's a single setInterval either way.
+const now = ref(Date.now())
+let nowTimer: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+  nowTimer = setInterval(() => (now.value = Date.now()), 500)
+})
+onBeforeUnmount(() => clearInterval(nowTimer))
+
+function elapsedSeconds(startedAt: string): number {
+  return Math.max(0, (now.value - new Date(startedAt).getTime()) / 1000)
 }
 
-watch([failuresOnly, page], loadAttempts)
-onMounted(loadAttempts)
+// Live rows only make sense on page 1 (they're "right now", not a specific historical page) and
+// while not filtering to failures only - a still-running attempt hasn't failed (or succeeded) yet,
+// so it doesn't belong in that view. Newest-first, matching the finished list below.
+const visibleLiveAttempts = computed(() => {
+  if (page.value !== 1 || failuresOnly.value) return []
+
+  return Array.from(liveAttempts.value.values()).sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+})
 
 // Live updates: /admin/ws pushes the actual new row whenever a generation attempt is logged (see
 // the server's generationLog.ts) - applied locally below instead of re-running the REST fetches
@@ -92,7 +153,20 @@ interface GenerationLoggedEvent {
   attempt: Attempt
 }
 
+interface GenerationStartedEvent {
+  type: 'generation-started'
+  attempt: LiveAttempt
+}
+
+function applyGenerationStarted(attempt: LiveAttempt): void {
+  liveAttempts.value.set(attempt.requestId, attempt)
+}
+
 function applyGenerationLogged(attempt: Attempt): void {
+  // The real, finished row takes over from here - see liveGenerations.ts/the watch(liveAttemptsResponse
+  // above for why this is the only place a live placeholder ever gets removed.
+  if (attempt.requestId) liveAttempts.value.delete(attempt.requestId)
+
   if (stats.value) {
     if (attempt.success) stats.value.totalSuccess++
     else stats.value.totalFailure++
@@ -158,17 +232,20 @@ async function connectWs(): Promise<void> {
 
     // Catches up on anything missed while disconnected - a real reload, not the incremental path
     // above, since there's no way to know what was missed. Runs on the very first connect too
-    // (harmless, just one extra fetch layered on the immediate onMounted loads below).
+    // (harmless, just one extra fetch layered on top of the useFetch calls above, which already
+    // ran once during SSR/on mount).
     ws.addEventListener('open', () => {
-      void loadStats()
-      void loadAttempts()
+      void refreshStats()
+      void refreshAttempts()
+      void refreshLiveAttempts()
     })
 
     ws.addEventListener('message', (event: MessageEvent<string>) => {
       try {
-        const data = JSON.parse(event.data) as GenerationLoggedEvent
+        const data = JSON.parse(event.data) as GenerationLoggedEvent | GenerationStartedEvent
 
         if (data.type === 'generation-logged') applyGenerationLogged(data.attempt)
+        else if (data.type === 'generation-started') applyGenerationStarted(data.attempt)
       } catch (err) {
         console.error('[admin-ws] failed to apply message:', err)
       }
@@ -422,7 +499,7 @@ const durationChartOptions = {
       </div>
 
       <div
-        v-else-if="!attempts.length"
+        v-else-if="!attempts.length && !visibleLiveAttempts.length"
         class="py-8 text-center text-sm text-muted"
       >
         Nothing to show.
@@ -432,6 +509,32 @@ const durationChartOptions = {
         v-else
         class="flex flex-col divide-y divide-default text-sm"
       >
+        <!-- Still running (see liveGenerations.ts) - swapped out for the real row the instant
+        'generation-logged' arrives with a matching requestId (see applyGenerationLogged). -->
+        <div
+          v-for="attempt in visibleLiveAttempts"
+          :key="attempt.requestId"
+          class="flex flex-col gap-1.5 py-2"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <UBadge
+              color="info"
+              variant="subtle"
+            >
+              <span class="flex items-center gap-1">
+                <span class="size-1.5 animate-pulse rounded-full bg-info" />
+                Generating
+              </span>
+            </UBadge>
+            <span class="font-medium">{{ attempt.displayName || attempt.discordId }}</span>
+            <span class="text-muted">{{ attempt.avatarName }}</span>
+            <span class="text-muted">{{ attempt.provider }} · {{ attempt.profile }}</span>
+            <span class="ml-auto text-xs text-muted">
+              {{ elapsedSeconds(attempt.startedAt).toFixed(1) }}s
+            </span>
+          </div>
+        </div>
+
         <div
           v-for="attempt in attempts"
           :key="attempt.id"

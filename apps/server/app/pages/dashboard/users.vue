@@ -15,11 +15,23 @@ interface AccessEntry {
   credits: { remaining: number } | null
 }
 
-const { adminFetch } = useAdminApi()
+const { adminFetch, redirectIfUnauthorized } = useAdminApi()
 const toast = useToast()
 
-const users = ref<AccessEntry[]>([])
-const loading = ref(true)
+// useFetch (not adminFetch/onMounted) so this actually runs during SSR - the middleware only
+// checks "logged in" (see middleware/admin.ts), the real admin check is this request's own
+// response, and awaiting it here means the initial HTML an admin gets already has the user list
+// in it instead of a guaranteed-empty shell that fills in after hydration.
+const {
+  data: usersResponse,
+  pending: loading,
+  error: usersError,
+  refresh: reloadUsers
+} = await useFetch<{ users: AccessEntry[] }>('/api/admin/users')
+
+if (usersError.value) await redirectIfUnauthorized(usersError.value)
+
+const users = computed(() => usersResponse.value?.users ?? [])
 const filter = ref('')
 
 const filteredUsers = computed(() => {
@@ -35,20 +47,6 @@ const filteredUsers = computed(() => {
   )
 })
 
-async function load(): Promise<void> {
-  loading.value = true
-
-  try {
-    const res = await adminFetch<{ users: AccessEntry[] }>('/api/admin/users')
-
-    users.value = res.users
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(load)
-
 async function grantAccess(discordId: string, canSelectModel: boolean): Promise<void> {
   if (!discordId.trim()) return
 
@@ -57,13 +55,13 @@ async function grantAccess(discordId: string, canSelectModel: boolean): Promise<
     body: { discordId: discordId.trim(), canSelectModel }
   })
   toast.add({ title: 'Access granted', icon: 'i-lucide-check', color: 'success' })
-  await load()
+  await reloadUsers()
 }
 
 async function revokeAccess(discordId: string): Promise<void> {
   await adminFetch(`/api/admin/users/${discordId}`, { method: 'DELETE' })
   toast.add({ title: 'Access revoked', icon: 'i-lucide-x', color: 'neutral' })
-  await load()
+  await reloadUsers()
 }
 
 async function toggleCanSelectModel(user: AccessEntry): Promise<void> {
@@ -71,7 +69,7 @@ async function toggleCanSelectModel(user: AccessEntry): Promise<void> {
     method: 'PATCH',
     body: { canSelectModel: !user.canSelectModel }
   })
-  await load()
+  await reloadUsers()
 }
 
 const creditPopoverFor = ref<string | null>(null)
@@ -91,7 +89,7 @@ async function addCredits(discordId: string): Promise<void> {
   })
   toast.add({ title: `Added ${creditAmount.value} credits`, icon: 'i-lucide-check', color: 'success' })
   creditPopoverFor.value = null
-  await load()
+  await reloadUsers()
 }
 </script>
 

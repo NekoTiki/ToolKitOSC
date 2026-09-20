@@ -6,6 +6,7 @@ import { getAiProvider, resolveDefaultProvider } from '~~/server/utils/ai'
 import { getAiAccess } from '~~/server/utils/ai/access'
 import type { FailureReason } from '~~/server/utils/ai/generationLog'
 import { logGenerationAttempt } from '~~/server/utils/ai/generationLog'
+import { endLiveGeneration, startLiveGeneration } from '~~/server/utils/ai/liveGenerations'
 import { recordProviderFailure, recordProviderSuccess } from '~~/server/utils/ai/loadBalancer'
 import { normalizeSuggestion } from '~~/server/utils/ai/normalize'
 import type { PromptProfile } from '~~/server/utils/ai/profiles'
@@ -31,6 +32,7 @@ const PROGRESS_INTERVAL_MS = 6000
 interface GenerationContext {
   requestId: string
   discordId: string
+  displayName: string | null
   avatarId: string
   avatarName: string
   parameters: AiParameterInput[]
@@ -46,8 +48,22 @@ interface GenerationContext {
 // WS connection instead (same channel 'ai-credits-update' already uses), correlated by requestId -
 // see useAiGenerationStatus.ts/useWebsocketHost.ts on the client for the other end of this.
 async function runGeneration(ctx: GenerationContext): Promise<void> {
-  const { requestId, discordId, avatarId, avatarName, parameters, provider, profile, model } = ctx
+  const { requestId, discordId, displayName, avatarId, avatarName, parameters, provider, profile, model } = ctx
   const startedAt = Date.now()
+
+  // Lets the admin stats dashboard show this as a live, ticking-duration row instead of only
+  // appearing once it's done (see liveGenerations.ts) - cleared in the `finally` below the moment
+  // the outcome is known, regardless of whether the DB write/WS push that follows has finished.
+  startLiveGeneration({
+    requestId,
+    discordId,
+    displayName,
+    avatarName,
+    provider: provider.id,
+    profile: profile.id,
+    model,
+    startedAt: new Date(startedAt).toISOString()
+  })
 
   let messageIndex = 0
   const pushProgress = (): void => {
@@ -70,6 +86,7 @@ async function runGeneration(ctx: GenerationContext): Promise<void> {
     recordProviderSuccess(provider.id)
 
     void logGenerationAttempt({
+      requestId,
       discordId,
       avatarId,
       avatarName,
@@ -108,6 +125,7 @@ async function runGeneration(ctx: GenerationContext): Promise<void> {
     }
 
     void logGenerationAttempt({
+      requestId,
       discordId,
       avatarId,
       avatarName,
@@ -130,6 +148,7 @@ async function runGeneration(ctx: GenerationContext): Promise<void> {
     })
   } finally {
     clearInterval(progressTimer)
+    endLiveGeneration(requestId)
   }
 }
 
@@ -248,6 +267,7 @@ export default defineEventHandler(async (event): Promise<{ requestId: string }> 
   void runGeneration({
     requestId,
     discordId,
+    displayName: user.discord?.name ?? null,
     avatarId: body.avatarId,
     avatarName: body.avatarName,
     parameters: body.parameters,

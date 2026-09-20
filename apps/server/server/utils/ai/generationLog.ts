@@ -7,6 +7,11 @@ import { notifyAdmins } from '~~/server/routes/admin/ws'
 export type FailureReason = 'access-denied' | 'credit-limit' | 'provider-error'
 
 interface LogAttemptInput {
+  // Only set for an attempt that went through the async runGeneration path (see
+  // suggest-controls.post.ts) - an early synchronous failure (access-denied, credit-limit) never
+  // had a live placeholder to begin with (see liveGenerations.ts), so there's nothing to
+  // correlate for those and this is left undefined.
+  requestId?: string
   discordId: string
   avatarId?: string | null
   avatarName?: string | null
@@ -26,6 +31,11 @@ interface LogAttemptInput {
 // 'generation-logged' can be spliced straight into the same list a REST fetch would return.
 export interface GenerationLogEntry {
   id: number
+  // Only ever set on the live 'generation-logged' WS push, never on a plain REST-listed row (see
+  // requestId's own comment above - it isn't a column in ai_generation_log, so a page fetched via
+  // GET /api/admin/attempts never has one). The dashboard uses it to drop this attempt's live
+  // placeholder (see liveGenerations.ts) right as the real row replaces it.
+  requestId?: string
   discordId: string
   displayName: string | null
   avatarName: string | null
@@ -81,6 +91,7 @@ export async function logGenerationAttempt(input: LogAttemptInput): Promise<void
     type: 'generation-logged',
     attempt: {
       id: row.id,
+      requestId: input.requestId,
       discordId: input.discordId,
       displayName: user?.displayName ?? null,
       avatarName: input.avatarName ?? null,
