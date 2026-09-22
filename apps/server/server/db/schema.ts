@@ -77,3 +77,42 @@ export const aiGenerationLog = sqliteTable(
   },
   (t) => [index('ai_generation_log_created_at_idx').on(t.createdAt), index('ai_generation_log_discord_id_idx').on(t.discordId)]
 )
+
+// Snapshot of how many controls a host currently has configured for one avatar, by type - replaced
+// wholesale for that (discordId, avatarId) pair every time the host sends a `controls-update` (see
+// routes/host.ts and utils/controlStats.ts), mirroring how the in-memory `hostControls` map itself
+// is replaced wholesale on that same event. Keyed by avatarId (not just discordId) because controls
+// are authored per-avatar client-side (see apps/client's useControls.ts) - a `controls-update` only
+// ever reports whichever avatar is currently loaded, so without this an account's inventory would
+// only ever reflect one avatar at a time instead of every avatar they've configured controls for.
+// A type with zero controls simply has no row here, rather than a row with count 0, so a total is a
+// plain sum with nothing to filter out.
+export const controlInventory = sqliteTable(
+  'control_inventory',
+  {
+    discordId: text('discord_id').notNull(),
+    avatarId: text('avatar_id').notNull(),
+    type: text('type').notNull(),
+    count: integer('count').notNull().default(0),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+  },
+  (t) => [primaryKey({ columns: [t.discordId, t.avatarId, t.type] })]
+)
+
+// Day-partitioned (UTC calendar day) activation counters, one row per (discordId, type, day) -
+// same reasoning as ai_credit_usage above. `discordId` here is the *host's* room id (whoever owns
+// the control panel a command executed on), not the viewer who sent it - see routes/ws/[ws].ts,
+// where a command is counted against the room it was relayed into.
+export const controlActivationDaily = sqliteTable(
+  'control_activation_daily',
+  {
+    discordId: text('discord_id').notNull(),
+    type: text('type').notNull(),
+    day: text('day').notNull(),
+    count: integer('count').notNull().default(0)
+  },
+  (t) => [
+    primaryKey({ columns: [t.discordId, t.type, t.day] }),
+    index('control_activation_daily_discord_id_idx').on(t.discordId)
+  ]
+)

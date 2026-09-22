@@ -17,11 +17,14 @@ export interface WsEnvelope<Type extends string, Message> {
 // this at auth-token time so the server (the one long-lived instance, redeployed independently of
 // any given client build - see apps/server/deploy.mjs) can tell a stale client apart from a bad
 // token, instead of silently misparsing or dropping its messages.
-export const PROTOCOL_VERSION = 1
+//
+// v2: 'controls-update' (host -> server) changed from a bare ControlGroup[] to
+// ControlsUpdateMessage (adds `avatarId`) - see that type's own comment.
+export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
 // shim is needed for versions below it; for now (no shim exists yet) it tracks PROTOCOL_VERSION.
-export const MIN_SUPPORTED_PROTOCOL_VERSION = 1
+export const MIN_SUPPORTED_PROTOCOL_VERSION = 2
 
 export interface ProtocolMismatchMessage {
   reason: string
@@ -147,6 +150,19 @@ export interface ClientBannedMessage {
   reason?: string
 }
 
+// Controls are authored/stored per-avatar client-side (see apps/client's useControls.ts, keyed by
+// `controls_${avatarId}` in localStorage) - a bare ControlGroup[] here would only ever tell the
+// server about whichever avatar happens to be loaded right now, with no way to distinguish that
+// from "this account's controls overall" (see apps/server's controlStats.ts, which keys its
+// inventory snapshot by (discordId, avatarId) precisely so switching avatars doesn't wipe out the
+// previous one's counts). `avatarId` is null only in the brief window before OSCQuery has reported
+// any avatar at all (see useAvatarDetails.ts) - the server skips recording inventory for that case,
+// since there's nothing to key it by yet.
+export interface ControlsUpdateMessage {
+  avatarId: string | null
+  groups: ControlGroup[]
+}
+
 export interface ClientListEntry {
   peerId: string
   ip: string
@@ -164,7 +180,7 @@ export interface ClientListEntry {
 // `args-update`) — kept here to match what the server actually handles, not just what's used today.
 export type HostToServerMessage =
   | WsEnvelope<'auth-token', { token: string; protocolVersion: number }>
-  | WsEnvelope<'controls-update', ControlGroup[]>
+  | WsEnvelope<'controls-update', ControlsUpdateMessage>
   | WsEnvelope<'args-initial', Record<string, OSCArg[]>>
   | WsEnvelope<'args-update', ArgUpdateMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>

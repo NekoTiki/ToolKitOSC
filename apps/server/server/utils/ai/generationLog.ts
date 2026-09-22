@@ -3,8 +3,37 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import { getDb } from '~~/server/db'
 import { aiGenerationLog, users } from '~~/server/db/schema'
 import { notifyAdmins } from '~~/server/routes/admin/ws'
+import { getAiProvider } from '~~/server/utils/ai'
+import { getPromptProfile } from '~~/server/utils/ai/profiles'
 
 export type FailureReason = 'access-denied' | 'credit-limit' | 'provider-error'
+
+// Single source of truth for how a failure reason reads on the admin dashboard (see
+// GenerationLogEntry.failureReasonLabel below) - a plain enum value like 'credit-limit' is fine as
+// a stable, filterable category (see RecentAttemptFilters), but isn't what should be shown to a
+// human reading the "recent generations" log.
+const FAILURE_REASON_LABELS: Record<FailureReason, string> = {
+  'access-denied': 'Access denied',
+  'credit-limit': 'Credit limit reached',
+  'provider-error': 'Provider error'
+}
+
+export function failureReasonLabel(reason: string | null): string | null {
+  return reason && reason in FAILURE_REASON_LABELS ? FAILURE_REASON_LABELS[reason as FailureReason] : reason
+}
+
+// getAiProvider()/getPromptProfile() always resolve a label regardless of whether that provider is
+// currently configured/that profile still exists (see index.ts/profiles.ts) - a historical row for
+// a provider that's since been removed from the server's env just falls back to its raw id, rather
+// than the whole row failing to resolve. Exported: also used by liveGenerations.ts, for the exact
+// same labels on an in-progress row as a finished one gets.
+export function providerLabel(provider: string | null): string | null {
+  return provider ? (getAiProvider(provider)?.label ?? provider) : provider
+}
+
+export function profileLabel(profile: string | null): string | null {
+  return profile ? (getPromptProfile(profile)?.label ?? profile) : profile
+}
 
 interface LogAttemptInput {
   // Only set for an attempt that went through the async runGeneration path (see
@@ -40,10 +69,16 @@ export interface GenerationLogEntry {
   displayName: string | null
   avatarName: string | null
   provider: string | null
+  // Human-readable form of `provider`/`profile`/`failureReason` (see providerLabel()/
+  // profileLabel()/failureReasonLabel() above) - the raw values are kept alongside them since
+  // they're still what RecentAttemptFilters/byProvider/byProfile filter and group by.
+  providerLabel: string | null
   profile: string | null
+  profileLabel: string | null
   model: string | null
   success: boolean
   failureReason: string | null
+  failureReasonLabel: string | null
   errorMessage: string | null
   refunded: boolean
   durationMs: number | null
@@ -96,10 +131,13 @@ export async function logGenerationAttempt(input: LogAttemptInput): Promise<void
       displayName: user?.displayName ?? null,
       avatarName: input.avatarName ?? null,
       provider: input.provider ?? null,
+      providerLabel: providerLabel(input.provider ?? null),
       profile: input.profile ?? null,
+      profileLabel: profileLabel(input.profile ?? null),
       model: input.model ?? null,
       success: input.success,
       failureReason: input.failureReason ?? null,
+      failureReasonLabel: failureReasonLabel(input.failureReason ?? null),
       errorMessage: input.errorMessage ? input.errorMessage.slice(0, 2000) : null,
       refunded: input.refunded ?? false,
       durationMs: input.durationMs ?? null,
@@ -116,9 +154,15 @@ export interface StatsResult {
   totalFailure: number
 }
 
-export async function queryStats(days: number): Promise<StatsResult> {
+// `discordId` narrows every query to one account's own attempts - used as-is (no filter) for the
+// global /dashboard/stats charts, and passed by the per-user drill-down page (see
+// api/admin/users/[discordId]/stats.get.ts) to get the exact same shape scoped to just them.
+export async function queryStats(days: number, discordId?: string): Promise<StatsResult> {
   const db = getDb()
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  const sinceCondition = discordId
+    ? and(gte(aiGenerationLog.createdAt, since), eq(aiGenerationLog.discordId, discordId))
+    : gte(aiGenerationLog.createdAt, since)
   // createdAt is stored as unix seconds (integer 'timestamp' mode) - date()'s 'unixepoch' modifier
   // matches that directly, no ms conversion needed.
   const dayExpr = sql<string>`date(${aiGenerationLog.createdAt}, 'unixepoch')`
@@ -136,18 +180,18 @@ export async function queryStats(days: number): Promise<StatsResult> {
     db
       .select({ day: dayExpr, success: successSum, failure: failureSum })
       .from(aiGenerationLog)
-      .where(gte(aiGenerationLog.createdAt, since))
+      .where(sinceCondition)
       .groupBy(dayExpr)
       .orderBy(dayExpr),
     db
       .select({ provider: aiGenerationLog.provider, success: successSum, failure: failureSum, avgDurationMs: avgDurationExpr })
       .from(aiGenerationLog)
-      .where(gte(aiGenerationLog.createdAt, since))
+      .where(sinceCondition)
       .groupBy(aiGenerationLog.provider),
     db
       .select({ profile: aiGenerationLog.profile, count: sql<number>`count(*)` })
       .from(aiGenerationLog)
-      .where(gte(aiGenerationLog.createdAt, since))
+      .where(sinceCondition)
       .groupBy(aiGenerationLog.profile)
   ])
 
@@ -176,14 +220,14 @@ export interface RecentAttemptFilters {
   success?: boolean
 }
 
-export async function listRecentAttempts(filters: RecentAttemptFilters, page = 1, pageSize = 25) {
+export async function listRecentAttempts(filters: RecentAttemptFilters, page = 1, pageSize = 25): Promise<GenerationLogEntry[]> {
   const conditions = []
 
   if (filters.discordId) conditions.push(eq(aiGenerationLog.discordId, filters.discordId))
   if (filters.provider) conditions.push(eq(aiGenerationLog.provider, filters.provider))
   if (filters.success !== undefined) conditions.push(eq(aiGenerationLog.success, filters.success))
 
-  return getDb()
+  const rows = await getDb()
     .select({
       id: aiGenerationLog.id,
       discordId: aiGenerationLog.discordId,
@@ -205,4 +249,12 @@ export async function listRecentAttempts(filters: RecentAttemptFilters, page = 1
     .orderBy(desc(aiGenerationLog.createdAt))
     .limit(pageSize)
     .offset((page - 1) * pageSize)
+
+  return rows.map((row) => ({
+    ...row,
+    providerLabel: providerLabel(row.provider),
+    profileLabel: profileLabel(row.profile),
+    failureReasonLabel: failureReasonLabel(row.failureReason),
+    createdAt: row.createdAt.toISOString()
+  }))
 }

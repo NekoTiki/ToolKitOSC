@@ -11,6 +11,7 @@ import {
 import { upsertUserFromAuth } from '~~/server/db/users'
 import { clientList, sendToClient, sendToEveryoneInRoom } from '~~/server/routes/ws/[ws]'
 import { getAiAccess } from '~~/server/utils/ai/access'
+import { recordControlInventory } from '~~/server/utils/controlStats'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -155,9 +156,17 @@ export default defineWebSocketHandler({
         peer.close()
       }
     } else if (data.type === 'controls-update') {
-      hostControls.set(roomId!, data.message)
+      const { avatarId, groups } = data.message
 
-      sendToEveryoneInRoom(roomId!, message.text())
+      hostControls.set(roomId!, groups)
+      // Fire-and-forget: this shouldn't add DB latency to relaying the update to every viewer.
+      void recordControlInventory(roomId!, avatarId, groups).catch((error) =>
+        console.error('[controls] failed to record inventory:', error)
+      )
+
+      // Re-sent as just `groups` (ServerToViewerMessage's own 'controls-update' shape never
+      // changed) - viewers don't need, and shouldn't rely on, which avatar these came from.
+      sendToEveryoneInRoom(roomId!, { type: 'controls-update', message: groups })
     } else if (data.type === 'args-initial') {
       hostArgs.set(roomId!, data.message)
 

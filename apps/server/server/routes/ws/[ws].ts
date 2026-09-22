@@ -10,6 +10,7 @@ import {
   sendClientListToHost,
   sendMessageToHost
 } from '~~/server/routes/host'
+import { scheduleControlActivation } from '~~/server/utils/controlStats'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
@@ -126,6 +127,10 @@ export default defineWebSocketHandler({
           message: { peerId: sessionId, reason: 'You are sending messages too quickly - slow down.' }
         })
         return
+      }
+
+      if (data.type === 'command') {
+        scheduleControlActivation(roomId!, data.message.groupId, data.message.controlId, data.message.type)
       }
 
       sendMessageToHost(roomId!, data.type, data.message, {

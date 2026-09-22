@@ -2,6 +2,7 @@ import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiCredits } from '@renderer/composables/useAiCredits'
 import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
 import { useAuth } from '@renderer/composables/useAuth'
+import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
 import { useClientType } from '@renderer/composables/useClientType'
@@ -96,6 +97,7 @@ export function useWebsocketHost(): {
 
   const { increaseIpCount, increaseDiscordIdCount } = useCommandAnalytics()
   const { token, user, setToken } = useAuth()
+  const { avatarDetails } = useAvatarDetails()
 
   const addressList = computed<Set<string>>(() => {
     const addresses = new Set<string>()
@@ -392,7 +394,7 @@ export function useWebsocketHost(): {
   }
 
   const sendControls = (): void => {
-    sendMessage('controls-update', visibleControls.value)
+    sendMessage('controls-update', { avatarId: avatarDetails.value?.id ?? null, groups: visibleControls.value })
     Array.from(addressList.value).forEach((address) => {
       const argList = args.value?.[address]
 

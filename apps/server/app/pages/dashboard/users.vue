@@ -139,6 +139,15 @@ async function addCredits(discordId: string): Promise<void> {
             </div>
 
             <div class="ml-auto flex flex-wrap items-center gap-2">
+              <UButton
+                :to="`/dashboard/user/${user.discordId}`"
+                size="xs"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-bar-chart-3"
+              >
+                Stats
+              </UButton>
               <template v-if="user.hasAccess">
                 <UBadge
                   v-if="user.credits"

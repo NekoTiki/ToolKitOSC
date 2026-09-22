@@ -10,6 +10,8 @@ import {
 } from 'chart.js'
 import { Bar, Doughnut } from 'vue-chartjs'
 
+import type { Attempt } from '~/types/aiAttempts'
+
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
 
 interface StatsResult {
@@ -20,41 +22,15 @@ interface StatsResult {
   totalFailure: number
 }
 
-interface Attempt {
-  id: number
-  requestId?: string
-  discordId: string
-  displayName: string | null
-  avatarName: string | null
-  provider: string | null
-  profile: string | null
-  model: string | null
-  success: boolean
-  failureReason: string | null
-  errorMessage: string | null
-  refunded: boolean
-  durationMs: number | null
-  createdAt: string
+interface ControlStatsResult {
+  inventory: { type: string; count: number }[]
+  totalControls: number
+  activationByType: { type: string; count: number }[]
+  activationDaily: { day: string; count: number }[]
+  totalActivations: number
 }
 
-// A generation still in flight (see the server's liveGenerations.ts) - no `id`/`success`/duration
-// yet, since those only exist once ai_generation_log actually has a row for it.
-interface LiveAttempt {
-  requestId: string
-  discordId: string
-  displayName: string | null
-  avatarName: string
-  provider: string
-  profile: string
-  model: string
-  startedAt: string
-}
-
-const { adminFetch, redirectIfUnauthorized } = useAdminApi()
-
-// Matches the server's listRecentAttempts default (server/utils/ai/generationLog.ts) - used to
-// trim the list back down to a page's worth after splicing in a live-pushed row.
-const ATTEMPTS_PAGE_SIZE = 25
+const { redirectIfUnauthorized } = useAdminApi()
 
 // useFetch (not adminFetch/onMounted) so these actually run during SSR - the middleware only
 // checks "logged in" (see middleware/admin.ts), the real admin check is each request's own
@@ -72,223 +48,93 @@ const {
 
 if (statsError.value) await redirectIfUnauthorized(statsError.value)
 
-const failuresOnly = ref(false)
-const page = ref(1)
+// Same `days` range as the AI stats above - one date-range selector drives both sections.
 const {
-  data: attemptsResponse,
-  pending: attemptsLoading,
-  error: attemptsError,
-  refresh: refreshAttempts
-} = await useFetch<{ attempts: Attempt[] }>('/api/admin/attempts', {
-  query: computed(() => ({ page: page.value, success: failuresOnly.value ? 'false' : undefined }))
-})
+  data: controlStats,
+  pending: controlStatsLoading,
+  error: controlStatsError
+} = await useFetch<ControlStatsResult>('/api/admin/control-stats', { query: { days } })
 
-if (attemptsError.value) await redirectIfUnauthorized(attemptsError.value)
+if (controlStatsError.value) await redirectIfUnauthorized(controlStatsError.value)
 
-// A plain, freely-mutable copy, not attemptsResponse itself - the WS live-update splicing below
-// (applyGenerationLogged) needs to add a row without that then getting clobbered the next time
-// attemptsResponse's own reactive query changes and refetches from the server.
-const attempts = ref<Attempt[]>([])
+const { colorFor: controlTypeColor, labelFor: controlTypeLabel } = useControlTypeChartColors()
+// Applied to every dataset below (and every other chart on this page) - see the composable's own
+// comment for why bars get this too, not just doughnuts.
+const chartBorder = useChartBorder()
 
-watch(attemptsResponse, (res) => (attempts.value = res?.attempts ?? []), { immediate: true })
-
-// useFetch here too, for the same SSR reason as stats/attempts above - a page loaded (or an admin
-// WS reconnected, see refreshLiveAttempts below) while a generation is already minutes into
-// running should still be able to show it as live, not just from the next one that starts.
-const {
-  data: liveAttemptsResponse,
-  error: liveAttemptsError,
-  refresh: refreshLiveAttempts
-} = await useFetch<{ attempts: LiveAttempt[] }>('/api/admin/live-attempts')
-
-if (liveAttemptsError.value) await redirectIfUnauthorized(liveAttemptsError.value)
-
-const liveAttempts = ref<Map<string, LiveAttempt>>(new Map())
-
-// Keyed by requestId, not an array - both this and applyGenerationLogged (remove, once the real
-// row replaces it) below need direct lookup. Only ever adds/updates entries here, never removes
-// ones missing from a given response: that can race a 'generation-started' WS push that already
-// landed locally for an even-newer request the snapshot predates, and any entry that's genuinely
-// gone stale (finished between the snapshot and now) is cleaned up by its own 'generation-logged'
-// push regardless, which always eventually arrives.
-watch(
-  liveAttemptsResponse,
-  (res) => {
-    for (const attempt of res?.attempts ?? []) liveAttempts.value.set(attempt.requestId, attempt)
-  },
-  { immediate: true }
-)
-
-// Drives every live row's ticking duration (see the template below) - one shared interval for all
-// of them rather than one per row. Simplicity over micro-optimizing an otherwise idle interval:
-// this is a low-traffic admin-only page, and pausing/resuming the interval based on whether any
-// live rows currently exist isn't worth the extra state for what's a single setInterval either way.
-const now = ref(Date.now())
-let nowTimer: ReturnType<typeof setInterval> | undefined
-
-onMounted(() => {
-  nowTimer = setInterval(() => (now.value = Date.now()), 500)
-})
-onBeforeUnmount(() => clearInterval(nowTimer))
-
-function elapsedSeconds(startedAt: string): number {
-  return Math.max(0, (now.value - new Date(startedAt).getTime()) / 1000)
-}
-
-// Live rows only make sense on page 1 (they're "right now", not a specific historical page) and
-// while not filtering to failures only - a still-running attempt hasn't failed (or succeeded) yet,
-// so it doesn't belong in that view. Newest-first, matching the finished list below.
-const visibleLiveAttempts = computed(() => {
-  if (page.value !== 1 || failuresOnly.value) return []
-
-  return Array.from(liveAttempts.value.values()).sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-})
-
-// Live updates: /admin/ws pushes the actual new row whenever a generation attempt is logged (see
-// the server's generationLog.ts) - applied locally below instead of re-running the REST fetches
-// above on every single event, which would mean a full aggregate re-query + a list re-fetch for
-// what's usually just one more row.
-interface GenerationLoggedEvent {
-  type: 'generation-logged'
-  attempt: Attempt
-}
-
-interface GenerationStartedEvent {
-  type: 'generation-started'
-  attempt: LiveAttempt
-}
-
-function applyGenerationStarted(attempt: LiveAttempt): void {
-  liveAttempts.value.set(attempt.requestId, attempt)
-}
-
-function applyGenerationLogged(attempt: Attempt): void {
-  // The real, finished row takes over from here - see liveGenerations.ts/the watch(liveAttemptsResponse
-  // above for why this is the only place a live placeholder ever gets removed.
-  if (attempt.requestId) liveAttempts.value.delete(attempt.requestId)
-
-  if (stats.value) {
-    if (attempt.success) stats.value.totalSuccess++
-    else stats.value.totalFailure++
-
-    // attempt.createdAt is an ISO string (UTC) - its first 10 chars are exactly the
-    // 'YYYY-MM-DD' UTC day queryStats() groups by server-side (date(created_at, 'unixepoch')).
-    const day = attempt.createdAt.slice(0, 10)
-    let dayEntry = stats.value.daily.find((d) => d.day === day)
-
-    if (!dayEntry) {
-      dayEntry = { day, success: 0, failure: 0 }
-      stats.value.daily.push(dayEntry)
-      stats.value.daily.sort((a, b) => a.day.localeCompare(b.day))
+const controlInventoryChartData = computed(() => ({
+  labels: controlStats.value?.inventory.map((i) => controlTypeLabel(i.type)) ?? [],
+  datasets: [
+    {
+      label: 'Controls configured',
+      data: controlStats.value?.inventory.map((i) => i.count) ?? [],
+      backgroundColor: controlStats.value?.inventory.map((i) => controlTypeColor(i.type)) ?? [],
+      ...chartBorder
     }
+  ]
+}))
 
-    if (attempt.success) dayEntry.success++
-    else dayEntry.failure++
-
-    let providerEntry = stats.value.byProvider.find((p) => p.provider === attempt.provider)
-
-    if (!providerEntry) {
-      // avgDurationMs is deliberately left stale here (not recomputed) - an accurate running
-      // average would need to know how many prior rows actually had a duration (not every failure
-      // does, see queryStats' comment), which this incremental path doesn't track. It self-corrects
-      // on the next reconnect-triggered reload (see connectWs' 'open' handler below).
-      providerEntry = { provider: attempt.provider, success: 0, failure: 0, avgDurationMs: null }
-      stats.value.byProvider.push(providerEntry)
+const controlActivationChartData = computed(() => ({
+  labels: controlStats.value?.activationByType.map((a) => controlTypeLabel(a.type)) ?? [],
+  datasets: [
+    {
+      label: 'Activations',
+      data: controlStats.value?.activationByType.map((a) => a.count) ?? [],
+      backgroundColor: controlStats.value?.activationByType.map((a) => controlTypeColor(a.type)) ?? [],
+      ...chartBorder
     }
+  ]
+}))
 
-    if (attempt.success) providerEntry.success++
-    else providerEntry.failure++
+// RecentGenerationsCard (see the template below) owns fetching/live-updating the attempts list
+// itself - all this page adds on top is keeping its own chart aggregates (below) in sync with the
+// exact same live events, via the card's 'generation-logged' emit.
+function updateStatsFromAttempt(attempt: Attempt): void {
+  if (!stats.value) return
 
-    let profileEntry = stats.value.byProfile.find((p) => p.profile === attempt.profile)
+  if (attempt.success) stats.value.totalSuccess++
+  else stats.value.totalFailure++
 
-    if (!profileEntry) {
-      profileEntry = { profile: attempt.profile, count: 0 }
-      stats.value.byProfile.push(profileEntry)
-    }
+  // attempt.createdAt is an ISO string (UTC) - its first 10 chars are exactly the 'YYYY-MM-DD' UTC
+  // day queryStats() groups by server-side (date(created_at, 'unixepoch')).
+  const day = attempt.createdAt.slice(0, 10)
+  let dayEntry = stats.value.daily.find((d) => d.day === day)
 
-    profileEntry.count++
+  if (!dayEntry) {
+    dayEntry = { day, success: 0, failure: 0 }
+    stats.value.daily.push(dayEntry)
+    stats.value.daily.sort((a, b) => a.day.localeCompare(b.day))
   }
 
-  // Only meaningful to splice into the visible list when looking at the first page (where a new
-  // row would actually land) and it matches the current filter - otherwise it's left alone; the
-  // admin will see it by paging back to 1, and the reconnect reload below catches up regardless.
-  if (page.value === 1 && (!failuresOnly.value || !attempt.success)) {
-    attempts.value = [attempt, ...attempts.value].slice(0, ATTEMPTS_PAGE_SIZE)
+  if (attempt.success) dayEntry.success++
+  else dayEntry.failure++
+
+  let providerEntry = stats.value.byProvider.find((p) => p.provider === attempt.provider)
+
+  if (!providerEntry) {
+    // avgDurationMs is deliberately left stale here (not recomputed) - an accurate running average
+    // would need to know how many prior rows actually had a duration (not every failure does, see
+    // queryStats' comment), which this incremental path doesn't track. It self-corrects on the
+    // next reconnect-triggered reload (see the template's @reconnected="refreshStats").
+    providerEntry = { provider: attempt.provider, success: 0, failure: 0, avgDurationMs: null }
+    stats.value.byProvider.push(providerEntry)
   }
-}
 
-let ws: WebSocket | null = null
-let reconnectTimeout: ReturnType<typeof setTimeout> | undefined
+  if (attempt.success) providerEntry.success++
+  else providerEntry.failure++
 
-async function connectWs(): Promise<void> {
-  try {
-    // The WS upgrade itself can't go through requireUserSession the way this fetch does, so this
-    // ticket - minted over an authenticated REST call - is the actual auth check (see the server's
-    // adminWsTickets.ts).
-    const { ticket } = await adminFetch<{ ticket: string }>('/api/admin/ws-ticket')
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  let profileEntry = stats.value.byProfile.find((p) => p.profile === attempt.profile)
 
-    ws = new WebSocket(`${protocol}//${location.host}/admin/ws?ticket=${ticket}`)
-
-    // Catches up on anything missed while disconnected - a real reload, not the incremental path
-    // above, since there's no way to know what was missed. Runs on the very first connect too
-    // (harmless, just one extra fetch layered on top of the useFetch calls above, which already
-    // ran once during SSR/on mount).
-    ws.addEventListener('open', () => {
-      void refreshStats()
-      void refreshAttempts()
-      void refreshLiveAttempts()
-    })
-
-    ws.addEventListener('message', (event: MessageEvent<string>) => {
-      try {
-        const data = JSON.parse(event.data) as GenerationLoggedEvent | GenerationStartedEvent
-
-        if (data.type === 'generation-logged') applyGenerationLogged(data.attempt)
-        else if (data.type === 'generation-started') applyGenerationStarted(data.attempt)
-      } catch (err) {
-        console.error('[admin-ws] failed to apply message:', err)
-      }
-    })
-
-    ws.addEventListener('close', () => {
-      ws = null
-      // Best-effort reconnect - a dashboard tab left open shouldn't need a manual reload just
-      // because the connection dropped once (a server restart, a network blip).
-      reconnectTimeout = setTimeout(connectWs, 5000)
-    })
-  } catch {
-    reconnectTimeout = setTimeout(connectWs, 5000)
+  if (!profileEntry) {
+    profileEntry = { profile: attempt.profile, count: 0 }
+    stats.value.byProfile.push(profileEntry)
   }
+
+  profileEntry.count++
 }
 
-onMounted(connectWs)
-onBeforeUnmount(() => {
-  clearTimeout(reconnectTimeout)
-  ws?.close()
-  ws = null
-})
-
-// Which attempt rows have their error message expanded - keyed by attempt id, reset on navigation
-// (not persisted), so re-opening the page always starts collapsed.
-const expandedErrors = ref<Record<number, boolean>>({})
-
-function toggleError(id: number): void {
-  expandedErrors.value[id] = !expandedErrors.value[id]
-}
-
-// Reads Tailwind's own palette straight from its CSS variables (Tailwind v4 exposes every default
-// color as --color-{name}-{shade}, see node_modules/tailwindcss/theme.css - imported via
-// app/assets/css/main.css's `@import "tailwindcss"`) instead of hardcoding copies of them, so
-// these always match whatever Tailwind actually renders rather than a hand-picked approximation.
-// Canvas fillStyle can't resolve var(...) itself the way a normal DOM element's style can, so the
-// value has to be read once via getComputedStyle instead of passed through as a live reference.
-function tailwindColor(name: string): string {
-  if (typeof document === 'undefined') return '#000'
-
-  return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim()
-}
-
+// tailwindColor() itself is an auto-imported composable (see app/composables/useTailwindColor.ts) -
+// shared with the per-user stats page and this page's own Controls section below.
 const CHART_COLORS = {
   success: tailwindColor('green-500'),
   failure: tailwindColor('red-500'),
@@ -298,8 +144,8 @@ const CHART_COLORS = {
 const dailyChartData = computed(() => ({
   labels: stats.value?.daily.map((d) => d.day) ?? [],
   datasets: [
-    { label: 'Success', data: stats.value?.daily.map((d) => d.success) ?? [], backgroundColor: CHART_COLORS.success },
-    { label: 'Failure', data: stats.value?.daily.map((d) => d.failure) ?? [], backgroundColor: CHART_COLORS.failure }
+    { label: 'Success', data: stats.value?.daily.map((d) => d.success) ?? [], backgroundColor: CHART_COLORS.success, ...chartBorder },
+    { label: 'Failure', data: stats.value?.daily.map((d) => d.failure) ?? [], backgroundColor: CHART_COLORS.failure, ...chartBorder }
   ]
 }))
 
@@ -309,7 +155,8 @@ const providerChartData = computed(() => ({
     {
       label: 'Generations',
       data: stats.value?.byProvider.map((p) => p.success + p.failure) ?? [],
-      backgroundColor: CHART_COLORS.providerPalette
+      backgroundColor: CHART_COLORS.providerPalette,
+      ...chartBorder
     }
   ]
 }))
@@ -340,8 +187,8 @@ const providerRateChartData = computed(() => {
   return {
     labels: rows.map((p) => p.provider ?? 'unknown'),
     datasets: [
-      { label: 'Success %', data: rates, backgroundColor: CHART_COLORS.success },
-      { label: 'Failure %', data: rates.map((rate) => 100 - rate), backgroundColor: CHART_COLORS.failure }
+      { label: 'Success %', data: rates, backgroundColor: CHART_COLORS.success, ...chartBorder },
+      { label: 'Failure %', data: rates.map((rate) => 100 - rate), backgroundColor: CHART_COLORS.failure, ...chartBorder }
     ]
   }
 })
@@ -357,7 +204,8 @@ const providerDurationChartData = computed(() => {
       {
         label: 'Avg duration (s)',
         data: rows.map((p) => (p.avgDurationMs === null ? 0 : Math.round(p.avgDurationMs) / 1000)),
-        backgroundColor: CHART_COLORS.providerPalette
+        backgroundColor: CHART_COLORS.providerPalette,
+        ...chartBorder
       }
     ]
   }
@@ -480,135 +328,63 @@ const durationChartOptions = {
       </UCard>
     </div>
 
-    <UCard>
-      <div class="mb-3 flex items-center justify-between gap-2">
-        <p class="text-sm font-medium">
-          Recent generations
+    <div
+      v-if="controlStats"
+      class="flex gap-4"
+    >
+      <UCard class="flex-1">
+        <p class="text-xs text-muted">
+          Controls configured (all hosts)
         </p>
-        <UCheckbox
-          v-model="failuresOnly"
-          label="Failures only"
-        />
-      </div>
+        <p class="text-2xl font-semibold">
+          {{ controlStats.totalControls }}
+        </p>
+      </UCard>
+      <UCard class="flex-1">
+        <p class="text-xs text-muted">
+          Control activations
+        </p>
+        <p class="text-2xl font-semibold">
+          {{ controlStats.totalActivations }}
+        </p>
+      </UCard>
+    </div>
 
-      <div
-        v-if="attemptsLoading"
-        class="py-8 text-center text-sm text-muted"
-      >
-        Loading…
-      </div>
-
-      <div
-        v-else-if="!attempts.length && !visibleLiveAttempts.length"
-        class="py-8 text-center text-sm text-muted"
-      >
-        Nothing to show.
-      </div>
-
-      <div
-        v-else
-        class="flex flex-col divide-y divide-default text-sm"
-      >
-        <!-- Still running (see liveGenerations.ts) - swapped out for the real row the instant
-        'generation-logged' arrives with a matching requestId (see applyGenerationLogged). -->
-        <div
-          v-for="attempt in visibleLiveAttempts"
-          :key="attempt.requestId"
-          class="flex flex-col gap-1.5 py-2"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <UBadge
-              color="info"
-              variant="subtle"
-            >
-              <span class="flex items-center gap-1">
-                <span class="size-1.5 animate-pulse rounded-full bg-info" />
-                Generating
-              </span>
-            </UBadge>
-            <span class="font-medium">{{ attempt.displayName || attempt.discordId }}</span>
-            <span class="text-muted">{{ attempt.avatarName }}</span>
-            <span class="text-muted">{{ attempt.provider }} · {{ attempt.profile }}</span>
-            <span class="ml-auto text-xs text-muted">
-              {{ elapsedSeconds(attempt.startedAt).toFixed(1) }}s
-            </span>
-          </div>
-        </div>
-
-        <div
-          v-for="attempt in attempts"
-          :key="attempt.id"
-          class="flex flex-col gap-1.5 py-2"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <!-- A dedicated toggle button, separate from the error text itself below - so the text
-            is plain, selectable content, not something wrapped in an interactive element that
-            would fight a click-drag selection or a double-click-to-select-word. -->
-            <UButton
-              v-if="attempt.errorMessage"
-              :icon="expandedErrors[attempt.id] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              square
-              @click="toggleError(attempt.id)"
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <UCard>
+        <p class="mb-2 text-sm font-medium">
+          Controls configured, by type
+        </p>
+        <ClientOnly>
+          <div class="h-64">
+            <Doughnut
+              v-if="!controlStatsLoading"
+              :data="controlInventoryChartData"
+              :options="chartOptions"
             />
-            <UBadge
-              :color="attempt.success ? 'success' : 'error'"
-              variant="subtle"
-            >
-              {{ attempt.success ? 'OK' : (attempt.failureReason ?? 'error') }}
-            </UBadge>
-            <UBadge
-              v-if="attempt.refunded"
-              color="neutral"
-              variant="subtle"
-            >
-              refunded
-            </UBadge>
-            <span class="font-medium">{{ attempt.displayName || attempt.discordId }}</span>
-            <span class="text-muted">{{ attempt.avatarName }}</span>
-            <span class="text-muted">{{ attempt.provider }} · {{ attempt.profile }}</span>
-            <button
-              v-if="attempt.errorMessage && !expandedErrors[attempt.id]"
-              type="button"
-              class="max-w-xs truncate text-left text-xs text-error"
-              @click="toggleError(attempt.id)"
-            >
-              {{ attempt.errorMessage }}
-            </button>
-            <span class="ml-auto text-xs text-muted">
-              <template v-if="attempt.durationMs !== null">{{ (attempt.durationMs / 1000).toFixed(1) }}s · </template>{{ new Date(attempt.createdAt).toLocaleString() }}
-            </span>
           </div>
+        </ClientOnly>
+      </UCard>
 
-          <!-- Plain text, not a button - so it can be selected/copied normally. -->
-          <p
-            v-if="attempt.errorMessage && expandedErrors[attempt.id]"
-            class="ml-8 rounded-md bg-elevated p-2 text-xs whitespace-pre-wrap break-words text-error select-text"
-          >
-            {{ attempt.errorMessage }}
-          </p>
-        </div>
-      </div>
+      <UCard>
+        <p class="mb-2 text-sm font-medium">
+          Activations, by type
+        </p>
+        <ClientOnly>
+          <div class="h-64">
+            <Doughnut
+              v-if="!controlStatsLoading"
+              :data="controlActivationChartData"
+              :options="chartOptions"
+            />
+          </div>
+        </ClientOnly>
+      </UCard>
+    </div>
 
-      <div class="mt-3 flex items-center justify-end gap-2">
-        <UButton
-          size="xs"
-          variant="soft"
-          icon="i-lucide-chevron-left"
-          :disabled="page <= 1"
-          @click="page--"
-        />
-        <span class="text-xs text-muted">Page {{ page }}</span>
-        <UButton
-          size="xs"
-          variant="soft"
-          icon="i-lucide-chevron-right"
-          :disabled="attempts.length < 25"
-          @click="page++"
-        />
-      </div>
-    </UCard>
+    <RecentGenerationsCard
+      @generation-logged="updateStatsFromAttempt"
+      @reconnected="refreshStats"
+    />
   </div>
 </template>
