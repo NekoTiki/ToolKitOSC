@@ -11,15 +11,18 @@
 // safe to import from the server's DOM-lib-free typecheck project (see that file's own comment).
 const BASE62_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const BASE = BigInt(BASE62_ALPHABET.length)
+// `BigInt(0)` rather than a `0n` literal: Nitro bundles the server with esbuild targeting es2019,
+// which predates bigint literal syntax and warns on every one (the runtime itself is fine).
+const ZERO = BigInt(0)
 
 export const encodeShareCode = (discordId: string): string => {
   let n = BigInt(discordId)
 
-  if (n === 0n) return BASE62_ALPHABET.charAt(0)
+  if (n === ZERO) return BASE62_ALPHABET.charAt(0)
 
   let code = ''
 
-  while (n > 0n) {
+  while (n > ZERO) {
     code = BASE62_ALPHABET.charAt(Number(n % BASE)) + code
     n /= BASE
   }
@@ -30,7 +33,7 @@ export const encodeShareCode = (discordId: string): string => {
 // Returns null for a code containing anything outside the base62 alphabet - a malformed/garbled
 // short link should 404, not resolve to some unrelated numeric id.
 export const decodeShareCode = (code: string): string | null => {
-  let n = 0n
+  let n = ZERO
 
   for (const char of code) {
     const digit = BASE62_ALPHABET.indexOf(char)
