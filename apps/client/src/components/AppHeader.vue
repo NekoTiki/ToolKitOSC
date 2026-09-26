@@ -146,12 +146,18 @@ const groupMenuItems = computed(
             sideOffset: 8
           }"
         >
-          <UButton
-            icon="i-lucide-lock"
-            color="neutral"
-            variant="outline"
-            aria-label="Manage Locked Control Profiles"
-          />
+          <UTooltip>
+            <UButton
+              icon="i-lucide-lock"
+              color="neutral"
+              variant="outline"
+              aria-label="Manage Locked Control Profiles"
+            />
+
+            <template #content>
+              Manage Locked Control Profiles
+            </template>
+          </UTooltip>
         </UDropdownMenu>
 
         <UTooltip>
@@ -207,13 +213,19 @@ const groupMenuItems = computed(
             sideOffset: 8
           }"
         >
-          <UButton
-            icon="i-lucide-layout-grid"
-            color="neutral"
-            variant="outline"
-            :disabled="!avatarDetails?.id"
-            aria-label="Manage Control Groups"
-          />
+          <UTooltip>
+            <UButton
+              icon="i-lucide-layout-grid"
+              color="neutral"
+              variant="outline"
+              :disabled="!avatarDetails?.id"
+              aria-label="Manage Control Groups"
+            />
+
+            <template #content>
+              Manage Control Groups
+            </template>
+          </UTooltip>
         </UDropdownMenu>
 
         <UTooltip v-if="aiAccess.hasAccess">
@@ -235,13 +247,19 @@ const groupMenuItems = computed(
           </template>
         </UTooltip>
 
-        <UButton
-          icon="i-lucide-settings"
-          color="neutral"
-          variant="outline"
-          aria-label="Settings"
-          @click="openSettingsModal()"
-        />
+        <UTooltip>
+          <UButton
+            icon="i-lucide-settings"
+            color="neutral"
+            variant="outline"
+            aria-label="Settings"
+            @click="openSettingsModal()"
+          />
+
+          <template #content>
+            Settings
+          </template>
+        </UTooltip>
       </div>
     </div>
   </UCard>
