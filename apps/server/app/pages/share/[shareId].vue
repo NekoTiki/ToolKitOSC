@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Control } from '@vrc-osc-toolkit/shared-ui'
+import { Control, useMasonry } from '@vrc-osc-toolkit/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
 import type { ShareInfo } from '~~/server/api/share/[shareId].get'
@@ -64,6 +64,8 @@ const bannedOpen = computed({
 })
 
 const wsOffline = computed(() => status.value === 'CLOSED')
+
+useMasonry(useTemplateRef('groupsGrid'))
 
 const handleChangeUsername = (username: string) => {
   sendMessage('update-username', { displayName: username })
@@ -131,14 +133,16 @@ onBeforeUnmount(removeTheme)
         class="h-min self-center min-w-92"
         :ui="{ avatar: 'animate-spin' }"
       />
-      <!-- Same fixed-width flex-wrap layout as the desktop client's own control panel (App.vue) -
-      each card sits at a definite, breakpoint-driven width (see the UCollapsible's
-      w-108/2xl:w-164 below) rather than being stretched to fill a column, which is what a CSS
-      multi-column masonry (tried first here too) forces every child to do. flex-wrap just packs cards
-      left-to-right at their own natural width and wraps once one doesn't fit - the outer flex
-      container above already provides the wrap/gap behavior, so these are its direct children
-      rather than a nested container. -->
-      <template v-else>
+      <!-- Same masonry layout as the desktop client's own control panel (App.vue, via shared-ui's
+      useMasonry) - each card keeps its definite, breakpoint-driven width (see the UCollapsible's
+      w-108/2xl:w-164 below) and only gets packed into whichever column is shortest. Its own
+      container (not the outer flex one above) so the empty/offline states above stay laid out as
+      before; the flex-wrap classes are just the pre-mount fallback. -->
+      <div
+        v-else
+        ref="groupsGrid"
+        class="flex w-full flex-wrap items-start justify-center gap-4"
+      >
         <UCard
           v-for="controlGroup in controlGroups"
           :key="controlGroup.id"
@@ -200,7 +204,7 @@ onBeforeUnmount(removeTheme)
             </template>
           </UCollapsible>
         </UCard>
-      </template>
+      </div>
     </div>
     <AuthModal
       v-model:open="authRequiredOpen"

@@ -10,7 +10,8 @@ import { useOscConnection } from '@renderer/composables/useOscConnection'
 import { useTheme } from '@renderer/composables/useTheme'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { ControlGroup as ControlGroupType } from '@vrc-osc-toolkit/shared-ui'
-import { computed, onMounted } from 'vue'
+import { useMasonry } from '@vrc-osc-toolkit/shared-ui'
+import { computed, onMounted, useTemplateRef } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 
 const { controls, setGroups } = useControls()
@@ -27,6 +28,8 @@ const groups = computed<ControlGroupType[]>({
 // there's nothing meaningful to show or add to until VRChat's OSC is both alive and has told us
 // which avatar is loaded.
 const ready = computed(() => oscConnected.value && !!avatarDetails.value)
+
+useMasonry(useTemplateRef('groupsGrid'))
 
 onMounted(() => api.ready())
 onMounted(() => loadTheme())
@@ -51,20 +54,14 @@ useAppUpdater()
           `group` prop here (unlike that inner one): groups don't drop into one another, only
           reorder among themselves.
 
-          flex-wrap, not CSS multi-column masonry (columns-*) - that was tried first, but it
-          requires every child to stretch to the full column width to avoid dead space, which is
-          the opposite of what we actually want now: each ControlGroup card sits at its own
-          definite, breakpoint-driven width (2 controls wide below 2xl, 3 at 2xl and up - see
-          ControlGroup.vue's own w-108/2xl:w-164 and why it's 2xl, not the narrower lg first
-          tried), not stretched to fill an arbitrary column.
-          flex-wrap just packs cards left-to-right at their own natural width and wraps to a new
-          row when one doesn't fit - a row's height
-          still comes from its tallest card, so an unusually short card can leave some dead space
-          next to a much taller neighbor in the same row, but with every card now capped to a
-          similar small width that's far less visible than the old few-huge-variable-width-columns
-          case this replaced. Sortable's drag-and-drop doesn't care which CSS layout mode arranges
-          its children, so reordering still works unchanged. -->
+          Masonry via useMasonry (shared-ui) - see its own comment for why not CSS columns-* or
+          plain flex-wrap (a row's height came from its tallest card, leaving dead space under the
+          shorter ones). Each ControlGroup card keeps its own definite, breakpoint-driven width (2
+          controls wide below 2xl, 3 at 2xl and up - see ControlGroup.vue's w-108/2xl:w-164); the
+          composable only packs them into columns. The flex-wrap classes below are just what shows
+          before it mounts. -->
           <VueDraggable
+            ref="groupsGrid"
             v-model.lazy="groups"
             handle=".group-handle"
             easing="cubic-bezier(0.25, 0.8, 0.25, 1)"
