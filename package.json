@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "deploy": "node apps/server/deploy.mjs",
+    "deploy:build": "node apps/server/deploy.mjs --build",
     "build:client": "npm run build -w apps/client"
   },
   "devDependencies": {
