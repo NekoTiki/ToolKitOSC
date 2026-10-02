@@ -1,0 +1,73 @@
+name: Build server
+run-name: "${{ github.event_name == 'pull_request' && format('Build server for PR #{0}', github.event.pull_request.number) || format('Build server on {0}', github.ref_name) }}"
+
+# Same image builds as release-server.yml, without pushing an image. Each run refreshes the
+# registry layer cache (the buildcache-* tags) that the release builds start from.
+on:
+  push:
+    branches: [master]
+    paths:
+      - apps/server/**
+      - packages/**
+      - package-lock.json
+      - .dockerignore
+      - .github/workflows/build-server.yml
+  pull_request:
+    paths:
+      - apps/server/**
+      - packages/**
+      - package-lock.json
+      - .dockerignore
+      - .github/workflows/build-server.yml
+  workflow_dispatch:
+
+concurrency:
+  group: build-server-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Compute image name
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/toolkitosc-server" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: false
+          cache-from: type=registry,ref=${{ steps.image.outputs.name }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ steps.image.outputs.name }}:buildcache-${{ matrix.arch }},mode=max,image-manifest=true,oci-mediatypes=true

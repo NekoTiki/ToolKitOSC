@@ -2,8 +2,17 @@ name: Build client
 run-name: "${{ github.event_name == 'pull_request' && format('Build client for PR #{0}', github.event.pull_request.number) || format('Build client on {0}', github.ref_name) }}"
 
 # Same builds as release-client.yml, without a release: the installers are uploaded as workflow
-# artifacts instead, to try them before tagging.
+# artifacts instead, to try them before tagging. The master runs also keep the build caches warm
+# for the release, which can't reuse caches saved by an earlier tag.
 on:
+  push:
+    branches: [master]
+    paths:
+      - apps/client/**
+      - packages/**
+      - package-lock.json
+      - .github/actions/setup-client/**
+      - .github/workflows/build-client.yml
   pull_request:
     paths:
       - apps/client/**

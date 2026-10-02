@@ -12,12 +12,13 @@ inputs:
 runs:
   using: composite
   steps:
+    # Restores the installed packages from the cache instead of an apt-get update + install.
     - name: Install Linux dependencies
       if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+      uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+      with:
+        packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+        version: 1
 
     - name: Set app version
       if: inputs.version != ''
@@ -42,11 +43,27 @@ runs:
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
 
+    # A cache saved by a tag run can only be restored by that same tag, so tags don't save one:
+    # they restore what build-client.yml saved on master. The shared key is what lets the two
+    # workflows read each other's cache.
     - name: Cache Rust build
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: apps/client/src-tauri -> target
-        key: ${{ inputs.cache-key }}
+        shared-key: client-${{ inputs.cache-key }}
+        cache-on-failure: true
+        save-if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+    # The bundler tools Tauri downloads on first use: NSIS on Windows, linuxdeploy and the
+    # AppImage plugins on Linux.
+    - name: Cache Tauri bundler tools
+      uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cache/tauri
+          ~/AppData/Local/tauri
+        key: tauri-tools-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+        restore-keys: tauri-tools-${{ runner.os }}-
 
     - name: Install dependencies
       shell: bash
