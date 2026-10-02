@@ -1,5 +1,5 @@
-import type { ColorFamily } from '@vrc-osc-toolkit/shared-ui'
-import { applyThemeColor, clearThemeColor } from '@vrc-osc-toolkit/shared-ui'
+import type { ColorFamily } from '@toolkitosc/shared-ui'
+import { applyThemeColor, clearThemeColor } from '@toolkitosc/shared-ui'
 
 // Viewer-side wrapper around the shared theme core: this app never picks a theme itself, it
 // only applies/clears whatever the host broadcasts over `theme-update`.

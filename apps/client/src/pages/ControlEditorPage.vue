@@ -22,8 +22,8 @@ import type {
   EnumControl,
   IntifacePatternControl,
   IntifaceToyControl
-} from '@vrc-osc-toolkit/shared-ui'
-import { Control, CONTROL_TYPE_LABELS, controlTileSpan } from '@vrc-osc-toolkit/shared-ui'
+} from '@toolkitosc/shared-ui'
+import { Control, CONTROL_TYPE_LABELS, controlTileSpan } from '@toolkitosc/shared-ui'
 import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 

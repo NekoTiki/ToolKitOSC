@@ -1,8 +1,8 @@
-# @vrc-osc-toolkit/client
+# @toolkitosc/client
 
-The VRC OSC Toolkit desktop app — a Tauri + Vue application that bridges VRChat's OSC protocol
-to the rest of the toolkit (the companion `@vrc-osc-toolkit/server` website). Control rendering
-components are shared with the server via `@vrc-osc-toolkit/shared-ui`.
+The ToolKitOSC desktop app — a Tauri + Vue application that bridges VRChat's OSC protocol
+to the rest of the toolkit (the companion `@toolkitosc/server` website). Control rendering
+components are shared with the server via `@toolkitosc/shared-ui`.
 
 ## Recommended IDE Setup
 

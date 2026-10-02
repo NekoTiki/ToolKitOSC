@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IntifaceDevice } from '@renderer/composables/useIntiface'
-import type { IntifaceToyControl } from '@vrc-osc-toolkit/shared-ui'
+import type { IntifaceToyControl } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 const props = defineProps<{ devices: Map<number, IntifaceDevice> }>()

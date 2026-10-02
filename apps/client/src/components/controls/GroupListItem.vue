@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { isControlOn, VALUE_CONTROL_TYPES } from '@renderer/utils/controlState'
-import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
-import { useOscMessages } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlGroup } from '@toolkitosc/shared-ui'
+import { useOscMessages } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 // One group in the Controls page's sidebar: name, control count, how many are on, and a row of

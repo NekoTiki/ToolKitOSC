@@ -84,7 +84,7 @@ from the monorepo root** (not from `apps/server`) so npm can resolve the workspa
 ### Build Image
 ```cmd
 REM From the repo root
-docker build -f apps/server/Dockerfile -t vrc-osc-toolkit-server:prod .
+docker build -f apps/server/Dockerfile -t toolkitosc-server:prod .
 ```
 
 Or via the reference compose file:
@@ -94,7 +94,7 @@ docker compose -f apps/server/docker-compose.yml build
 
 ### Run Container
 ```cmd
-docker run --rm -p 3000:3000 --name vrc-osc-toolkit vrc-osc-toolkit-server:prod
+docker run --rm -p 3000:3000 --name toolkitosc toolkitosc-server:prod
 ```
 
 Then visit: http://localhost:3000
@@ -102,12 +102,12 @@ Then visit: http://localhost:3000
 ### Environment Variables
 Copy `.env.example` to `.env` and fill in the values, then pass it at runtime:
 ```cmd
-docker run --rm --env-file .env -p 3000:3000 vrc-osc-toolkit-server:prod
+docker run --rm --env-file .env -p 3000:3000 toolkitosc-server:prod
 ```
 
 You can also override host/port individually:
 ```cmd
-docker run --rm -e PORT=8080 -p 8080:8080 vrc-osc-toolkit-server:prod
+docker run --rm -e PORT=8080 -p 8080:8080 toolkitosc-server:prod
 ```
 
 ### Healthcheck
@@ -120,5 +120,5 @@ the Nuxt build reruns on source changes.
 
 ### CI image (GitHub Container Registry)
 `.github/workflows/build-server-image.yml` builds this Dockerfile (linux/amd64 + linux/arm64)
-and pushes it to `ghcr.io/<owner>/vrc-osc-toolkit-server` on every push to `main` that touches
+and pushes it to `ghcr.io/<owner>/toolkitosc-server` on every push to `main` that touches
 the server or its workspace dependencies, or via manual dispatch.

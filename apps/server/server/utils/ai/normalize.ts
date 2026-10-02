@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import type { ControlGroup, ControlType } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlGroup, ControlType } from '@toolkitosc/shared-ui'
 
 import { ICON_CHOICES } from './prompt'
 import { aiAddressSchema, aiControlNameSchema, stepEnumOptionSchema } from './schemas'

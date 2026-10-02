@@ -39,7 +39,7 @@ for (const svc of Object.values(SERVICES)) {
 
 const screen = blessed.screen({
   smartCSR: true,
-  title: 'VRC OSC Toolkit — Dev',
+  title: 'ToolKitOSC — Dev',
   fullUnicode: true,
   autoPadding: true
 })
@@ -49,7 +49,7 @@ const header = blessed.box({
   left: 0,
   width: '100%',
   height: 1,
-  content: ' VRC OSC Toolkit — Dev Launcher',
+  content: ' ToolKitOSC — Dev Launcher',
   tags: true,
   style: { fg: 'black', bg: 'white', bold: true }
 })

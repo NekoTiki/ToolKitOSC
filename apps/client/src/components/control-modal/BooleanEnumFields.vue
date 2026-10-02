@@ -4,7 +4,7 @@ import AddressListEditor from '@renderer/components/control-modal/AddressListEdi
 import AddressListToggle from '@renderer/components/control-modal/AddressListToggle.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import { getUUID } from '@renderer/utils/uuid'
-import type { BooleanEnumControl } from '@vrc-osc-toolkit/shared-ui'
+import type { BooleanEnumControl } from '@toolkitosc/shared-ui'
 
 defineProps<{ addresses: SelectMenuItem[] }>()
 const inputs = defineModel<BooleanEnumControl['inputs']>('inputs', { required: true })

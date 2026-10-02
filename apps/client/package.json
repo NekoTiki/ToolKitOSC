@@ -1,7 +1,7 @@
 {
-  "name": "@vrc-osc-toolkit/client",
+  "name": "@toolkitosc/client",
   "version": "1.0.0",
-  "description": "VRC OSC Toolkit desktop client",
+  "description": "ToolKitOSC desktop client",
   "private": true,
   "type": "module",
   "author": "example.com",
@@ -22,7 +22,7 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2.5.5",
     "@tauri-apps/plugin-updater": "^2.11.0",
-    "@vrc-osc-toolkit/shared-ui": "*",
+    "@toolkitosc/shared-ui": "*",
     "@vueuse/core": "^14.4.0",
     "@vueuse/rxjs": "^14.4.0",
     "dexie": "^4.4.5",

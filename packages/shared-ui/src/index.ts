@@ -1,4 +1,4 @@
-// Public entry point for @vrc-osc-toolkit/shared-ui — the read-only control-rendering layer
+// Public entry point for @toolkitosc/shared-ui — the read-only control-rendering layer
 // shared between the desktop client (authoring UI wraps these) and the server's viewer page.
 export { default as Control } from './components/Control.vue'
 export { default as ControlBase } from './components/ControlBase.vue'

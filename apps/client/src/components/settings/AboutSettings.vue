@@ -22,7 +22,7 @@ onMounted(() => void getVersion().then((value) => (version.value = value)))
         class="size-12 rounded-xl"
       >
       <div class="grid min-w-0 flex-1">
-        <b class="text-[15px] font-semibold text-highlighted">VRC OSC Toolkit</b>
+        <b class="text-[15px] font-semibold text-highlighted">ToolKitOSC</b>
         <small class="text-[13px] text-muted">{{ version ? `Version ${version}` : 'Checking version…' }}</small>
       </div>
       <UButton

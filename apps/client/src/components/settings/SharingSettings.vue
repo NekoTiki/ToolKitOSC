@@ -6,7 +6,7 @@ import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
-import { encodeShareCode } from '@vrc-osc-toolkit/shared-ui'
+import { encodeShareCode } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 const { user, loggedIn } = useAuth()

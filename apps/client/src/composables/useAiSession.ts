@@ -3,7 +3,7 @@ import { useAiControlSuggestions } from '@renderer/composables/useAiControlSugge
 import { useAiCredits } from '@renderer/composables/useAiCredits'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { router } from '@renderer/router'
-import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlGroup } from '@toolkitosc/shared-ui'
 import type { Ref, WritableComputedRef } from 'vue'
 import { computed, ref, watch } from 'vue'
 

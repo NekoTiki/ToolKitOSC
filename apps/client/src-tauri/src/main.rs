@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    vrc_osc_toolkit_lib::run()
+    toolkitosc_lib::run()
 }

@@ -1,5 +1,5 @@
 import { api } from '@renderer/lib/tauri-bridge'
-import { args, useOscMessages as useSharedOscMessages } from '@vrc-osc-toolkit/shared-ui'
+import { args, useOscMessages as useSharedOscMessages } from '@toolkitosc/shared-ui'
 
 import type { OscCommand, OSCMessage } from '../env.d'
 

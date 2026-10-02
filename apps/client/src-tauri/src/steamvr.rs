@@ -20,7 +20,7 @@ use serde::Serialize;
 /// Reverse-DNS key SteamVR uses to identify this app in its manifest registry - matches the Tauri
 /// app identifier (tauri.conf.json) and must stay stable across versions/reinstalls, since it's
 /// how SetApplicationAutoLaunch/GetApplicationAutoLaunch address an already-registered app.
-const APP_KEY: &str = "io.github.nekotiki.vrc-osc-toolkit";
+const APP_KEY: &str = "io.github.nekotiki.toolkitosc";
 
 const APP_TYPE_BACKGROUND: i32 = 3; // EVRApplicationType_VRApplication_Background
 const INIT_ERROR_NO_SERVER_FOR_BACKGROUND_APP: i32 = 121;
@@ -218,8 +218,8 @@ fn write_manifest(manifest_path: &Path) -> Result<(), String> {
             is_dashboard_overlay: false,
             strings: ManifestStrings {
                 en_us: ManifestLocale {
-                    name: "VRC OSC Toolkit",
-                    description: "VRC OSC Toolkit"
+                    name: "ToolKitOSC",
+                    description: "ToolKitOSC"
                 }
             }
         }]

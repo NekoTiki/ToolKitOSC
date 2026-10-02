@@ -1,9 +1,9 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
-@import "@vrc-osc-toolkit/shared-ui/styles/theme-colors.css";
-@import "@vrc-osc-toolkit/shared-ui/styles/aurora.css";
+@import "@toolkitosc/shared-ui/styles/theme-colors.css";
+@import "@toolkitosc/shared-ui/styles/aurora.css";
 
 /* Tailwind v4's automatic content detection skips anything reached through node_modules
-   (which is how @vrc-osc-toolkit/shared-ui gets pulled in, via the workspace symlink) — without
+   (which is how @toolkitosc/shared-ui gets pulled in, via the workspace symlink) — without
    this, none of the shared control components' utility classes make it into the generated CSS. */
 @source "../../../../../packages/shared-ui/src/**/*.{vue,ts}";

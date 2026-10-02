@@ -4,7 +4,7 @@ import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useControlsView } from '@renderer/composables/useControlsView'
 import type { ColorFamilyWithoutNeutral } from '@renderer/composables/useTheme'
 import { COLOR_FAMILIES, useTheme } from '@renderer/composables/useTheme'
-import { ControlBase, ControlBooleanBase, ControlOptions, ControlSliderBase } from '@vrc-osc-toolkit/shared-ui'
+import { ControlBase, ControlBooleanBase, ControlOptions, ControlSliderBase } from '@toolkitosc/shared-ui'
 import { computed, ref } from 'vue'
 
 // The theme is two colors (see shared-ui's styles/aurora.css): primary for buttons, the selected

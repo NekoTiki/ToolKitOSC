@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 const DEFAULT_INTIFACE_URL = 'ws://localhost:12345'
 const URL_STORAGE_KEY = 'intiface_url'
 const ENABLED_STORAGE_KEY = 'intiface_enabled'
-const CLIENT_NAME = 'VRC OSC Toolkit'
+const CLIENT_NAME = 'ToolKitOSC'
 const RECONNECT_DELAY = 3000
 
 // Buttplug protocol (raw JSON messages exchanged with an Intiface Engine over WebSocket) - only

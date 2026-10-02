@@ -73,10 +73,10 @@ export default defineNuxtConfig({
       websocket: true
     }
   },
-  // @vrc-osc-toolkit/shared-ui ships raw, uncompiled .vue/.ts source (workspace package, no
+  // @toolkitosc/shared-ui ships raw, uncompiled .vue/.ts source (workspace package, no
   // build step) — Nitro/Vite need to run their own SFC compiler over it rather than treating it
   // as pre-built JS.
   build: {
-    transpile: ['@vrc-osc-toolkit/shared-ui']
+    transpile: ['@toolkitosc/shared-ui']
   }
 })

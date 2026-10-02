@@ -7,7 +7,7 @@ import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { usePresets } from '@renderer/composables/usePresets'
 import { api } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
-import type { ControlType } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlType } from '@toolkitosc/shared-ui'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 

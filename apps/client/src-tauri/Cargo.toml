@@ -1,12 +1,12 @@
 [package]
-name = "vrc-osc-toolkit"
+name = "toolkitosc"
 version = "1.0.0"
-description = "VRC OSC Toolkit desktop client"
+description = "ToolKitOSC desktop client"
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "vrc_osc_toolkit_lib"
+name = "toolkitosc_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

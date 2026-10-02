@@ -1,5 +1,5 @@
-import type { ControlTypes } from '@vrc-osc-toolkit/shared-ui'
-import { CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlTypes } from '@toolkitosc/shared-ui'
+import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
 
 // Human labels for control types in the dashboard charts. Per-type colors are gone: the charts
 // rank types as single-color bars (see components/admin/RankedBars.vue), so a type's name - not

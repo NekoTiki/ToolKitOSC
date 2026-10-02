@@ -19,7 +19,7 @@ jobs:
       - name: Compute image name
         id: image
         # ghcr.io repository paths must be lowercase, github.repository_owner isn't guaranteed to be.
-        run: echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/vrc-osc-toolkit-server" >> "$GITHUB_OUTPUT"
+        run: echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/toolkitosc-server" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4

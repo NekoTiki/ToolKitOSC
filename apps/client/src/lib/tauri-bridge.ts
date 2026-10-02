@@ -4,7 +4,7 @@
 // apps/client's entry in the monorepo plan for the reasoning.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AvatarDetails, OscCommand, OSCMessage, PresetStore } from '@vrc-osc-toolkit/shared-ui'
+import type { AvatarDetails, OscCommand, OSCMessage, PresetStore } from '@toolkitosc/shared-ui'
 
 export const api = {
   ready: (): void => {

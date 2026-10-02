@@ -1,4 +1,4 @@
-import type { ControlTypes } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlTypes } from '@toolkitosc/shared-ui'
 
 import type { AiProviderId } from './types'
 

@@ -36,8 +36,8 @@ export function createOpenRouterProvider(apiKey: string, primaryModel: string): 
           Authorization: `Bearer ${apiKey}`,
           // OpenRouter asks for these on every request for their own analytics/attribution - not
           // load-bearing for the API call itself, just good citizenship.
-          'HTTP-Referer': 'https://github.com/NekoTiki/VRC-OSC-Toolkit',
-          'X-Title': 'VRC OSC Toolkit'
+          'HTTP-Referer': 'https://github.com/NekoTiki/ToolKitOSC',
+          'X-Title': 'ToolKitOSC'
         },
         body: JSON.stringify({
           model,

@@ -3,7 +3,7 @@ import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { usePresets } from '@renderer/composables/usePresets'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
-import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlGroup } from '@toolkitosc/shared-ui'
 import { ref } from 'vue'
 
 export interface AiProviderInfo {

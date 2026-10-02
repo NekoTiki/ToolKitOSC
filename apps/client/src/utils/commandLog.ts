@@ -1,5 +1,5 @@
 import type { Command } from '@renderer/db/commands.db'
-import type { OpenShockCommandResult } from '@vrc-osc-toolkit/shared-ui'
+import type { OpenShockCommandResult } from '@toolkitosc/shared-ui'
 
 // Shared by every place that renders logged Command rows (the Activity and Viewers pages, the
 // Controls page's log line), however they're filtered.

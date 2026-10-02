@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BUILTIN_PATTERNS } from '@renderer/composables/useIntifacePatterns'
-import type { IntifacePatternControl } from '@vrc-osc-toolkit/shared-ui'
+import type { IntifacePatternControl } from '@toolkitosc/shared-ui'
 
 const allowedPatterns = defineModel<IntifacePatternControl['allowedPatterns']>('allowedPatterns', {
   required: true

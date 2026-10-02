@@ -15,8 +15,8 @@ import type {
   LastUser,
   OpenShockCommandResult,
   StepEnumControl
-} from '@vrc-osc-toolkit/shared-ui'
-import { useIntifaceControl, useOpenShockControl } from '@vrc-osc-toolkit/shared-ui'
+} from '@toolkitosc/shared-ui'
+import { useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
 import type { ComputedRef } from 'vue'
 import { computed, ref, toRaw, watch } from 'vue'
 

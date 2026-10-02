@@ -18,7 +18,7 @@ const TAG: &str = "vrc-osc";
 ///
 /// Verbosity defaults to `info` and everything above; override with the `RUST_LOG` env var
 /// (same syntax `tracing-subscriber`/`env_logger` use, e.g. `RUST_LOG=debug` or
-/// `RUST_LOG=vrc_osc_toolkit_lib::osc=trace`).
+/// `RUST_LOG=toolkitosc_lib::osc=trace`).
 pub fn init() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
@@ -62,10 +62,10 @@ where
     }
 }
 
-/// Groups a `tracing` target (a full module path, e.g. `vrc_osc_toolkit_lib::osc::udp`) down to
+/// Groups a `tracing` target (a full module path, e.g. `toolkitosc_lib::osc::udp`) down to
 /// its first module segment (`osc`) — the equivalent of Vite's `(client)`/`(server)` scope tag.
 fn scope_of(target: &str) -> &str {
-    let rest = target.strip_prefix("vrc_osc_toolkit_lib").unwrap_or(target);
+    let rest = target.strip_prefix("toolkitosc_lib").unwrap_or(target);
     let rest = rest.strip_prefix("::").unwrap_or(rest);
     let first = rest.split("::").next().unwrap_or("");
 

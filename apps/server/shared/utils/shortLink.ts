@@ -7,4 +7,4 @@
 // Nitro/server typecheck project too, which has no DOM lib. The package root also exports Vue
 // components and the DOM-touching useTheme composable; resolving those (even for an unrelated
 // named re-export) would drag their implementations into that project's program and break it.
-export { decodeShareCode, encodeShareCode } from '@vrc-osc-toolkit/shared-ui/utils'
+export { decodeShareCode, encodeShareCode } from '@toolkitosc/shared-ui/utils'

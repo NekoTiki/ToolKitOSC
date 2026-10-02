@@ -1,4 +1,4 @@
-import type { ControlType } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlType } from '@toolkitosc/shared-ui'
 
 type Getter = <T>(address: string, fallback: T) => T
 

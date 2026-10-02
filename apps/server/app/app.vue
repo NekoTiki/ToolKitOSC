@@ -4,7 +4,7 @@ import type { NavigationMenuItem } from '@nuxt/ui/components/NavigationMenu.vue'
 
 const { loggedIn, user, clear } = useUserSession()
 
-useHead({ title: 'VRC OSC Toolkit' })
+useHead({ title: 'ToolKitOSC' })
 
 const { refresh } = useFetch('/auth/refresh', { immediate: false })
 
@@ -86,7 +86,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
       <template #title>
         <span class="flex items-center gap-2.5 font-semibold text-highlighted">
           <span class="size-6.5 rounded-lg bg-linear-to-br from-primary to-secondary" />
-          VRC OSC Toolkit
+          ToolKitOSC
         </span>
       </template>
 

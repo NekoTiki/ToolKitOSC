@@ -9,7 +9,7 @@ import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { usePresets } from '@renderer/composables/usePresets'
 import { timeAgo } from '@renderer/utils/time'
-import { CONTROL_TYPE_COLORS, CONTROL_TYPE_LABELS } from '@vrc-osc-toolkit/shared-ui'
+import { CONTROL_TYPE_COLORS, CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
 import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRouter } from 'vue-router'
 

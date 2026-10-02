@@ -1,9 +1,9 @@
-import type { ColorFamilyWithoutNeutral } from '@vrc-osc-toolkit/shared-ui'
-import { applyThemeColor, COLOR_FAMILIES, NEUTRAL_COLOR_FAMILIES } from '@vrc-osc-toolkit/shared-ui'
+import type { ColorFamilyWithoutNeutral } from '@toolkitosc/shared-ui'
+import { applyThemeColor, COLOR_FAMILIES, NEUTRAL_COLOR_FAMILIES } from '@toolkitosc/shared-ui'
 import { ref } from 'vue'
 
 export { COLOR_FAMILIES, NEUTRAL_COLOR_FAMILIES }
-export type { ColorFamily, ColorFamilyWithoutNeutral } from '@vrc-osc-toolkit/shared-ui'
+export type { ColorFamily, ColorFamilyWithoutNeutral } from '@toolkitosc/shared-ui'
 
 // The desktop client is the theme *authority*: it picks a color, persists it, and broadcasts it
 // to remote viewers over the host WS connection (see useWebsocketHost.ts). The DOM-mutating part

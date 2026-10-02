@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use directories::BaseDirs;
 use mslnk::ShellLink;
 
-const SHORTCUT_NAME: &str = "VRC OSC Toolkit.lnk";
+const SHORTCUT_NAME: &str = "ToolKitOSC.lnk";
 
 fn startup_dir() -> Option<PathBuf> {
     Some(BaseDirs::new()?.data_dir().join("VRCX").join("startup"))

@@ -2,7 +2,7 @@ import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { api } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
-import type { OSCArg, Preset, PresetParameter } from '@vrc-osc-toolkit/shared-ui'
+import type { OSCArg, Preset, PresetParameter } from '@toolkitosc/shared-ui'
 import type { ComputedRef } from 'vue'
 import { computed, ref } from 'vue'
 

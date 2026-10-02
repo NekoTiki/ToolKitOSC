@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
-import type { EnumControl } from '@vrc-osc-toolkit/shared-ui'
+import type { EnumControl } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 const options = defineModel<EnumControl['options']>({ required: true })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SelectMenuItem } from '@nuxt/ui/components/SelectMenu.vue'
-import type { OpenShockControl } from '@vrc-osc-toolkit/shared-ui'
+import type { OpenShockControl } from '@toolkitosc/shared-ui'
 
 defineProps<{
   openShockMode: SelectMenuItem[]

@@ -8,7 +8,7 @@ import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { hostStatus, protocolMismatchReason, serverProtocolVersion, unsupportedControlTypes } from '@renderer/composables/useWebsocketHost'
 import { isValidServerWsUrl, useWebsocketSettings } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
-import { CONTROL_TYPE_LABELS, PROTOCOL_VERSION } from '@vrc-osc-toolkit/shared-ui'
+import { CONTROL_TYPE_LABELS, PROTOCOL_VERSION } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import { computed, ref, watch } from 'vue'
 

@@ -1,4 +1,4 @@
-//! Wire types mirroring `@vrc-osc-toolkit/shared-ui/types/osc.ts`. Kept in sync by hand — if you
+//! Wire types mirroring `@toolkitosc/shared-ui/types/osc.ts`. Kept in sync by hand — if you
 //! change one side, change the other.
 use serde::{Deserialize, Serialize};
 

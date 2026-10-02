@@ -1,4 +1,4 @@
-import type { AiGenerateErrorMessage, AiGenerateProgressMessage, AiGenerateResultMessage, ControlGroup } from '@vrc-osc-toolkit/shared-ui'
+import type { AiGenerateErrorMessage, AiGenerateProgressMessage, AiGenerateResultMessage, ControlGroup } from '@toolkitosc/shared-ui'
 import { ref } from 'vue'
 
 // A generation now finishes over the host WS connection (see useWebsocketHost.ts's

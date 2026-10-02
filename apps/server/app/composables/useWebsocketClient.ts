@@ -1,4 +1,4 @@
-import type { ControlGroup, ServerToViewerMessage } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlGroup, ServerToViewerMessage } from '@toolkitosc/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
 import { useIntifaceControl } from '~/composables/useIntifaceControl'

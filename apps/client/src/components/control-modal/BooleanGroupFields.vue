@@ -2,7 +2,7 @@
 import type { SelectMenuItem } from '@nuxt/ui/components/SelectMenu.vue'
 import AddressListEditor from '@renderer/components/control-modal/AddressListEditor.vue'
 import AddressListToggle from '@renderer/components/control-modal/AddressListToggle.vue'
-import type { BooleanGroupControl } from '@vrc-osc-toolkit/shared-ui'
+import type { BooleanGroupControl } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 defineProps<{ addresses: SelectMenuItem[] }>()

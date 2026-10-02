@@ -54,5 +54,5 @@ jobs:
         with:
           projectPath: apps/client
           tagName: ${{ github.ref_name }}
-          releaseName: 'VRC OSC Toolkit v__VERSION__'
+          releaseName: 'ToolKitOSC v__VERSION__'
           releaseDraft: true

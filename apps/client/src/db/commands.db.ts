@@ -1,4 +1,4 @@
-import type { OpenShockCommandResult } from '@vrc-osc-toolkit/shared-ui'
+import type { OpenShockCommandResult } from '@toolkitosc/shared-ui'
 import type { Table } from 'dexie'
 import Dexie from 'dexie'
 

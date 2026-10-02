@@ -15,14 +15,14 @@ import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
 import { AUTHENTICATED_MAX_PER_WINDOW, isRateLimited } from '@renderer/utils/rateLimit'
 import { getStableIp } from '@renderer/utils/stableIp'
-import type { ControlTypes } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlTypes } from '@toolkitosc/shared-ui'
 import {
   guestName,
   PROTOCOL_VERSION,
   useIntifaceControl,
   useIntifacePatternControl,
   useOpenShockControl
-} from '@vrc-osc-toolkit/shared-ui'
+} from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import { useWebSocket } from '@vueuse/core'
 import type { Ref, ShallowRef } from 'vue'

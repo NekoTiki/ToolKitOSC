@@ -60,7 +60,7 @@ const close = (): void => void appWindow.close()
         alt=""
         class="size-4 rounded-xs"
       >
-      <span>VRC OSC Toolkit</span>
+      <span>ToolKitOSC</span>
     </div>
 
     <div class="flex h-full">

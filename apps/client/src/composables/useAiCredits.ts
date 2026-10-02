@@ -1,4 +1,4 @@
-import type { AiCreditsUpdateMessage } from '@vrc-osc-toolkit/shared-ui'
+import type { AiCreditsUpdateMessage } from '@toolkitosc/shared-ui'
 import { ref } from 'vue'
 
 // Module-scope, not per-caller state - same pattern as useAuth/useOpenShock: the server pushes

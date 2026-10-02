@@ -38,7 +38,7 @@ use vrchat_osc::{models::OscNode, models::OscRootNode, models::OscValue, Service
 use super::udp::{flatten_packet, handle_message};
 use crate::state::AppState;
 
-const SERVICE_NAME: &str = "vrc-osc-toolkit";
+const SERVICE_NAME: &str = "toolkitosc";
 const VRCHAT_SERVICE_PREFIX: &str = "VRChat-Client-";
 
 /// A few seconds of lag on detecting an avatar swap is an acceptable trade for a plain HTTP GET

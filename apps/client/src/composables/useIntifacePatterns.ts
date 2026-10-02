@@ -1,5 +1,5 @@
-import type { IntifaceActuatorRef } from '@vrc-osc-toolkit/shared-ui'
-import { INTIFACE_PATTERN_OFF_ID, useIntifacePatternControl } from '@vrc-osc-toolkit/shared-ui'
+import type { IntifaceActuatorRef } from '@toolkitosc/shared-ui'
+import { INTIFACE_PATTERN_OFF_ID, useIntifacePatternControl } from '@toolkitosc/shared-ui'
 
 import { useIntiface } from './useIntiface'
 

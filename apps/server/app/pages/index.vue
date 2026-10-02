@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ControlBase, ControlBooleanBase, ControlOptions, ControlSliderBase } from '@vrc-osc-toolkit/shared-ui'
+import { ControlBase, ControlBooleanBase, ControlOptions, ControlSliderBase } from '@toolkitosc/shared-ui'
 
 useHead({
-  title: 'VRC OSC Toolkit',
+  title: 'ToolKitOSC',
   meta: [
     {
       name: 'description',
@@ -86,7 +86,7 @@ const features = [
 const { loggedIn } = useUserSession()
 
 // Where Windows builds are published by the release workflow (.github/workflows/release-client.yml).
-const DOWNLOAD_URL = 'https://github.com/NekoTiki/VRC-OSC-Toolkit/releases/latest'
+const DOWNLOAD_URL = 'https://github.com/NekoTiki/ToolKitOSC/releases/latest'
 
 // The hero's demo: real control tiles on local state, so visitors can try the same controls their
 // viewers will use.

@@ -1,4 +1,4 @@
-import type { AiAccessUpdateMessage } from '@vrc-osc-toolkit/shared-ui'
+import type { AiAccessUpdateMessage } from '@toolkitosc/shared-ui'
 import { ref } from 'vue'
 
 // Module-scope, not per-caller state - same pattern as useAiCredits.ts. Populated from two

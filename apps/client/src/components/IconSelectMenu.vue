@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CONTROL_ICONS } from '@vrc-osc-toolkit/shared-ui'
+import { CONTROL_ICONS } from '@toolkitosc/shared-ui'
 import { computed, ref, watch } from 'vue'
 
 // An icon picker: a field-like button showing the current icon, opening a searchable grid of

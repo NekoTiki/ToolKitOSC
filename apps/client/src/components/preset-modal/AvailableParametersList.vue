@@ -3,7 +3,7 @@ import AddressListToggle from '@renderer/components/control-modal/AddressListTog
 import type { FilterableParameter } from '@renderer/composables/usePresets'
 import { usePresets } from '@renderer/composables/usePresets'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
-import type { PresetParameter } from '@vrc-osc-toolkit/shared-ui'
+import type { PresetParameter } from '@toolkitosc/shared-ui'
 import { computed, ref } from 'vue'
 
 const parameters = defineModel<PresetParameter[]>('parameters', { required: true })

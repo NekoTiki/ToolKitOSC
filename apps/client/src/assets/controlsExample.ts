@@ -1,4 +1,4 @@
-import type { ControlGroup } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlGroup } from '@toolkitosc/shared-ui'
 
 export const controlGroups: ControlGroup[] = [
   {

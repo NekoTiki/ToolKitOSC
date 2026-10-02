@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="apps/client/src/assets/logo.svg" alt="VRC OSC Toolkit logo" width="120" />
+<img src="apps/client/src/assets/logo.svg" alt="ToolKitOSC logo" width="120" />
 
-# VRC OSC Toolkit
+# ToolKitOSC
 
 **Turn your VRChat avatar's parameters into a live control panel — and share it.**
 
@@ -84,8 +84,8 @@ This is an npm workspaces monorepo:
 ### Install
 
 ```bash
-git clone git@github.com:NekoTiki/VRC-OSC-Toolkit.git
-cd VRC-OSC-Toolkit
+git clone git@github.com:NekoTiki/ToolKitOSC.git
+cd ToolKitOSC
 npm install
 ```
 
@@ -127,8 +127,8 @@ npm run build -w apps/server     # Nuxt production build in apps/server/.output
 The server also ships as a Docker image, built **from the repo root** so the workspace packages resolve:
 
 ```bash
-docker build -f apps/server/Dockerfile -t vrc-osc-toolkit-server .
-docker run --rm --env-file apps/server/.env -p 3000:3000 vrc-osc-toolkit-server
+docker build -f apps/server/Dockerfile -t toolkitosc-server .
+docker run --rm --env-file apps/server/.env -p 3000:3000 toolkitosc-server
 ```
 
 See [`apps/server/docker-compose.yml`](apps/server/docker-compose.yml) for a setup with a persistent database volume.
@@ -163,7 +163,7 @@ style used in the history (`feat(client): …`, `fix(server): …`).
 
 ## 📄 License
 
-VRC OSC Toolkit is free software: you can redistribute it and/or modify it under the terms of
+ToolKitOSC is free software: you can redistribute it and/or modify it under the terms of
 the **GNU General Public License v3.0 or later**. See [`LICENSE`](LICENSE) for the full text.
 
 This project is not affiliated with or endorsed by VRChat Inc.

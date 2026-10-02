@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { usePresets } from '@renderer/composables/usePresets'
-import type { PresetParameter } from '@vrc-osc-toolkit/shared-ui'
+import type { PresetParameter } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 const parameter = defineModel<PresetParameter>({ required: true })

@@ -6,7 +6,7 @@ import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
-import { encodeShareCode } from '@vrc-osc-toolkit/shared-ui'
+import { encodeShareCode } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 

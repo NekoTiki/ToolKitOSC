@@ -6,14 +6,14 @@
 // the Nitro/server typecheck project too, which has no DOM lib. The package root also exports
 // Vue components and the DOM-touching useTheme composable; resolving those (even for a type-only
 // re-export) would drag their implementations into that project's program and break it.
-export type * from '@vrc-osc-toolkit/shared-ui/types'
+export type * from '@toolkitosc/shared-ui/types'
 
 // Named (non type-only) re-export: PROTOCOL_VERSION / MIN_SUPPORTED_PROTOCOL_VERSION are plain
 // numeric constants declared in protocol.ts itself (no DOM-touching imports), so pulling in their
 // runtime values doesn't risk dragging the package's Vue components into this project's typecheck
 // the way `export * from` off the root would.
-export { MIN_SUPPORTED_PROTOCOL_VERSION, PROTOCOL_VERSION } from '@vrc-osc-toolkit/shared-ui/types'
+export { MIN_SUPPORTED_PROTOCOL_VERSION, PROTOCOL_VERSION } from '@toolkitosc/shared-ui/types'
 
 // Same reasoning: KNOWN_CONTROL_TYPES is derived in controls.ts (also import-free) from a Record
 // literal, not from anything DOM-touching.
-export { KNOWN_CONTROL_TYPES } from '@vrc-osc-toolkit/shared-ui/types'
+export { KNOWN_CONTROL_TYPES } from '@toolkitosc/shared-ui/types'

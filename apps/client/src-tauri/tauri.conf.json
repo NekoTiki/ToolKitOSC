@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "VRC OSC Toolkit",
+  "productName": "ToolKitOSC",
   "version": "1.0.0",
-  "identifier": "io.github.nekotiki.vrc-osc-toolkit",
+  "identifier": "io.github.nekotiki.toolkitosc",
   "build": {
     "beforeDevCommand": "npm run dev:vite",
     "beforeBuildCommand": "npm run build:vite",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "VRC OSC Toolkit",
+        "title": "ToolKitOSC",
         "width": 900,
         "height": 670,
         "minWidth": 700,
@@ -41,7 +41,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg4NzJDNkY0OTExN0FGMEMKUldRTXJ4ZVI5TVp5aUJWUjAwSkFFZkkvdWtseEMrVEdKUmtTeHFsMHVJRFlxT1kra0tld1pvVlgK",
       "endpoints": [
-        "https://github.com/NekoTiki/VRC-OSC-Toolkit/releases/latest/download/latest.json"
+        "https://github.com/NekoTiki/ToolKitOSC/releases/latest/download/latest.json"
       ]
     }
   }

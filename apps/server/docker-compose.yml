@@ -12,9 +12,9 @@ services:
       context: ../..
       dockerfile: apps/server/Dockerfile
     # Or skip the local build and run the image published by CI instead:
-    # image: ghcr.io/nekotiki/vrc-osc-toolkit-server:latest
+    # image: ghcr.io/nekotiki/toolkitosc-server:latest
     restart: always
-    container_name: vrc-osc-toolkit-server
+    container_name: toolkitosc-server
     env_file:
       - .env
     ports:

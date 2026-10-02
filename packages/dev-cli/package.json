@@ -1,5 +1,5 @@
 {
-  "name": "@vrc-osc-toolkit/dev-cli",
+  "name": "@toolkitosc/dev-cli",
   "version": "1.0.0",
   "private": true,
   "description": "Interactive dev launcher for the server and client, with split log panes",

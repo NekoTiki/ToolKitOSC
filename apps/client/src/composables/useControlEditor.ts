@@ -17,7 +17,7 @@ import type {
   PresetControl,
   SliderControl,
   StepEnumControl
-} from '@vrc-osc-toolkit/shared-ui'
+} from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import type { ComputedRef, Ref, WritableComputedRef } from 'vue'
 import { computed, ref, watch } from 'vue'

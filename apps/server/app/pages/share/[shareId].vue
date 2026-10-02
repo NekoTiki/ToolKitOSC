@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { ControlType } from '@vrc-osc-toolkit/shared-ui'
-import { Control, controlTileSpan, randomGuestName } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlType } from '@toolkitosc/shared-ui'
+import { Control, controlTileSpan, randomGuestName } from '@toolkitosc/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
 import type { ShareInfo } from '~~/server/api/share/[shareId].get'

@@ -4,7 +4,7 @@
 // Vue/Vite pipeline, which crashes its build (confirmed live - "Expression expected" from Rollup
 // trying to parse ControlBooleanBase.vue as plain JS). '/types' is exactly the DOM/component-free
 // subpath the codebase already established for this reason (see apps/server/shared/types/protocol.ts).
-import { CONTROL_ICONS } from '@vrc-osc-toolkit/shared-ui/types'
+import { CONTROL_ICONS } from '@toolkitosc/shared-ui/types'
 
 import type { PromptProfile, PromptProfileId } from './profiles'
 import type { AiParameterInput } from './types'
