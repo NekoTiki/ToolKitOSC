@@ -37,6 +37,11 @@ COPY --from=build /app/apps/server/.output ./.output
 # on the tracer to find it.
 COPY --from=build /app/node_modules/@libsql ./.output/server/node_modules/@libsql
 
+# Same story for @resvg/resvg-js (server/utils/ogImage.ts, the link-preview images): its native
+# binary is a per-platform optional package (e.g. @resvg/resvg-js-linux-arm64-musl), so it's copied
+# over wholesale too rather than trusting the tracer to pick the one this build installed.
+COPY --from=build /app/node_modules/@resvg ./.output/server/node_modules/@resvg
+
 # Raw migration SQL files (server/db/migrations) are read from disk at startup (see
 # server/db/index.ts's ensureMigrated) rather than bundled into the JS output like imported code,
 # so they're copied in separately here, at the same `server/db/migrations` path relative to this
