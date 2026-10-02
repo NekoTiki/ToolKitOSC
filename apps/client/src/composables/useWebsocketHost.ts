@@ -46,6 +46,15 @@ export type Client = {
 
 export const clients = ref<Client[]>([])
 
+// `clients` has one entry per connection, so the same person on several browsers/tabs shows up
+// more than once - this counts people instead, keyed the same way the Viewers page groups them.
+export const uniqueClientCount = computed(
+  () =>
+    new Set(
+      clients.value.map((client) => formatUniqueKey(getStableIp(client.ip), client.user?.discord?.id || null))
+    ).size
+)
+
 // Mirrors useWebSocket's own `status` at module scope, same reasoning as `clients` above: the
 // actual socket is only ever opened once (by StatusBar.vue, the only place useWebsocketHost() may be
 // called - every call opens its own socket, and two host sockets for one account keep kicking each

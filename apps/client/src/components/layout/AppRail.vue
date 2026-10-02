@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiSession } from '@renderer/composables/useAiSession'
-import { clients } from '@renderer/composables/useWebsocketHost'
+import { uniqueClientCount } from '@renderer/composables/useWebsocketHost'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -26,7 +26,7 @@ const items = computed<RailItem[]>(() => [
   { key: 'presets', label: 'Presets', icon: 'i-lucide-layers', to: '/presets' },
   { key: 'parameters', label: 'Parameters', icon: 'i-lucide-list-tree', to: '/parameters' },
   { key: 'profiles', label: 'Profiles', icon: 'i-lucide-lock', to: '/profiles' },
-  { key: 'viewers', label: 'Viewers', icon: 'i-lucide-users', to: '/viewers', badge: clients.value.length },
+  { key: 'viewers', label: 'Viewers', icon: 'i-lucide-users', to: '/viewers', badge: uniqueClientCount.value },
   { key: 'activity', label: 'Activity', icon: 'i-lucide-history', to: '/activity' },
   ...(aiAccess.value.hasAccess
     ? [{ key: 'ai', label: 'AI', icon: 'i-lucide-sparkles', to: '/ai', busy: aiGenerating.value, alert: aiUnseen.value }]

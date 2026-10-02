@@ -5,13 +5,13 @@ import { useIntiface } from '@renderer/composables/useIntiface'
 import type { OpenShockStatus } from '@renderer/composables/useOpenShock'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
-import { unsupportedControlTypes, useWebsocketHost } from '@renderer/composables/useWebsocketHost'
+import { uniqueClientCount, unsupportedControlTypes, useWebsocketHost } from '@renderer/composables/useWebsocketHost'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 // The top bar's connection chips. Each one opens the page where that connection is configured and
 // its details live (no popovers - one tap, VR-friendly), as in the redesign.
-const { clients, status, open, close } = useWebsocketHost()
+const { status, open, close } = useWebsocketHost()
 const { connected: oscConnected } = useOscConnection()
 const { status: openShockStatus } = useOpenShock()
 const { status: intifaceStatus } = useIntiface()
@@ -67,10 +67,10 @@ onBeforeUnmount(close)
     />
     <StatusChip
       icon="i-lucide-users"
-      :tone="clients.length ? 'success' : 'muted'"
+      :tone="uniqueClientCount ? 'success' : 'muted'"
       @click="go('/viewers')"
     >
-      <span class="font-mono">{{ clients.length }}</span>
+      <span class="font-mono">{{ uniqueClientCount }}</span>
     </StatusChip>
   </div>
 </template>
