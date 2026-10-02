@@ -70,6 +70,21 @@ const hostName = computed(() => shareInfo.value?.hostName ?? 'This host')
 // mismatch on the S/M/L buttons and no flash of the wrong tile size.
 const density = useCookie<'s' | 'm' | 'l'>('share_tileDensity', { default: () => 'm', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
 
+// The installed web app starts at /launch (see public/manifest.webmanifest), which reopens the last
+// share this device viewed - read server-side by server/routes/launch.get.ts, hence a cookie. Set on
+// mount rather than during SSR so link-preview crawlers fetching the page never get one. Stored raw
+// (useCookie JSON-encodes by default, which would wrap the id in quotes) for that server route.
+const lastShare = useCookie<string>('share_last', {
+  maxAge: 60 * 60 * 24 * 365,
+  sameSite: 'lax',
+  encode: (value) => value ?? '',
+  decode: (value: string) => value
+})
+
+onMounted(() => {
+  lastShare.value = shareId
+})
+
 const query = ref('')
 const search = computed(() => query.value.trim().toLowerCase())
 const selectedId = ref<string | null>(null)

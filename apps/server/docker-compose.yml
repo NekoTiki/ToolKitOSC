@@ -1,18 +1,18 @@
-# Reference compose file for running the server image standalone.
+# Reference compose file for running the server image published to GitHub Container Registry.
 #
-# From the repo root:
-#   docker compose -f apps/server/docker-compose.yml build
+#   docker compose -f apps/server/docker-compose.yml pull
 #   docker compose -f apps/server/docker-compose.yml up -d
 #
+# To build the image locally instead, uncomment the build section below and run
+# `docker compose -f apps/server/docker-compose.yml up -d --build` from the repo root.
 # build.context points at the repo root (two levels up) because this app depends on
 # the packages/shared-ui workspace package — see apps/server/Dockerfile.
 services:
   app:
-    build:
-      context: ../..
-      dockerfile: apps/server/Dockerfile
-    # Or skip the local build and run the image published by CI instead:
-    # image: ghcr.io/nekotiki/toolkitosc-server:latest
+    image: ghcr.io/nekotiki/toolkitosc-server:latest
+    # build:
+    #   context: ../..
+    #   dockerfile: apps/server/Dockerfile
     restart: always
     container_name: toolkitosc-server
     env_file:

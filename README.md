@@ -124,12 +124,14 @@ npm run build:client             # Windows installer under apps/client/src-tauri
 npm run build -w apps/server     # Nuxt production build in apps/server/.output
 ```
 
-The server also ships as a Docker image, built **from the repo root** so the workspace packages resolve:
+The server also ships as a Docker image on GitHub Container Registry:
 
 ```bash
-docker build -f apps/server/Dockerfile -t toolkitosc-server .
-docker run --rm --env-file apps/server/.env -p 3000:3000 toolkitosc-server
+docker pull ghcr.io/nekotiki/toolkitosc-server:latest
+docker run --rm --env-file apps/server/.env -p 3000:3000 ghcr.io/nekotiki/toolkitosc-server:latest
 ```
+
+To build it yourself, run `docker build -f apps/server/Dockerfile -t toolkitosc-server .` **from the repo root** so the workspace packages resolve.
 
 See [`apps/server/docker-compose.yml`](apps/server/docker-compose.yml) for a setup with a persistent database volume.
 
