@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' https://api.iconify.design https://api.openshock.app http://localhost:3000 ws://localhost:3000 wss://localhost:3000; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://ui-avatars.com https://cdn.discordapp.com; connect-src 'self' https://api.iconify.design https://api.openshock.app http://localhost:3000 ws: wss:"
+      "csp": "default-src 'self' https://api.iconify.design https://api.openshock.app http://localhost:3000 ws://localhost:3000 wss://localhost:3000; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://ui-avatars.com https://cdn.discordapp.com; connect-src 'self' https://api.iconify.design https://api.openshock.app http://localhost:3000 https: ws: wss:"
     }
   },
   "bundle": {

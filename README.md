@@ -140,6 +140,14 @@ Releases are cut by pushing a tag:
 - `client-vX.Y.Z` — builds the Windows installer and publishes it as a GitHub release.
 - `server-vX.Y.Z` — builds the multi-arch server image and pushes it to GitHub Container Registry.
 
+The client release needs these set in the repository's Actions settings:
+
+| Name                                 | Kind     | Purpose                                                       |
+| ------------------------------------ | -------- | ------------------------------------------------------------- |
+| `VITE_SERVER_WS_URL`                 | Variable | Default server the app connects to (e.g. `wss://vot.nek.ovh`) |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Secret   | Signs the installers for the in-app updater                   |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Secret   | Password of that key, if it has one                           |
+
 ---
 
 ## 🛠️ Development scripts
