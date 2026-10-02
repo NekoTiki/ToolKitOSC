@@ -1,5 +1,5 @@
-name: Release client
-run-name: Release ${{ github.ref_name }}
+name: 🚀 Release client installers on GitHub
+run-name: 🚀 Release ${{ github.ref_name }} installers
 
 on:
   push:

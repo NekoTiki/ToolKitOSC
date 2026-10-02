@@ -1,4 +1,5 @@
-name: Release server
+name: 📦 Publish server image to GHCR
+run-name: 📦 Publish ${{ github.ref_name }} image
 
 on:
   push:

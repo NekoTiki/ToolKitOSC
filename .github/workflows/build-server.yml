@@ -1,5 +1,5 @@
-name: Build server
-run-name: "${{ github.event_name == 'pull_request' && format('Build server for PR #{0}', github.event.pull_request.number) || format('Build server on {0}', github.ref_name) }}"
+name: 🐳 Build server image (amd64 + arm64, no push)
+run-name: "${{ github.event_name == 'pull_request' && format('🐳 Server build · PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) || format('🐳 Server build on {0}', github.ref_name) }}"
 
 # Same image builds as release-server.yml, without pushing an image. Each run refreshes the
 # registry layer cache (the buildcache-* tags) that the release builds start from.
