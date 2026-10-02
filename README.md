@@ -10,7 +10,7 @@ A desktop companion app that talks to VRChat over OSC, plus a website where the 
 invite can drive your avatar, toys and shockers in real time.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078d6)
+![Platforms: Windows | Linux](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux-0078d6)
 ![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24c8db)
 ![Nuxt 4](https://img.shields.io/badge/server-Nuxt%204-00dc82)
 
@@ -79,7 +79,7 @@ This is an npm workspaces monorepo:
 
 - [Node.js](https://nodejs.org/) 22+
 - [Rust toolchain](https://rustup.rs/) and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) (client only)
-- Windows — the desktop client currently ships Windows builds only
+- Windows or Linux to build the desktop client
 
 ### Install
 
@@ -120,7 +120,7 @@ npm run dev:prod -w apps/client # Tauri app pointed at the deployed server
 ## 📦 Building
 
 ```bash
-npm run build:client             # Windows installer under apps/client/src-tauri/target/release/bundle
+npm run build:client             # Installer for your OS (nsis on Windows, deb + AppImage on Linux) under apps/client/src-tauri/target/release/bundle
 npm run build -w apps/server     # Nuxt production build in apps/server/.output
 ```
 
@@ -139,7 +139,7 @@ See [`apps/server/docker-compose.yml`](apps/server/docker-compose.yml) for a set
 
 Releases are cut by pushing a tag:
 
-- `client-vX.Y.Z` — builds the Windows installer and publishes it as a GitHub release.
+- `client-vX.Y.Z` — creates a draft GitHub release, builds the Windows installer and the Linux `.deb` and `.AppImage` into it, then publishes it once every build succeeded. A suffixed tag (`client-vX.Y.Z-beta.1`) is published as a prerelease, which the in-app updater ignores.
 - `server-vX.Y.Z` — builds the multi-arch server image and pushes it to GitHub Container Registry.
 
 The client release needs these set in the repository's Actions settings:

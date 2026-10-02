@@ -1,4 +1,5 @@
 name: Release client
+run-name: Release ${{ github.ref_name }}
 
 on:
   push:
@@ -9,22 +10,103 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    # The client only ships a Windows (nsis) bundle today — see apps/client/src-tauri/tauri.conf.json.
-    runs-on: windows-latest
+  create-release:
+    runs-on: ubuntu-24.04
+    outputs:
+      release-id: ${{ steps.release.outputs.id }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read version from tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#client-v}"
+          # A suffix (client-v1.2.0-beta.1) makes it a prerelease, which the updater's
+          # releases/latest endpoint skips.
+          if [[ "$version" == *-* ]]; then prerelease=true; else prerelease=false; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Find previous client tag
+        id: previous
+        env:
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        # Server tags live in the same repo, so GitHub's own guess at the previous tag can land on
+        # a server-v* one. Stable releases compare against the last stable client tag.
+        run: |
+          tags="$(git -c versionsort.suffix=- tag --list 'client-v*' --sort=-v:refname | grep -vx "$TAG" || true)"
+          if [ "$PRERELEASE" = false ]; then
+            tags="$(echo "$tags" | grep -v -- '-' || true)"
+          fi
+          echo "tag=$(echo "$tags" | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft GitHub release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+        run: |
+          ID="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[] | select(.tag_name == env.TAG) | .id' | head -n1)"
+          if [ -z "$ID" ]; then
+            args=(-f tag_name="$TAG" -f name="ToolKitOSC v$VERSION" -F draft=true -F prerelease="$PRERELEASE" -F generate_release_notes=true)
+            if [ -n "$PREVIOUS_TAG" ]; then
+              args+=(-f previous_tag_name="$PREVIOUS_TAG")
+            fi
+            ID="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" "${args[@]}" --jq .id)"
+          fi
+          if [ -z "$ID" ]; then
+            echo "::error::Couldn't create or find the release for $TAG"
+            exit 1
+          fi
+          echo "Release $ID for $TAG"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Bundles come from bundle.targets in apps/client/src-tauri/tauri.conf.json: nsis on
+          # Windows, deb + AppImage on Linux. VRChat and SteamVR are x64 only, so no arm64 build.
+          - os: windows-latest
+            platform: windows-x64
+          # The oldest supported runner, so the AppImage and deb run on older glibc versions too.
+          - os: ubuntu-22.04
+            platform: linux-x64
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+
       - name: Set app version from tag
         shell: bash
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#client-v}"
           node -e "
             const fs = require('fs');
             const path = 'apps/client/src-tauri/tauri.conf.json';
             const conf = JSON.parse(fs.readFileSync(path, 'utf8'));
-            conf.version = '$version';
+            conf.version = process.env.VERSION;
             fs.writeFileSync(path, JSON.stringify(conf, null, 2) + '\n');
           "
 
@@ -41,11 +123,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/client/src-tauri -> target
+          key: ${{ matrix.platform }}
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Release client
+      - name: Build and upload to release
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -54,6 +137,16 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/client
-          tagName: ${{ github.ref_name }}
-          releaseName: 'ToolKitOSC v__VERSION__'
-          releaseDraft: true
+          releaseId: ${{ needs.create-release.outputs.release-id }}
+
+  # Only goes public once every platform uploaded its installers and its entry in latest.json,
+  # so the updater never sees a release with a platform missing.
+  publish-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release-id }}
+        run: gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false
