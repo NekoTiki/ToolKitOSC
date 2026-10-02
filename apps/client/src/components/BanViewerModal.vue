@@ -58,7 +58,7 @@ const confirm = (): void => {
       >
         <UInput
           v-model="reason"
-          placeholder="Spamming the shocker…"
+          placeholder="Spamming the shockerâ€¦"
           class="w-full"
           @keydown.enter="confirm"
         />
