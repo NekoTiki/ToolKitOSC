@@ -89,7 +89,7 @@ export default defineWebSocketHandler({
   async message(_peer, message) {
     const peer: Peer = _peer as unknown as Peer
 
-    if (message.text().includes('ping')) {
+    if (message.text() === 'ping') {
       peer.send('pong')
       return
     }
