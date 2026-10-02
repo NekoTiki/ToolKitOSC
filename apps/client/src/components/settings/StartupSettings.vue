@@ -8,8 +8,8 @@ import { useVrcxLaunch } from '@renderer/composables/useVrcxLaunch'
 import { computed } from 'vue'
 
 const { enabled: trayEnabled, setEnabled: setTrayEnabled } = useTraySettings()
-const { enabled: steamVrEnabled, setEnabled: setSteamVrEnabled, status: steamVrStatus, error: steamVrError, available: steamVrAvailable } = useSteamVrLaunch()
-const { enabled: vrcxEnabled, setEnabled: setVrcxEnabled, status: vrcxStatus, error: vrcxError, available: vrcxAvailable } = useVrcxLaunch()
+const { enabled: steamVrEnabled, setEnabled: setSteamVrEnabled, status: steamVrStatus, error: steamVrError, availability: steamVrAvailability, available: steamVrAvailable } = useSteamVrLaunch()
+const { enabled: vrcxEnabled, setEnabled: setVrcxEnabled, status: vrcxStatus, error: vrcxError, availability: vrcxAvailability, available: vrcxAvailable } = useVrcxLaunch()
 
 const steamVrInfo = computed<StatusInfo>(() => {
   switch (steamVrStatus.value) {
@@ -34,6 +34,18 @@ const vrcxInfo = computed<StatusInfo>(() => {
       return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Disabled' }
   }
 })
+
+const steamVrDescription = computed(() =>
+  steamVrAvailable.value
+    ? 'Starts this app automatically whenever SteamVR starts.'
+    : "SteamVR wasn't found on this computer. Install it from Steam, then restart this app."
+)
+
+const vrcxDescription = computed(() =>
+  vrcxAvailable.value
+    ? "Adds this app to VRCX's auto-launch folder, so it starts whenever VRChat does."
+    : "Needs VRCX, which wasn't found on this computer. Install it, then restart this app."
+)
 </script>
 
 <template>
@@ -46,28 +58,32 @@ const vrcxInfo = computed<StatusInfo>(() => {
     />
   </FormSection>
 
-  <FormSection v-if="steamVrAvailable">
+  <!-- Hidden where the OS can't support the integration at all; shown but disabled (saying what's
+       missing) where it could work but the app it hooks into isn't installed. -->
+  <FormSection v-if="steamVrAvailability !== 'unsupported'">
     <USwitch
-      :model-value="steamVrEnabled"
+      :model-value="steamVrAvailable && steamVrEnabled"
+      :disabled="!steamVrAvailable"
       label="Launch with SteamVR"
-      description="Starts this app automatically whenever SteamVR starts."
+      :description="steamVrDescription"
       @update:model-value="setSteamVrEnabled(!!$event)"
     />
     <StatusLine
-      v-if="steamVrEnabled"
+      v-if="steamVrAvailable && steamVrEnabled"
       :status="steamVrInfo"
     />
   </FormSection>
 
-  <FormSection v-if="vrcxAvailable">
+  <FormSection v-if="vrcxAvailability !== 'unsupported'">
     <USwitch
-      :model-value="vrcxEnabled"
+      :model-value="vrcxAvailable && vrcxEnabled"
+      :disabled="!vrcxAvailable"
       label="Launch with VRChat"
-      description="Adds this app to VRCX's auto-launch folder, so it starts whenever VRChat does."
+      :description="vrcxDescription"
       @update:model-value="setVrcxEnabled(!!$event)"
     />
     <StatusLine
-      v-if="vrcxEnabled"
+      v-if="vrcxAvailable && vrcxEnabled"
       :status="vrcxInfo"
     />
   </FormSection>

@@ -6,6 +6,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { AvatarDetails, OscCommand, OSCMessage, PresetStore } from '@toolkitosc/shared-ui'
 
+// Whether an optional integration (SteamVR, VRCX) can be offered here - mirrors `Availability` in
+// src-tauri/src/commands.rs. 'unsupported' means it can't work on this OS at all, 'not-installed'
+// that it could but the app it hooks into wasn't found.
+export type IntegrationAvailability = 'available' | 'not-installed' | 'unsupported'
+
 export const api = {
   ready: (): void => {
     void invoke('ready')
@@ -15,10 +20,10 @@ export const api = {
   },
   intifaceCentralAvailable: (): Promise<boolean> => invoke('intiface_central_available'),
   startIntifaceCentral: (): Promise<void> => invoke('start_intiface_central'),
-  steamVrAvailable: (): Promise<boolean> => invoke('steamvr_available'),
+  steamVrAvailable: (): Promise<IntegrationAvailability> => invoke('steamvr_available'),
   steamVrSetAutoLaunch: (enable: boolean): Promise<void> => invoke('steamvr_set_auto_launch', { enable }),
   steamVrGetAutoLaunch: (): Promise<boolean> => invoke('steamvr_get_auto_launch'),
-  vrcxAvailable: (): Promise<boolean> => invoke('vrcx_available'),
+  vrcxAvailable: (): Promise<IntegrationAvailability> => invoke('vrcx_available'),
   vrcxSetAutoLaunch: (enable: boolean): Promise<void> => invoke('vrcx_set_auto_launch', { enable }),
   vrcxGetAutoLaunch: (): Promise<boolean> => invoke('vrcx_get_auto_launch'),
   setMinimizeToTray: (enabled: boolean): void => {

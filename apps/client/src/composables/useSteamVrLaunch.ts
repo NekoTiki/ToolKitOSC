@@ -1,3 +1,4 @@
+import type { IntegrationAvailability } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref } from 'vue'
@@ -17,15 +18,17 @@ const enabled = ref<boolean>(localStorage.getItem(ENABLED_STORAGE_KEY) === 'true
 const status = ref<SteamVrAutoLaunchStatus>('disabled')
 const error = ref<string>('')
 
-// Whether SteamVR was found on this machine at all (checked once at module load, below) - lets
-// Settings hide/disable the toggle entirely rather than offering something that can only ever fail.
-const available = ref(false)
+// Whether SteamVR can be used here (checked once at module load, below) - lets Settings hide the
+// toggle on an OS SteamVR doesn't run on, and disable it when SteamVR just isn't installed, rather
+// than offering something that can only ever fail. 'unsupported' until the check answers.
+const availability = ref<IntegrationAvailability>('unsupported')
 
 export function useSteamVrLaunch(): {
   enabled: Ref<boolean>
   setEnabled: (value: boolean) => Promise<void>
   status: Ref<SteamVrAutoLaunchStatus>
   error: Ref<string>
+  availability: Ref<IntegrationAvailability>
   available: ComputedRef<boolean>
 } {
   const setEnabled = async (value: boolean): Promise<void> => {
@@ -48,14 +51,15 @@ export function useSteamVrLaunch(): {
     setEnabled,
     status,
     error,
-    available: computed(() => available.value)
+    availability,
+    available: computed(() => availability.value === 'available')
   }
 }
 
 api
   .steamVrAvailable()
-  .then((value) => (available.value = value))
-  .catch(() => (available.value = false))
+  .then((value) => (availability.value = value))
+  .catch(() => (availability.value = 'unsupported'))
 
 // Registering with SteamVR requires SteamVR to already be running (see steamvr.rs), so a previous
 // attempt may well have failed for no reason other than bad timing. Retrying once at every app
