@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::Ordering;
 
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::osc::{codec, oscquery};
@@ -147,9 +148,29 @@ fn steamvr_manifest_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("app.vrmanifest"))
 }
 
+/// Whether an optional integration (SteamVR, VRCX) can be offered, so Settings can tell "can't
+/// work on this OS" (hide the toggle) apart from "not installed" (show it disabled, saying why).
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Availability {
+    Available,
+    NotInstalled,
+    Unsupported,
+}
+
+impl Availability {
+    fn new(supported: bool, installed: bool) -> Self {
+        match (supported, installed) {
+            (false, _) => Self::Unsupported,
+            (true, false) => Self::NotInstalled,
+            (true, true) => Self::Available,
+        }
+    }
+}
+
 #[tauri::command]
-pub fn steamvr_available() -> bool {
-    steamvr::find_openvr_api_dll().is_some()
+pub fn steamvr_available() -> Availability {
+    Availability::new(steamvr::is_supported(), steamvr::find_openvr_api().is_some())
 }
 
 #[tauri::command]
@@ -163,8 +184,8 @@ pub fn steamvr_get_auto_launch(app: AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn vrcx_available() -> bool {
-    vrcx::is_vrcx_installed()
+pub fn vrcx_available() -> Availability {
+    Availability::new(vrcx::is_supported(), vrcx::is_vrcx_installed())
 }
 
 #[tauri::command]

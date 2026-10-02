@@ -1,3 +1,4 @@
+import type { IntegrationAvailability } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref } from 'vue'
@@ -11,15 +12,17 @@ const enabled = ref<boolean>(localStorage.getItem(ENABLED_STORAGE_KEY) === 'true
 const status = ref<VrcxAutoLaunchStatus>('disabled')
 const error = ref<string>('')
 
-// Whether VRCX's Auto-Launch Folder was found on this machine (checked once at module load,
-// below) - lets Settings hide/disable the toggle when VRCX isn't installed at all.
-const available = ref(false)
+// Whether VRCX's Auto-Launch Folder can be used here (checked once at module load, below) - lets
+// Settings hide the toggle where VRCX doesn't support it, and disable it when VRCX isn't installed.
+// 'unsupported' until the check answers.
+const availability = ref<IntegrationAvailability>('unsupported')
 
 export function useVrcxLaunch(): {
   enabled: Ref<boolean>
   setEnabled: (value: boolean) => Promise<void>
   status: Ref<VrcxAutoLaunchStatus>
   error: Ref<string>
+  availability: Ref<IntegrationAvailability>
   available: ComputedRef<boolean>
 } {
   const setEnabled = async (value: boolean): Promise<void> => {
@@ -41,14 +44,15 @@ export function useVrcxLaunch(): {
     setEnabled,
     status,
     error,
-    available: computed(() => available.value)
+    availability,
+    available: computed(() => availability.value === 'available')
   }
 }
 
 api
   .vrcxAvailable()
-  .then((value) => (available.value = value))
-  .catch(() => (available.value = false))
+  .then((value) => (availability.value = value))
+  .catch(() => (availability.value = 'unsupported'))
 
 // Unlike SteamVR's registration (which lives in a running SteamVR's own memory/config and needs
 // re-establishing every session), the shortcut this drops in VRCX's Auto-Launch Folder is plain

@@ -4,6 +4,7 @@ mod logging;
 mod osc;
 mod presets;
 mod state;
+mod steam;
 mod steamvr;
 mod types;
 mod vrcx;
