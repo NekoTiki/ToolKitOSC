@@ -1,0 +1,53 @@
+name: Set up client build
+description: Linux system deps, Node, Rust (+ cache), npm install, and the app version when one is given
+inputs:
+  cache-key:
+    description: Rust cache key suffix, one per platform
+    required: false
+    default: ''
+  version:
+    description: App version written into tauri.conf.json, e.g. 1.2.0 (empty keeps the committed one)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+
+    - name: Set app version
+      if: inputs.version != ''
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        node -e "
+          const fs = require('fs');
+          const path = 'apps/client/src-tauri/tauri.conf.json';
+          const conf = JSON.parse(fs.readFileSync(path, 'utf8'));
+          conf.version = process.env.VERSION;
+          fs.writeFileSync(path, JSON.stringify(conf, null, 2) + '\n');
+        "
+
+    - name: Set up Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 22
+        cache: npm
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: apps/client/src-tauri -> target
+        key: ${{ inputs.cache-key }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --no-audit --no-fund

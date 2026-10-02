@@ -103,8 +103,10 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {
-    // Tauri uses Chromium on Windows/Linux and WebKit on macOS.
-    target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
+    // Tauri uses WebView2 (Chromium) on Windows and WebKit elsewhere (WebKitGTK on Linux). safari13
+    // is too old for esbuild to lower some of the destructuring in our deps, and any WebKitGTK
+    // 4.1 shipped by current distros (Ubuntu 22.04+) is past Safari 16 level.
+    target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari16',
     minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG
   }

@@ -1,0 +1,53 @@
+name: Build client
+run-name: "${{ github.event_name == 'pull_request' && format('Build client for PR #{0}', github.event.pull_request.number) || format('Build client on {0}', github.ref_name) }}"
+
+# Same builds as release-client.yml, without a release: the installers are uploaded as workflow
+# artifacts instead, to try them before tagging.
+on:
+  pull_request:
+    paths:
+      - apps/client/**
+      - packages/**
+      - package-lock.json
+      - .github/actions/setup-client/**
+      - .github/workflows/build-client.yml
+  workflow_dispatch:
+
+concurrency:
+  group: build-client-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+          - os: ubuntu-22.04
+            platform: linux-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up build
+        uses: ./.github/actions/setup-client
+        with:
+          cache-key: ${{ matrix.platform }}
+
+      - name: Build
+        uses: tauri-apps/tauri-action@v1
+        env:
+          VITE_SERVER_WS_URL: ${{ vars.VITE_SERVER_WS_URL }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/client
+          uploadWorkflowArtifacts: true

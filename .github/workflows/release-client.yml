@@ -91,42 +91,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
-
-      - name: Set app version from tag
-        shell: bash
-        env:
-          VERSION: ${{ needs.create-release.outputs.version }}
-        run: |
-          node -e "
-            const fs = require('fs');
-            const path = 'apps/client/src-tauri/tauri.conf.json';
-            const conf = JSON.parse(fs.readFileSync(path, 'utf8'));
-            conf.version = process.env.VERSION;
-            fs.writeFileSync(path, JSON.stringify(conf, null, 2) + '\n');
-          "
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
+      - name: Set up build
+        uses: ./.github/actions/setup-client
         with:
-          node-version: 22
-          cache: npm
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/client/src-tauri -> target
-          key: ${{ matrix.platform }}
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+          cache-key: ${{ matrix.platform }}
+          version: ${{ needs.create-release.outputs.version }}
 
       - name: Build and upload to release
         uses: tauri-apps/tauri-action@v1
