@@ -8,11 +8,24 @@ export default defineNuxtConfig({
   colorMode: { preference: 'dark', fallback: 'dark' },
   // /profile was renamed /connect to match its menu item; old links and bookmarks still work.
   routeRules: { '/profile': { redirect: '/connect' } },
+  // Installable as a web app (public/manifest.webmanifest, icons from scripts/generate-icons.mjs).
+  // No service worker on purpose: every page needs the live WS/API so there's nothing useful to
+  // serve offline, and /_nuxt assets are already cached as immutable by Nitro + Cloudflare.
   app: {
     head: {
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
-        { rel: 'shortcut icon', href: '/favicon.ico' }
+        { rel: 'shortcut icon', href: '/favicon.ico' },
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }
+      ],
+      meta: [
+        // Matches --aurora-base (see shared-ui's styles/aurora.css) with the default primary.
+        { name: 'theme-color', content: '#041417' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-title', content: 'ToolKitOSC' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'black' }
       ]
     }
   },

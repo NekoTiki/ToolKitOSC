@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "ToolKitOSC",
+  "short_name": "ToolKitOSC",
+  "description": "Control VRChat avatars live from a shared link.",
+  "start_url": "/launch",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#041417",
+  "theme_color": "#041417",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
