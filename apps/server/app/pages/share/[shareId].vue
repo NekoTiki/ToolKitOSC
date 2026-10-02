@@ -13,8 +13,17 @@ const shareId = useRoute().params.shareId as string
 const { data: shareInfo } = await useFetch<ShareInfo>(`/api/share/${shareId}`)
 
 const requestUrl = useRequestURL()
-const ogImageUrl = `${requestUrl.origin}/og-image.png`
 const pageUrl = `${requestUrl.origin}/share/${shareId}`
+
+// Drawn per room by server/routes/og/share/[shareId].ts. Versioned by the state it shows, so
+// Discord (which caches embed images by URL) fetches a fresh one once the host comes online or
+// shares more controls, instead of reusing an "Offline" card from an earlier paste.
+const ogImageUrl = computed(() => {
+  const info = shareInfo.value
+  const version = info?.online ? `on-${info.controlCount}` : 'off'
+
+  return `${requestUrl.origin}/og/share/${shareId}?v=${version}`
+})
 
 const title = computed(() =>
   shareInfo.value?.hostName ? `${shareInfo.value.hostName}'s Controls` : 'Shared Controls'
@@ -36,6 +45,9 @@ useSeoMeta({
   ogTitle: title,
   ogDescription: description,
   ogImage: ogImageUrl,
+  ogImageWidth: 1200,
+  ogImageHeight: 630,
+  ogImageType: 'image/png',
   ogUrl: pageUrl,
   ogType: 'website',
   twitterCard: 'summary_large_image',

@@ -12,6 +12,21 @@ useHead({
   ]
 })
 
+// Link-preview card for the homepage itself - the generic one drawn by server/routes/og-image.png.ts.
+const origin = useRequestURL().origin
+
+useSeoMeta({
+  ogTitle: 'ToolKitOSC',
+  ogDescription: 'Remote control panel for your VRChat avatar - share a link and let anyone drive your avatar parameters live.',
+  ogImage: `${origin}/og-image.png`,
+  ogImageWidth: 1200,
+  ogImageHeight: 630,
+  ogImageType: 'image/png',
+  ogUrl: origin,
+  ogType: 'website',
+  twitterCard: 'summary_large_image'
+})
+
 const steps = [
   {
     icon: 'lucide:plug-zap',

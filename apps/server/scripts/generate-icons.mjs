@@ -1,6 +1,6 @@
 // One-off generator for the installable web app icons referenced by public/manifest.webmanifest
 // and nuxt.config.ts's head links. Not part of the build - `sharp` (SVG rasterization) is a
-// devDependency only used by these scripts, run manually whenever the logo changes:
+// devDependency only used by this script, run manually whenever the logo changes:
 // `node scripts/generate-icons.mjs` from apps/server.
 //
 // Rasterizes public/favicon.svg (the app logo) as-is for the regular icons, plus a full-bleed
