@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
+import type { NavigationMenuItem } from '@nuxt/ui/components/NavigationMenu.vue'
 
 const { loggedIn, user, clear } = useUserSession()
 
@@ -30,9 +31,16 @@ const checkIsAdmin = async (): Promise<void> => {
 
 watch(() => loggedIn.value && !!user.value?.discord, checkIsAdmin, { immediate: true })
 
-// A computed, not a plain ref built once at setup - needs to react to isAdmin resolving
-// asynchronously after the initial render (and to the user's own name/avatar changing), unlike
-// the static array this replaces.
+// Computeds, not plain arrays built once at setup - they need to react to isAdmin resolving
+// asynchronously after the initial render (and to the user's own name/avatar changing).
+const links = computed<NavigationMenuItem[]>(() => [
+  { label: 'Home', icon: 'i-lucide-house', to: '/' },
+  ...(loggedIn.value && user.value?.discord ? [{ label: 'Connect app', icon: 'i-lucide-link', to: '/connect' }] : []),
+  ...(isAdmin.value ? [{ label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/dashboard' }] : [])
+])
+
+// The account menu repeats the page links, so they stay reachable on phones where the header's
+// link row is hidden.
 const items = computed<DropdownMenuItem[][]>(() => [
   [
     {
@@ -47,7 +55,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
     {
       label: 'Connect Desktop App',
       icon: 'i-lucide-link',
-      to: '/profile'
+      to: '/connect'
     },
     ...(isAdmin.value
       ? [{ label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/dashboard' }]
@@ -55,10 +63,13 @@ const items = computed<DropdownMenuItem[][]>(() => [
   ],
   [
     {
-      label: 'Logout',
+      label: 'Sign out',
       icon: 'i-lucide-log-out',
       color: 'error',
-      onSelect: () => clear()
+      onSelect: async () => {
+        await clear()
+        await navigateTo('/')
+      }
     }
   ]
 ])
@@ -66,14 +77,24 @@ const items = computed<DropdownMenuItem[][]>(() => [
 
 <template>
   <UApp>
-    <UHeader to="/">
+    <!-- Glass header over the Aurora background (see shared-ui's styles/aurora.css). Links are
+    plain buttons, not hover menus, so the site works from a phone or a VR browser. -->
+    <UHeader
+      to="/"
+      :ui="{ root: 'border-default bg-(--ui-bg)/55 backdrop-blur-(--aurora-blur)' }"
+    >
       <template #title>
-        <span
-          class="font-bold bg-clip-text text-transparent bg-linear-to-r from-primary-500 to-primary-200"
-        >
+        <span class="flex items-center gap-2.5 font-semibold text-highlighted">
+          <span class="size-6.5 rounded-lg bg-linear-to-br from-primary to-secondary" />
           VRC OSC Toolkit
         </span>
       </template>
+
+      <UNavigationMenu
+        :items="links"
+        variant="pill"
+        highlight
+      />
 
       <template #toggle>
         <div />
@@ -85,15 +106,21 @@ const items = computed<DropdownMenuItem[][]>(() => [
           icon="ic:baseline-discord"
           target="_top"
           href="/auth/discord"
+          class="bg-[#5865f2] text-white hover:bg-[#4752c4]"
         >
           Sign in
         </UButton>
-        <UDropdownMenu :items="items" :content="{ align: 'end', side: 'bottom', sideOffset: 8 }">
+        <UDropdownMenu
+          v-else
+          :items="items"
+          :content="{ align: 'end', side: 'bottom', sideOffset: 8 }"
+        >
           <UButton
-            v-if="loggedIn && user?.discord"
-            icon="fa7-solid:user-alt"
             color="neutral"
-            variant="outline"
+            variant="ghost"
+            :avatar="{ src: user.discord.avatar, alt: user.discord.name }"
+            :label="user.discord.name"
+            :ui="{ label: 'max-sm:hidden' }"
           />
         </UDropdownMenu>
       </template>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ControlBase, ControlBooleanBase, ControlOptions, ControlSliderBase } from '@vrc-osc-toolkit/shared-ui'
+
 useHead({
   title: 'VRC OSC Toolkit',
   meta: [
@@ -13,19 +15,19 @@ useHead({
 const steps = [
   {
     icon: 'lucide:plug-zap',
-    title: '1. Connect the desktop app',
+    title: 'Connect the desktop app',
     description:
       "Install the Windows app and it hooks straight into VRChat's OSC input and output — nothing to set up beyond enabling OSC in VRChat."
   },
   {
     icon: 'lucide:layout-grid',
-    title: '2. Build your controls',
+    title: 'Build your controls',
     description:
       'Map avatar parameters to toggles, sliders, enums, toy actuators or shockers. Group them, pick icons, and lock the ones nobody else should touch.'
   },
   {
     icon: 'lucide:share-2',
-    title: '3. Share a room link',
+    title: 'Share a room link',
     description:
       'Every room gets its own URL. Open it in any browser for a live control panel kept in sync over a WebSocket connection.'
   }
@@ -80,52 +82,163 @@ const features = [
     description: 'A native Windows app that stays out of the way — OSC in, controls out.'
   }
 ]
+
+const { loggedIn } = useUserSession()
+
+// Where Windows builds are published by the release workflow (.github/workflows/release-client.yml).
+const DOWNLOAD_URL = 'https://github.com/NekoTiki/VRC-OSC-Toolkit/releases/latest'
+
+// The hero's demo: real control tiles on local state, so visitors can try the same controls their
+// viewers will use.
+const demoOn = ref(true)
+const demoValue = ref(64)
+const demoFace = ref(1)
+const demoFaceOptions = computed(() => ['Happy', 'Blush', 'Smug', 'Sleepy'].map((name, index) => ({ key: name, name, selected: index === demoFace.value })))
 </script>
 
 <template>
-  <div>
-    <UPageHero
-      headline="Free & open source"
-      title="Turn VRChat OSC into a live control panel you can share"
-      description="VRC OSC Toolkit pairs a desktop bridge for VRChat's OSC protocol with this website: build controls for your avatar's parameters, then hand out a link so anyone can drive them live from their browser."
-      :links="[
-        {
-          label: 'Sign in with Discord',
-          icon: 'ic:baseline-discord',
-          href: '/auth/discord',
-          target: '_top',
-          size: 'xl'
-        }
-      ]"
-    />
+  <div class="mx-auto grid w-full max-w-6xl gap-16 px-4 py-10 sm:px-7 lg:py-16">
+    <section class="grid items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div class="grid gap-5">
+        <span class="font-mono text-xs tracking-widest text-secondary uppercase">Free &amp; open source</span>
+        <h1 class="text-4xl leading-[1.05] font-semibold tracking-tight text-balance text-highlighted sm:text-5xl">
+          Turn VRChat OSC into a <span class="text-primary">live control panel</span> you can share
+        </h1>
+        <p class="max-w-xl text-lg leading-relaxed text-muted">
+          Build big, simple controls for your avatar in the desktop app, then send friends one link.
+          Made to work inside VR, on a phone, or at a desk.
+        </p>
+        <div class="flex flex-wrap gap-2.5">
+          <UButton
+            v-if="loggedIn"
+            size="xl"
+            icon="i-lucide-link"
+            to="/connect"
+          >
+            Connect the desktop app
+          </UButton>
+          <UButton
+            v-else
+            size="xl"
+            icon="ic:baseline-discord"
+            href="/auth/discord"
+            target="_top"
+            class="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+          >
+            Sign in with Discord
+          </UButton>
+          <UButton
+            size="xl"
+            icon="i-lucide-download"
+            color="neutral"
+            variant="subtle"
+            :to="DOWNLOAD_URL"
+            target="_blank"
+          >
+            Download for Windows
+          </UButton>
+        </div>
+      </div>
 
-    <UPageSection
-      headline="How it works"
-      title="From OSC to a shareable panel in three steps"
-      :features="steps"
-    />
+      <div class="grid justify-items-center gap-3 rounded-panel glass p-5">
+        <span class="font-mono text-[10.5px] tracking-widest text-muted uppercase">Try it</span>
+        <div
+          class="tile-grid grid-cols-[repeat(2,var(--tile-cell))] [--tile-cell:10rem] max-sm:[--tile-cell:9rem]"
+          data-density="m"
+        >
+          <ControlBooleanBase
+            v-model="demoOn"
+            title="Hoodie"
+            icon="i-lucide-shirt"
+          />
+          <ControlSliderBase
+            v-model="demoValue"
+            title="Tail wag"
+          />
+          <div data-span="m">
+            <ControlBase
+              title="Face"
+              kind="value"
+              fill
+            >
+              <ControlOptions
+                :options="demoFaceOptions"
+                @select="demoFace = $event"
+              />
+            </ControlBase>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <UPageSection
-      headline="Features"
-      title="Everything you need to run a room"
-      description="From avatar toggles to toys and shockers, the toolkit covers the whole path between VRChat and the people you share it with."
-      :features="features"
-      :ui="{ features: 'sm:grid-cols-2 lg:grid-cols-4' }"
-    />
+    <section class="grid gap-5">
+      <div class="grid gap-1.5">
+        <span class="font-mono text-xs tracking-widest text-secondary uppercase">How it works</span>
+        <h2 class="text-3xl font-semibold tracking-tight text-highlighted">
+          From OSC to a shareable panel in three steps
+        </h2>
+      </div>
+      <div class="grid gap-3 md:grid-cols-3">
+        <div
+          v-for="(step, index) in steps"
+          :key="step.title"
+          class="grid content-start gap-2 rounded-panel glass p-5"
+        >
+          <span class="grid size-8.5 place-items-center rounded-full bg-primary/18 font-semibold text-primary">{{ index + 1 }}</span>
+          <b class="text-base font-semibold text-highlighted">{{ step.title }}</b>
+          <p class="text-[13.5px] leading-relaxed text-muted">
+            {{ step.description }}
+          </p>
+        </div>
+      </div>
+    </section>
 
-    <UPageCTA
-      title="Ready to share your first room?"
-      description="Sign in with Discord — it only takes a few seconds, and you can build your first control right after."
-      :links="[
-        {
-          label: 'Sign in with Discord',
-          icon: 'ic:baseline-discord',
-          href: '/auth/discord',
-          target: '_top',
-          size: 'lg'
-        }
-      ]"
-      variant="subtle"
-    />
+    <section class="grid gap-5">
+      <div class="grid gap-1.5">
+        <span class="font-mono text-xs tracking-widest text-secondary uppercase">Features</span>
+        <h2 class="text-3xl font-semibold tracking-tight text-highlighted">
+          Everything you need to run a room
+        </h2>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          v-for="feature in features"
+          :key="feature.title"
+          class="grid content-start gap-2 rounded-field glass p-4"
+        >
+          <UIcon
+            :name="feature.icon"
+            class="size-5.5 text-secondary"
+          />
+          <b class="text-[14.5px] font-semibold text-highlighted">{{ feature.title }}</b>
+          <p class="text-[12.5px] leading-relaxed text-muted">
+            {{ feature.description }}
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="flex flex-wrap items-center gap-5 rounded-panel border border-default bg-linear-120 from-primary/25 to-secondary/18 p-7">
+      <h2 class="min-w-56 flex-1 text-2xl font-semibold text-highlighted">
+        Ready to share your first room?
+      </h2>
+      <UButton
+        v-if="loggedIn"
+        size="xl"
+        to="/connect"
+      >
+        Connect the desktop app
+      </UButton>
+      <UButton
+        v-else
+        size="xl"
+        icon="ic:baseline-discord"
+        href="/auth/discord"
+        target="_top"
+        class="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+      >
+        Sign in with Discord
+      </UButton>
+    </section>
   </div>
 </template>

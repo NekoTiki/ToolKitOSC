@@ -8,20 +8,20 @@ import { defineConfig } from 'vite'
 // Every floating/portaled Nuxt UI component (Tooltip, Popover, DropdownMenu, Select, SelectMenu,
 // ContextMenu) teleports its content to <body> with no z-index of its own (verified against this
 // version's theme defaults - none of them set one), and neither does Modal/Slideover. That leaves
-// their stacking order to fall out of DOM/mount order, which loses to AppHeader.vue's sticky
-// `z-10` bar (an explicit z-index always wins over z-index:auto content in the same stacking
+// their stacking order to fall out of DOM/mount order, which loses to any in-page content with an
+// explicit z-index (an explicit z-index always wins over z-index:auto content in the same stacking
 // context, regardless of DOM position) - the exact "renders behind the header" bug this app kept
 // hitting one component at a time. Setting it once here, globally, fixes every instance of it -
 // current and future - instead of requiring a per-usage `:ui="{ content: 'z-NN' }"` override each
 // time a new one is added. The scale:
-//   10 - AppHeader.vue's sticky bar (hardcoded there, not part of this config)
-//   30 - Modal / Slideover (need to beat the header)
-//   40 - Tooltip / Popover / DropdownMenu / Select / ContextMenu content (need to beat both the
-//        header AND any Modal/Slideover they might be nested inside, e.g. a dropdown inside
-//        SettingsModal)
-// AreYouSureModal.vue is the one deliberate exception, at z-50: it can itself be triggered from
-// inside an already-open Modal/Slideover (e.g. a delete confirmation opened from within
-// ClientsListSliderover), so it needs to beat other z-30 modals too, not just the header.
+//   <30 - in-page positioned content (sticky page parts, tile edit overlays)
+//   30 - Modal / Slideover (need to beat in-page content)
+//   40 - Tooltip / Popover / DropdownMenu / Select / ContextMenu content (need to beat both
+//        in-page content AND any Modal/Slideover they might be nested inside, e.g. a dropdown
+//        inside SettingsModal)
+// Confirmation dialogs (ui/ConfirmDialog.vue) are the one deliberate exception, at z-50: they can
+// be triggered from inside something already open (e.g. a delete confirmation opened from a
+// context menu), so they need to beat other z-30 modals too.
 const Z_MODAL = 'z-30'
 const Z_OVERLAY = 'z-40'
 
@@ -46,26 +46,45 @@ export default defineConfig({
   plugins: [
     vue(),
     ui({
+      // Aurora is dark-only (see shared-ui's styles/aurora.css) - index.html carries a static
+      // `dark` class, and this stops Nuxt UI's color-mode helper from swapping it for `light` on
+      // systems set to light mode.
+      colorMode: false,
       ui: {
+        // The defaults for a user who hasn't picked a theme yet (useTheme.ts only overrides these
+        // once a choice is stored). Same pair as the server's app.config.ts, so a viewer sees the
+        // same colors before the host's own theme arrives.
+        colors: { primary: 'teal', secondary: 'orange', neutral: 'slate' },
+        // Larger defaults across the board: this app is often used from inside VR with a laser
+        // pointer, where the stock `md` controls are too small to hit reliably.
+        input: { defaultVariants: { size: 'lg' } },
+        // Centered, not top-aligned: next to a label + description the toggle otherwise sits high.
+        switch: { slots: { root: 'relative flex items-center' }, defaultVariants: { size: 'lg' } },
+        checkbox: { defaultVariants: { size: 'lg' } },
         // UButton's own theme only sets `cursor-not-allowed` for its disabled state, leaving the
         // enabled one at the browser's default `cursor: default` for a <button> element (unlike an
         // <a>, which is `pointer` natively) - every button in the app was reading as non-clickable
         // at a glance. Added once here, globally, instead of a per-usage `:ui="{ base: '...' }'"`.
-        button: { slots: { base: 'cursor-pointer' } },
+        button: { slots: { base: 'cursor-pointer' }, defaultVariants: { size: 'lg' } },
         modal: { slots: { overlay: Z_MODAL, content: `${Z_MODAL} ${MODAL_TOP}` } },
         slideover: { slots: { overlay: Z_MODAL, content: `${Z_MODAL} ${SLIDEOVER_TOP}` } },
         tooltip: { slots: { content: Z_OVERLAY } },
         popover: { slots: { content: Z_OVERLAY } },
         dropdownMenu: { slots: { content: Z_OVERLAY } },
-        select: { slots: { content: Z_OVERLAY } },
-        selectMenu: { slots: { content: Z_OVERLAY } },
-        inputMenu: { slots: { content: Z_OVERLAY } },
+        select: { slots: { content: Z_OVERLAY }, defaultVariants: { size: 'lg' } },
+        selectMenu: { slots: { content: Z_OVERLAY }, defaultVariants: { size: 'lg' } },
+        inputMenu: { slots: { content: Z_OVERLAY }, defaultVariants: { size: 'lg' } },
         contextMenu: { slots: { content: Z_OVERLAY } }
       }
     }),
     tailwindcss()
   ],
   resolve: {
+    // vue-router isn't hoisted to the workspace root (client and server pin different majors), so
+    // @nuxt/ui - which is hoisted - can't resolve it from its own location and falls back to an
+    // empty optional-peer-dep stub, failing the production build on UButton's RouterLink import.
+    // Deduping resolves it from this package instead.
+    dedupe: ['vue', 'vue-router'],
     alias: {
       '@renderer': fileURLToPath(new URL('./src', import.meta.url))
     }

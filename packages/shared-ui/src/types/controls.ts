@@ -79,7 +79,14 @@ export interface BaseControl {
   // host-side the same way `locked` is (see useWebsocketHost.ts).
   unavailable?: boolean
   type: ControlTypes
+  // Tile width in a tile grid. Left unset, the width is automatic (see utils/tiles.ts'
+  // controlTileSpan): one cell for most types, two for option pickers. 'wide' asks for two cells.
+  size?: ControlSize
+  // Listed under Pinned at the top of the desktop client's Controls page. Viewers ignore it.
+  pinned?: boolean
 }
+
+export type ControlSize = 'normal' | 'wide'
 
 export interface BooleanControl extends BaseControl {
   type: 'boolean'

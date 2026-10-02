@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import type { Attempt, LiveAttempt } from '~/types/aiAttempts'
 
-// Fully self-contained: fetching, pagination, the failures-only filter, the live WS connection and
-// its in-progress rows, error expand/collapse, icons - everything the "recent generations" log
-// needs, shared verbatim between /dashboard/stats (global, no `discordId`) and the per-user
-// drill-down page (see generationLog.ts's own discordId-optional queries for the same split
-// server-side). A page embedding this only ever needs to react to the two emits below if it also
-// keeps its own separate aggregate (see dashboard/stats.vue's chart totals) that a live event
-// should update too - this component never needs to know that's happening.
-const props = defineProps<{ discordId?: string }>()
+// Fully self-contained: fetching, pagination, the failure/provider filters, the live WS connection
+// and its in-progress rows, error expand/collapse, icons - everything the generations log needs.
+// Two modes: a short preview with a "See all" link (Overview and a user's page), and the full log
+// with filters and paging (/dashboard/generations). `discordId` narrows either to one account (see
+// generationLog.ts's own discordId-optional queries for the same split server-side). A page
+// embedding this only ever needs to react to the emits below if it also keeps its own separate
+// aggregate (see dashboard/stats.vue's chart totals) that a live event should update too.
+const props = withDefaults(defineProps<{ discordId?: string; full?: boolean; limit?: number; userName?: string }>(), {
+  discordId: undefined,
+  full: false,
+  limit: 6,
+  userName: undefined
+})
 
 const emit = defineEmits<{
   (e: 'generation-logged', attempt: Attempt): void
@@ -22,6 +27,8 @@ const emit = defineEmits<{
 const { adminFetch, redirectIfUnauthorized } = useAdminApi()
 const { successIcon, failureIcon, refundedIcon, providerIcon, profileIcon } = useAiLogIcons()
 
+const seeAllLink = computed(() => (props.discordId ? `/dashboard/generations?user=${props.discordId}` : '/dashboard/generations'))
+
 // Matches the server's listRecentAttempts default (server/utils/ai/generationLog.ts) - used to
 // trim the list back down to a page's worth after splicing in a live-pushed row.
 const ATTEMPTS_PAGE_SIZE = 25
@@ -31,7 +38,10 @@ const ATTEMPTS_PAGE_SIZE = 25
 // awaiting it here means the initial HTML an admin gets already has real rows in it instead of a
 // guaranteed-empty shell that fills in after hydration.
 const failuresOnly = ref(false)
+const provider = ref<string | null>(null)
 const page = ref(1)
+
+watch([failuresOnly, provider], () => (page.value = 1))
 const {
   data: attemptsResponse,
   pending: attemptsLoading,
@@ -41,11 +51,17 @@ const {
   query: computed(() => ({
     page: page.value,
     success: failuresOnly.value ? 'false' : undefined,
+    provider: provider.value ?? undefined,
     discordId: props.discordId
   }))
 })
 
 if (attemptsError.value) await redirectIfUnauthorized(attemptsError.value)
+
+// The provider filter's choices - only needed by the full log.
+const { data: providersResponse } = await useFetch<{ providers: { id: string; label: string }[] }>('/api/admin/providers', {
+  immediate: props.full
+})
 
 // A plain, freely-mutable copy, not attemptsResponse itself - the WS live-update splicing below
 // (applyGenerationLogged) needs to add a row without that then getting clobbered the next time
@@ -73,6 +89,9 @@ const liveAttempts = ref<Map<string, LiveAttempt>>(new Map())
 function inScope(discordId: string): boolean {
   return !props.discordId || discordId === props.discordId
 }
+
+const matchesFilters = (attempt: { provider: string | null; success?: boolean }): boolean =>
+  (!provider.value || attempt.provider === provider.value) && (!failuresOnly.value || attempt.success === false)
 
 // Keyed by requestId, not an array - both this and applyGenerationLogged (remove, once the real
 // row replaces it) below need direct lookup. Only ever adds/updates entries here, never removes
@@ -112,8 +131,16 @@ function elapsedSeconds(startedAt: string): number {
 const visibleLiveAttempts = computed(() => {
   if (page.value !== 1 || failuresOnly.value) return []
 
-  return Array.from(liveAttempts.value.values()).sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  return Array.from(liveAttempts.value.values())
+    .filter(matchesFilters)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 })
+
+// The preview shows running generations first, then the newest finished ones, `limit` rows in all.
+const visibleLive = computed(() => (props.full ? visibleLiveAttempts.value : visibleLiveAttempts.value.slice(0, props.limit)))
+const visibleAttempts = computed(() =>
+  props.full ? attempts.value : attempts.value.slice(0, Math.max(0, props.limit - visibleLive.value.length))
+)
 
 // Live updates: /admin/ws pushes the actual new row whenever a generation attempt is logged (see
 // the server's generationLog.ts) - applied locally below instead of re-running the REST fetches
@@ -147,7 +174,7 @@ function applyGenerationLogged(attempt: Attempt): void {
   // Only meaningful to splice into the visible list when looking at the first page (where a new
   // row would actually land) and it matches the current filter - otherwise it's left alone; the
   // admin will see it by paging back to 1, and the reconnect reload below catches up regardless.
-  if (page.value === 1 && (!failuresOnly.value || !attempt.success)) {
+  if (page.value === 1 && matchesFilters(attempt)) {
     attempts.value = [attempt, ...attempts.value].slice(0, ATTEMPTS_PAGE_SIZE)
   }
 
@@ -216,163 +243,210 @@ function toggleError(id: number): void {
 </script>
 
 <template>
-  <UCard>
-    <div class="mb-3 flex items-center justify-between gap-2">
-      <p class="text-sm font-medium">
-        Recent generations
-      </p>
-      <UCheckbox
-        v-model="failuresOnly"
-        label="Failures only"
-      />
-    </div>
-
+  <div class="grid gap-3.5">
     <div
-      v-if="attemptsLoading"
-      class="py-8 text-center text-sm text-muted"
+      v-if="full"
+      class="flex flex-wrap items-center gap-2"
     >
-      Loading…
-    </div>
-
-    <div
-      v-else-if="!attempts.length && !visibleLiveAttempts.length"
-      class="py-8 text-center text-sm text-muted"
-    >
-      Nothing to show.
-    </div>
-
-    <div
-      v-else
-      class="flex flex-col divide-y divide-default text-sm"
-    >
-      <!-- Still running (see liveGenerations.ts) - swapped out for the real row the instant
-      'generation-logged' arrives with a matching requestId (see applyGenerationLogged). -->
-      <div
-        v-for="attempt in visibleLiveAttempts"
-        :key="attempt.requestId"
-        class="flex flex-col gap-1.5 py-2"
+      <UButton
+        icon="i-lucide-circle-x"
+        :color="failuresOnly ? 'primary' : 'neutral'"
+        :variant="failuresOnly ? 'soft' : 'outline'"
+        class="rounded-full"
+        :aria-pressed="failuresOnly"
+        @click="failuresOnly = !failuresOnly"
       >
-        <div class="flex flex-wrap items-center gap-2">
-          <UBadge
-            color="info"
-            variant="subtle"
-          >
-            <span class="flex items-center gap-1">
-              <span class="size-1.5 animate-pulse rounded-full bg-info" />
-              Generating
-            </span>
-          </UBadge>
-          <span class="font-medium">{{ attempt.displayName || attempt.discordId }}</span>
-          <span class="text-muted">{{ attempt.avatarName }}</span>
-          <span class="flex items-center gap-1 text-muted">
-            <UIcon
-              :name="providerIcon"
-              class="size-3.5"
-            />{{ attempt.providerLabel }}
-          </span>
-          <span class="text-muted">·</span>
-          <span class="flex items-center gap-1 text-muted">
-            <UIcon
-              :name="profileIcon"
-              class="size-3.5"
-            />{{ attempt.profileLabel }}
-          </span>
-          <span class="ml-auto text-xs text-muted">
-            {{ elapsedSeconds(attempt.startedAt).toFixed(1) }}s
-          </span>
-        </div>
+        Failures only
+      </UButton>
+      <span class="mx-1 h-7 w-px bg-(--ui-border)" />
+      <UButton
+        v-for="option in [{ id: null, label: 'All providers' }, ...(providersResponse?.providers ?? [])]"
+        :key="option.id ?? 'all'"
+        :color="provider === option.id ? 'primary' : 'neutral'"
+        :variant="provider === option.id ? 'soft' : 'outline'"
+        class="rounded-full"
+        :aria-pressed="provider === option.id"
+        @click="provider = option.id"
+      >
+        {{ option.label }}
+      </UButton>
+      <UButton
+        v-if="discordId"
+        to="/dashboard/generations"
+        color="primary"
+        variant="soft"
+        trailing-icon="i-lucide-x"
+        class="rounded-full"
+        :aria-label="`Show everyone, not just ${userName ?? discordId}`"
+      >
+        {{ userName ?? discordId }}
+      </UButton>
+    </div>
+
+    <UCard :ui="{ body: 'p-0 sm:p-0' }">
+      <div
+        v-if="!full"
+        class="flex items-center gap-2.5 px-4.5 pt-4 pb-2"
+      >
+        <h2 class="flex-1 text-[17px] font-semibold text-highlighted">
+          Recent generations
+        </h2>
+        <UButton
+          :to="seeAllLink"
+          size="md"
+          color="neutral"
+          variant="outline"
+        >
+          See all
+        </UButton>
       </div>
 
-      <div
-        v-for="attempt in attempts"
-        :key="attempt.id"
-        class="flex flex-col gap-1.5 py-2"
+      <p
+        v-if="attemptsLoading && !attempts.length"
+        class="py-10 text-center text-sm text-muted"
       >
-        <div class="flex flex-wrap items-center gap-2">
-          <!-- A dedicated toggle button, separate from the error text itself below - so the text
-          is plain, selectable content, not something wrapped in an interactive element that would
-          fight a click-drag selection or a double-click-to-select-word. -->
-          <UButton
-            v-if="attempt.errorMessage"
-            :icon="expandedErrors[attempt.id] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            square
-            @click="toggleError(attempt.id)"
-          />
+        Loading…
+      </p>
+
+      <p
+        v-else-if="!visibleAttempts.length && !visibleLive.length"
+        class="py-10 text-center text-sm text-muted"
+      >
+        {{ full && (failuresOnly || provider) ? 'Nothing matches these filters.' : 'No generations yet.' }}
+      </p>
+
+      <div
+        v-else
+        class="divide-y divide-default"
+      >
+        <!-- Still running (see liveGenerations.ts) - swapped out for the real row the instant
+        'generation-logged' arrives with a matching requestId (see applyGenerationLogged). -->
+        <div
+          v-for="attempt in visibleLive"
+          :key="attempt.requestId"
+          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 px-3.5 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+        >
+          <UBadge
+            color="primary"
+            variant="subtle"
+            class="rounded-full"
+          >
+            <span class="size-1.75 animate-pulse rounded-full bg-primary" />
+            Generating
+          </UBadge>
+          <div class="min-w-0">
+            <b class="text-sm font-medium text-highlighted">{{ attempt.displayName || attempt.discordId }}</b>
+            <span class="text-sm text-muted"> · {{ attempt.avatarName }}</span>
+            <small class="mt-0.5 flex items-center gap-1 truncate text-xs text-muted">
+              <UIcon
+                :name="providerIcon"
+                class="size-3.5 shrink-0"
+              />{{ attempt.providerLabel }} · {{ attempt.model }} ·
+              <UIcon
+                :name="profileIcon"
+                class="size-3.5 shrink-0"
+              />{{ attempt.profileLabel }}
+            </small>
+          </div>
+          <span class="font-mono text-xs text-muted tabular-nums max-sm:col-start-2">{{ elapsedSeconds(attempt.startedAt).toFixed(1) }}s</span>
+        </div>
+
+        <div
+          v-for="attempt in visibleAttempts"
+          :key="attempt.id"
+          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 px-3.5 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+        >
           <UBadge
             :color="attempt.success ? 'success' : 'error'"
             :icon="attempt.success ? successIcon : failureIcon(attempt.failureReason)"
             variant="subtle"
+            class="rounded-full"
           >
             {{ attempt.success ? 'OK' : (attempt.failureReasonLabel ?? 'Error') }}
           </UBadge>
-          <UBadge
-            v-if="attempt.refunded"
-            color="neutral"
-            variant="subtle"
-            :icon="refundedIcon"
+          <div class="min-w-0">
+            <b class="text-sm font-medium text-highlighted">{{ attempt.displayName || attempt.discordId }}</b>
+            <span
+              v-if="attempt.avatarName"
+              class="text-sm text-muted"
+            > · {{ attempt.avatarName }}</span>
+            <UBadge
+              v-if="attempt.refunded"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              :icon="refundedIcon"
+              class="ml-1.5 rounded-full align-middle"
+            >
+              Refunded
+            </UBadge>
+            <small class="mt-0.5 flex items-center gap-1 truncate text-xs text-muted">
+              <UIcon
+                :name="providerIcon"
+                class="size-3.5 shrink-0"
+              />{{ attempt.providerLabel ?? 'No provider' }}<template v-if="attempt.model"> · {{ attempt.model }}</template><template v-if="attempt.profileLabel"> ·
+                <UIcon
+                  :name="profileIcon"
+                  class="size-3.5 shrink-0"
+                />{{ attempt.profileLabel }}</template>
+            </small>
+          </div>
+          <div class="grid justify-items-end gap-1 font-mono text-xs whitespace-nowrap text-muted max-sm:col-start-2 max-sm:flex max-sm:items-center max-sm:justify-between">
+            <span>
+              <template v-if="attempt.durationMs !== null">{{ (attempt.durationMs / 1000).toFixed(1) }}s · </template><NuxtTime
+                :datetime="attempt.createdAt"
+                relative
+              />
+            </span>
+            <!-- A separate toggle, so the error text itself stays plain, selectable content. -->
+            <button
+              v-if="attempt.errorMessage"
+              type="button"
+              class="-mr-1.5 flex h-8 cursor-pointer items-center gap-1 rounded-lg px-1.5 text-error hover:bg-error/10"
+              :aria-expanded="!!expandedErrors[attempt.id]"
+              @click="toggleError(attempt.id)"
+            >
+              <UIcon
+                :name="expandedErrors[attempt.id] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                class="size-3.5"
+              />{{ expandedErrors[attempt.id] ? 'Hide error' : 'Show error' }}
+            </button>
+          </div>
+          <p
+            v-if="attempt.errorMessage && expandedErrors[attempt.id]"
+            class="col-span-full rounded-md bg-error/8 px-3 py-2.5 font-mono text-xs break-words whitespace-pre-wrap text-error select-text"
           >
-            Refunded
-          </UBadge>
-          <span class="font-medium">{{ attempt.displayName || attempt.discordId }}</span>
-          <span class="text-muted">{{ attempt.avatarName }}</span>
-          <span class="flex items-center gap-1 text-muted">
-            <UIcon
-              :name="providerIcon"
-              class="size-3.5"
-            />{{ attempt.providerLabel }}
-          </span>
-          <span class="text-muted">·</span>
-          <span class="flex items-center gap-1 text-muted">
-            <UIcon
-              :name="profileIcon"
-              class="size-3.5"
-            />{{ attempt.profileLabel }}
-          </span>
-          <span class="ml-auto text-xs text-muted">
-            <template v-if="attempt.durationMs !== null">{{ (attempt.durationMs / 1000).toFixed(1) }}s · </template>{{ new Date(attempt.createdAt).toLocaleString() }}
-          </span>
+            {{ attempt.errorMessage }}
+          </p>
         </div>
-
-        <!-- Error message always gets its own line below the main row, instead of competing for
-        space inline with the name/provider/timestamp - collapsed shows one truncated line at the
-        row's full width; expanded (same toggle button above) grows into the full wrapped block.
-        The expanded case is plain text, not a button, so it can be selected/copied normally. -->
-        <button
-          v-if="attempt.errorMessage && !expandedErrors[attempt.id]"
-          type="button"
-          class="ml-8 truncate text-left text-xs text-error"
-          @click="toggleError(attempt.id)"
-        >
-          {{ attempt.errorMessage }}
-        </button>
-        <p
-          v-if="attempt.errorMessage && expandedErrors[attempt.id]"
-          class="ml-8 rounded-md bg-elevated p-2 text-xs whitespace-pre-wrap break-words text-error select-text"
-        >
-          {{ attempt.errorMessage }}
-        </p>
       </div>
-    </div>
+    </UCard>
 
-    <div class="mt-3 flex items-center justify-end gap-2">
+    <div
+      v-if="full"
+      class="flex flex-wrap items-center gap-2"
+    >
+      <span class="flex-1 text-[13px] text-muted">Page {{ page }}</span>
       <UButton
-        size="xs"
-        variant="soft"
+        size="md"
+        color="neutral"
+        variant="outline"
         icon="i-lucide-chevron-left"
         :disabled="page <= 1"
         @click="page--"
-      />
-      <span class="text-xs text-muted">Page {{ page }}</span>
+      >
+        Newer
+      </UButton>
       <UButton
-        size="xs"
-        variant="soft"
-        icon="i-lucide-chevron-right"
-        :disabled="attempts.length < 25"
+        size="md"
+        color="neutral"
+        variant="outline"
+        trailing-icon="i-lucide-chevron-right"
+        :disabled="attempts.length < ATTEMPTS_PAGE_SIZE"
         @click="page++"
-      />
+      >
+        Older
+      </UButton>
     </div>
-  </UCard>
+  </div>
 </template>

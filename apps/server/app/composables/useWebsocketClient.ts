@@ -68,7 +68,7 @@ export function useWebsocketClient(roomId: string) {
         // The wire type is the full ClientType union ('everyone' | 'username' | 'discord'), but
         // checkClient() (see apps/client/src/utils/checkClient.ts) never fails validation when
         // the host's policy is 'everyone', so client-invalid.type in practice is always
-        // 'username' | 'discord' — the only two AuthModal actually renders a flow for.
+        // 'username' | 'discord' — the only two the share page's sign-in state has a flow for.
         authRequired.value = data.message.type as 'username' | 'discord'
       } else if (data.type === 'client-banned') {
         banned.value = { scope: data.message.scope, reason: data.message.reason }

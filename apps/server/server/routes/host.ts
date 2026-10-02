@@ -120,6 +120,12 @@ export default defineWebSocketHandler({
         return
       }
 
+      if (!data.message.token) {
+        peer.send({ type: 'auth-error', message: 'Missing authentication token' })
+        peer.close()
+        return
+      }
+
       const runtimeConfig = useRuntimeConfig()
 
       try {
@@ -155,6 +161,10 @@ export default defineWebSocketHandler({
 
         peer.close()
       }
+    } else if (!roomId) {
+      // Everything below acts on the host's room - ignore it from a peer that never authenticated
+      // (it used to run with an undefined room, e.g. recording inventory under a NULL discord id).
+      return
     } else if (data.type === 'controls-update') {
       const { avatarId, groups } = data.message
 
@@ -201,8 +211,14 @@ export default defineWebSocketHandler({
   close(peer) {
     const roomId = getRoomId(peer.id)
 
-    removeClient(roomId!)
-    sendToEveryoneInRoom(roomId!, { type: 'host-status', message: 'offline' })
+    authenticateHost.delete(peer.id)
+
+    // Only the room's current host going away takes it offline - a connection that was already
+    // replaced by a newer one (addClient closes the old peer) must not remove its successor.
+    if (!roomId || hostList.get(roomId)?.peer.id !== peer.id) return
+
+    removeClient(roomId)
+    sendToEveryoneInRoom(roomId, { type: 'host-status', message: 'offline' })
   },
   error(peer, error) {
     console.error('[ws] error', peer, error)

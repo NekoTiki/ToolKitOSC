@@ -30,7 +30,7 @@ export interface AiOptions {
   dailyCredits: number
   // Whether this account is allowed to pick the provider/model itself (see the server's
   // utils/ai/access.ts) - profile is always the user's own choice regardless. false means
-  // AiControlsModal.vue hides the provider picker; the server still picks one on its own,
+  // the AI page hides the provider picker; the server still picks one on its own,
   // it's just not surfaced to the user (see resolveDefaultProvider's load-balancing comment -
   // there's no single fixed answer to show anyway).
   canSelectModel: boolean
@@ -63,7 +63,7 @@ export function useAiControlSuggestions(): {
   // profiles.ts's resolveModel). This only ever offers the two axes the server actually exposes.
   // Always re-fetched (never cached here) - remaining credits change every time generate() runs,
   // and the modal that owns this composable's lifetime doesn't get remounted on every open (see
-  // AiControlsModal.vue), so a caller has to explicitly call this again to see a fresh number.
+  // the AI page), so a caller has to explicitly call this again to see a fresh number.
   const listOptions = async (): Promise<AiOptions> => {
     const response = await fetch(`${serverHttpUrl.value}/api/ai/providers`, { headers: authHeaders() })
 

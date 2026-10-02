@@ -15,7 +15,7 @@ const showAll = ref(false)
 const includedAddresses = computed(() => new Set(parameters.value.map((p) => p.address)))
 
 // virtualize below: an avatar's full parameter list can run into the hundreds, same reasoning as
-// every other potentially-long list in this app (see ExcludedParametersModal.vue).
+// every other potentially-long list in this app (see pages/ParametersPage.vue).
 const availableParameters = computed<FilterableParameter[]>(() =>
   filterableParameters.value
     .filter((param) => !includedAddresses.value.has(param.address))

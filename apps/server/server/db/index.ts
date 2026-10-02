@@ -24,6 +24,10 @@ function createDb(): Db {
 
   const client = createClient({ url: `file:${sqlitePath}` })
 
+  // Wait for another writer's lock (e.g. a second dev worker during a hot reload) instead of
+  // failing on the spot with SQLITE_BUSY.
+  void client.execute('PRAGMA busy_timeout = 5000')
+
   return drizzle({ client, schema })
 }
 

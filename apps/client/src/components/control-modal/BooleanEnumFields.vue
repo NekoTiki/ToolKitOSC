@@ -3,7 +3,7 @@ import type { SelectMenuItem } from '@nuxt/ui/components/SelectMenu.vue'
 import AddressListEditor from '@renderer/components/control-modal/AddressListEditor.vue'
 import AddressListToggle from '@renderer/components/control-modal/AddressListToggle.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
-import { getUUID } from '@renderer/composables/useControlModal'
+import { getUUID } from '@renderer/utils/uuid'
 import type { BooleanEnumControl } from '@vrc-osc-toolkit/shared-ui'
 
 defineProps<{ addresses: SelectMenuItem[] }>()

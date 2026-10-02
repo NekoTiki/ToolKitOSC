@@ -34,7 +34,8 @@ export function usePresets(): {
   setExcluded: (address: string, excluded: boolean) => void
   captureParameters: () => PresetParameter[]
   getPreset: (id: string) => Preset | undefined
-  addPreset: (name: string, icon: string | undefined, parameters: PresetParameter[]) => void
+  // Returns the new preset's id, or null when no avatar is loaded.
+  addPreset: (name: string, icon: string | undefined, parameters: PresetParameter[]) => string | null
   updatePreset: (
     id: string,
     patch: Partial<Pick<Preset, 'name' | 'icon' | 'parameters'>>
@@ -128,13 +129,14 @@ export function usePresets(): {
 
   const getPreset = (id: string): Preset | undefined => presets.value.find((p) => p.id === id)
 
-  const addPreset = (name: string, icon: string | undefined, parameters: PresetParameter[]): void => {
-    if (!avatarId.value) return
+  const addPreset = (name: string, icon: string | undefined, parameters: PresetParameter[]): string | null => {
+    if (!avatarId.value) return null
 
     const now = new Date().toISOString()
+    const id = self.crypto.randomUUID()
 
     presets.value.push({
-      id: self.crypto.randomUUID(),
+      id,
       avatarId: avatarId.value,
       avatarName: avatarDetails.value?.name ?? '',
       name,
@@ -145,6 +147,8 @@ export function usePresets(): {
     })
 
     persist()
+
+    return id
   }
 
   const updatePreset = (

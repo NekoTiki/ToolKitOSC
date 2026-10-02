@@ -1,5 +1,5 @@
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { getUUID } from '@renderer/composables/useControlModal'
+import { getUUID } from '@renderer/utils/uuid'
 import { computed, ref, watch } from 'vue'
 
 export type LockedControlGroup = {
@@ -21,7 +21,8 @@ export function useLockedControls(): {
   currentLockedControlsGroup: typeof currentLockedControlsGroup
   lockedControlGroups: typeof lockedControlGroups
   getLockedControlGroup: (groupId: LockedControlGroup['id']) => LockedControlGroup | undefined
-  addLockedControlGroup: (lockedControlsGroup: Omit<LockedControlGroup, 'id'>) => void
+  // Returns the new profile's id.
+  addLockedControlGroup: (lockedControlsGroup: Omit<LockedControlGroup, 'id'>) => string
   updateLockedControlGroup: (
     groupId: LockedControlGroup['id'],
     lockedControlsGroup: Omit<LockedControlGroup, 'id'>
@@ -35,10 +36,14 @@ export function useLockedControls(): {
     return lockedControlGroups.value.find((g) => g.id === groupId)
   }
 
-  const addLockedControlGroup = (lockedControlsGroup: Omit<LockedControlGroup, 'id'>): void => {
-    lockedControlGroups.value.push({ id: getUUID(), ...lockedControlsGroup })
+  const addLockedControlGroup = (lockedControlsGroup: Omit<LockedControlGroup, 'id'>): string => {
+    const id = getUUID()
+
+    lockedControlGroups.value.push({ id, ...lockedControlsGroup })
 
     saveLockedControlsGroups()
+
+    return id
   }
 
   const updateLockedControlGroup = (

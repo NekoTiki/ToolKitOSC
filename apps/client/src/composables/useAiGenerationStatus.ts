@@ -10,7 +10,7 @@ import { ref } from 'vue'
 // it, so the two need a shared place to meet.
 const pending = new Map<string, { resolve: (groups: ControlGroup[]) => void; reject: (error: Error) => void }>()
 
-// Only the most recently started request's flavor text is shown - AiControlsModal.vue only ever
+// Only the most recently started request's flavor text is shown - the AI page only ever
 // has one generation in flight at a time (the Generate button is disabled while loading).
 const activeRequestId = ref<string | null>(null)
 const statusMessage = ref<string | null>(null)

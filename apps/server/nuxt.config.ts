@@ -3,6 +3,11 @@ export default defineNuxtConfig({
   modules: ['nuxt-auth-utils', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/eslint'],
   devtools: { enabled: true },
   css: ['~/assets/css/main.css'],
+  // Aurora (shared-ui's styles/aurora.css) is dark-only - pin the color mode rather than following
+  // the visitor's OS setting, so the share page always matches the host's desktop client.
+  colorMode: { preference: 'dark', fallback: 'dark' },
+  // /profile was renamed /connect to match its menu item; old links and bookmarks still work.
+  routeRules: { '/profile': { redirect: '/connect' } },
   app: {
     head: {
       link: [

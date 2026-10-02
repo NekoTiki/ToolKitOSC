@@ -10,7 +10,7 @@
     "lint": "eslint --cache .",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json --composite false",
     "dev:vite": "vite",
-    "build:vite": "npm run typecheck && vite build",
+    "build:vite": "vite build && npm run typecheck",
     "dev": "tauri dev",
     "dev:prod": "cross-env VITE_SERVER_WS_URL=wss://vot.nek.ovh tauri dev",
     "build": "tauri build",

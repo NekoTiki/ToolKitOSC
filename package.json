@@ -1,7 +1,11 @@
 {
   "name": "vrc-osc-toolkit",
   "private": true,
-  "workspaces": ["packages/*", "apps/*"],
+  "license": "GPL-3.0-or-later",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "node packages/dev-cli/index.js",
     "lint": "eslint --cache .",

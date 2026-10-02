@@ -1,10 +1,15 @@
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
+import { useLocalStorage } from '@vueuse/core'
 import _ from 'lodash'
 
 type NewCommand = Omit<Command, 'id' | 'createdAt'>
 
-export const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// How long the activity log keeps commands, in days - chosen in Settings → Data & logs.
+export const LOG_RETENTION_CHOICES = [1, 7, 30] as const
+export const logRetentionDays = useLocalStorage<number>('logRetentionDays', 7)
 
 // Not tied to any component's lifecycle - see useLogRetention.ts, which is what actually schedules
 // this (once at app startup, then on a recurring interval so it also catches logs that cross the
@@ -13,7 +18,7 @@ export const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 export const purgeOldCommands = (): Promise<number> =>
   db.commands
     .where('createdAt')
-    .below(Date.now() - LOG_RETENTION_MS)
+    .below(Date.now() - logRetentionDays.value * DAY_MS)
     .delete()
     .catch((error) => {
       console.error('Failed to purge old command logs:', error)

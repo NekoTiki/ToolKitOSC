@@ -5,6 +5,7 @@ import { useIntifacePatternControl } from '../composables/useIntifacePatternCont
 import type { IntifacePatternRef } from '../types/controls'
 import { INTIFACE_PATTERN_OFF_ID } from '../types/controls'
 import ControlBase from './ControlBase.vue'
+import ControlOptions from './ControlOptions.vue'
 
 // Same chip-picker treatment as ControlEnum.vue, for the same reason (every choice tappable and
 // visible at once, no dropdown) - the only real difference is the value being played back over
@@ -30,35 +31,34 @@ const chips = computed<IntifacePatternRef[]>(() => [
   { id: INTIFACE_PATTERN_OFF_ID, name: 'Off', icon: 'i-lucide-power-off' },
   ...props.patterns
 ])
+
+const options = computed(() =>
+  chips.value.map((chip) => ({ key: chip.id, name: chip.name, icon: chip.icon, selected: chip.id === currentPatternId.value }))
+)
 </script>
 
 <template>
   <control-base
     :title="title"
     :icon="icon"
+    kind="value"
+    fill
   >
-    <div class="flex flex-wrap items-center justify-center gap-1.5">
-      <button
-        v-for="chip in chips"
-        :key="chip.id"
-        type="button"
-        class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold transition-colors"
-        :class="
-          chip.id === currentPatternId
-            ? 'bg-primary text-inverted'
-            : 'bg-elevated text-muted hover:bg-accented'
-        "
-        @click.stop="emit('update:value', chip.id)"
+    <template #badge>
+      <span
+        class="grid size-5 shrink-0 place-items-center rounded-full bg-(--aurora-well) text-muted"
+        title="Intiface"
       >
         <UIcon
-          v-if="chip.icon"
-          :name="chip.icon"
-          class="size-4"
+          name="mdi:vibrate"
+          class="size-3"
         />
-        {{ chip.name }}
-      </button>
-    </div>
+      </span>
+    </template>
+    <ControlOptions
+      :options="options"
+      pill
+      @select="emit('update:value', chips[$event]!.id)"
+    />
   </control-base>
 </template>
-
-<style scoped></style>

@@ -5,6 +5,7 @@ import { computed } from 'vue'
 import { useOscMessages } from '../composables/useOscMessages'
 import type { BooleanEnumControl } from '../types/controls'
 import ControlBase from './ControlBase.vue'
+import ControlOptions from './ControlOptions.vue'
 
 const { get } = useOscMessages()
 
@@ -42,38 +43,22 @@ const currentId = computed((): string | undefined => {
       _.every(inputAddress.false, (addr) => _.includes(data.false, addr))
   )?.id
 })
+
+const options = computed(() =>
+  props.items.map((item) => ({ key: item.id, name: item.name, icon: item.icon, selected: item.id === currentId.value }))
+)
 </script>
 
 <template>
-  <!-- Full custom, not a dropdown - same chip-picker treatment as ControlEnum.vue, for the same
-  reason: every option tappable and visible at once beats hiding all but the current one behind a
-  menu, especially from a VR-overlay pointer. -->
   <control-base
     :title="title"
     :icon="icon"
+    kind="value"
+    fill
   >
-    <div class="flex flex-wrap items-center justify-center gap-1.5">
-      <button
-        v-for="(item, index) in items"
-        :key="item.id"
-        type="button"
-        class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold transition-colors"
-        :class="
-          item.id === currentId
-            ? 'bg-primary text-inverted'
-            : 'bg-elevated text-muted hover:bg-accented'
-        "
-        @click.stop="emit('update:value', index)"
-      >
-        <UIcon
-          v-if="item.icon"
-          :name="item.icon"
-          class="size-4"
-        />
-        {{ item.name }}
-      </button>
-    </div>
+    <ControlOptions
+      :options="options"
+      @select="emit('update:value', $event)"
+    />
   </control-base>
 </template>
-
-<style scoped></style>

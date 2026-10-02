@@ -1,6 +1,6 @@
 // Hardcoded denylist of known-noisy avatar parameter namespaces (PhysBones-adjacent/VRCFury/
-// OSCGoodies-style prefixes), shared between the control editor's address picker (ControlModal.vue)
-// and the preset creator (usePresets.ts) - previously duplicated as ControlModal.vue's own private
+// OSCGoodies-style prefixes), shared between the control editor's address picker (useControlEditor.ts)
+// and the preset creator (usePresets.ts) - previously duplicated as the old control modal's own private
 // `isFilteredAddress`, now the one definition both read from.
 const NOISY_ADDRESS_PREFIXES = [
   'pcs/',

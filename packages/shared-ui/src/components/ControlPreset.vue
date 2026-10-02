@@ -1,31 +1,44 @@
 <script setup lang="ts">
-// Built on ControlBase (title/icon card) like every other control. The whole card is the click
-// target (ControlBase forwards an unhandled `@click` straight onto its root element, same as
-// ControlBooleanBase's `@click="state = !state"` above it does), same as every other control in
-// this app - the UButton inside is just a real, obvious visual affordance for that action (a
-// one-shot "Apply" rather than a toggle/value to show), not a separate interactive target of its
-// own, hence `.stop` on it: without it, a click on the button would also bubble up to the card's
-// own handler and fire `run` twice.
+import { ref } from 'vue'
+
 import ControlBase from './ControlBase.vue'
 
 defineProps<{ title: string; icon?: string }>()
 const emit = defineEmits<{ (e: 'run'): void }>()
+
+// A brief lit state after each tap - applying a preset has no lasting on/off state of its own to
+// show, so this is the only confirmation the tap landed.
+const flashing = ref(false)
+let flashTimeout: ReturnType<typeof setTimeout> | undefined
+
+const run = (): void => {
+  emit('run')
+  flashing.value = true
+  clearTimeout(flashTimeout)
+  flashTimeout = setTimeout(() => (flashing.value = false), 700)
+}
 </script>
 
 <template>
   <control-base
     :title="title"
-    :icon="icon"
-    @click="emit('run')"
+    :icon="icon ?? 'i-lucide-play'"
+    :active="flashing"
+    role="button"
+    tabindex="0"
+    :aria-label="`Apply ${title}`"
+    @click="run"
+    @keydown.enter.space.prevent="run"
   >
-    <UButton
-      label="Apply"
-      icon="i-lucide-play"
-      color="primary"
-      block
-      @click.stop="emit('run')"
-    />
+    <div
+      class="flex h-(--tile-control) items-center justify-center gap-2 rounded-field border text-[calc(var(--tile-title)*0.95)] font-semibold tracking-wide transition-colors"
+      :class="flashing ? 'border-primary bg-primary text-inverted' : 'border-primary/50 text-primary'"
+    >
+      <UIcon
+        name="i-lucide-play"
+        class="size-4"
+      />
+      APPLY
+    </div>
   </control-base>
 </template>
-
-<style scoped></style>

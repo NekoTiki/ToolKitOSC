@@ -362,6 +362,9 @@ export function useIntiface(): {
     const byDevice = new Map<number, { index: number; actuatorType: string }[]>()
 
     actuators.forEach((actuator) => {
+      // A control spanning several toys stays usable while any one is connected (see useControls),
+      // but a toy that's gone would reject every command with DeviceNotAvailable - skip it.
+      if (!devices.value.has(actuator.deviceIndex)) return
       if (!byDevice.has(actuator.deviceIndex)) byDevice.set(actuator.deviceIndex, [])
 
       byDevice.get(actuator.deviceIndex)!.push({

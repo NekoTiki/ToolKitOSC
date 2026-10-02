@@ -1,9 +1,8 @@
 import type { Command } from '@renderer/db/commands.db'
 import type { OpenShockCommandResult } from '@vrc-osc-toolkit/shared-ui'
 
-// Shared between ClientLogsModal.vue (a client's whole history) and ControlLogsModal.vue (one
-// control's whole history) - both render the exact same kind of Command row, just filtered
-// differently (by ip/discordId vs. by controlId).
+// Shared by every place that renders logged Command rows (the Activity and Viewers pages, the
+// Controls page's log line), however they're filtered.
 export const isOpenShockCommandValue = (
   value: Command['value']
 ): value is OpenShockCommandResult => typeof value === 'object' && value !== null && 'shockers' in value

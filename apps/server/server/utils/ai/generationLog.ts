@@ -148,7 +148,7 @@ export async function logGenerationAttempt(input: LogAttemptInput): Promise<void
 
 export interface StatsResult {
   daily: { day: string; success: number; failure: number }[]
-  byProvider: { provider: string | null; success: number; failure: number; avgDurationMs: number | null }[]
+  byProvider: { provider: string | null; providerLabel: string | null; success: number; failure: number; avgDurationMs: number | null }[]
   byProfile: { profile: string | null; count: number }[]
   totalSuccess: number
   totalFailure: number
@@ -204,6 +204,7 @@ export async function queryStats(days: number, discordId?: string): Promise<Stat
     daily: daily.map((d) => ({ day: d.day, success: Number(d.success), failure: Number(d.failure) })),
     byProvider: byProvider.map((p) => ({
       provider: p.provider,
+      providerLabel: providerLabel(p.provider),
       success: Number(p.success),
       failure: Number(p.failure),
       avgDurationMs: p.avgDurationMs === null ? null : Number(p.avgDurationMs)

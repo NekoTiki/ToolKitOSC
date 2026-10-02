@@ -29,18 +29,20 @@ export async function recordControlInventory(discordId: string, avatarId: string
   }
 
   const updatedAt = new Date()
+  const db = getDb()
+  const clear = db.delete(controlInventory).where(and(eq(controlInventory.discordId, discordId), eq(controlInventory.avatarId, avatarId)))
 
-  await getDb().transaction(async (tx) => {
-    await tx
-      .delete(controlInventory)
-      .where(and(eq(controlInventory.discordId, discordId), eq(controlInventory.avatarId, avatarId)))
-
-    if (counts.size) {
-      await tx
-        .insert(controlInventory)
-        .values(Array.from(counts.entries()).map(([type, count]) => ({ discordId, avatarId, type, count, updatedAt })))
-    }
-  })
+  // A batch, not db.transaction(): libsql hands its connection to an interactive transaction and
+  // opens a fresh one (without a busy timeout) for everything else, so two overlapping
+  // controls-updates failed with SQLITE_BUSY. A batch runs atomically on the one shared connection.
+  if (counts.size) {
+    await db.batch([
+      clear,
+      db.insert(controlInventory).values(Array.from(counts.entries()).map(([type, count]) => ({ discordId, avatarId, type, count, updatedAt })))
+    ])
+  } else {
+    await clear
+  }
 }
 
 // One row per (discordId, type, day), incremented on every control activation relayed to that

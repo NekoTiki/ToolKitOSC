@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, provide } from 'vue'
 
 import type { CommandWithoutIds, ControlType, LastUser } from '../types/controls'
 import ControlBoolean from './ControlBoolean.vue'
@@ -11,42 +11,70 @@ import ControlIntifaceToy from './ControlIntifaceToy.vue'
 import ControlOpenShock from './ControlOpenShock.vue'
 import ControlPreset from './ControlPreset.vue'
 import ControlSlider from './ControlSlider.vue'
+import ControlStepEnum from './ControlStepEnum.vue'
+import type { TileBadge } from './tileBadges'
+import { TILE_BADGES } from './tileBadges'
 
 type Props = {
   lastUser?: LastUser
   control: ControlType
+  // Edit mode (desktop client): large Edit / Activity / Delete buttons over the tile, and a drag
+  // handle. Replaces the old right-click menu, which VR pointers and touch can't open.
   edit?: boolean
   offline?: boolean
+  // Blocking states (viewer side): the tile can't be used at all.
   locked?: boolean
-  lockedIndicator?: boolean
   unavailable?: boolean
+  // Informational states (host side): the host can still use the tile, but viewers can't.
+  lockedIndicator?: boolean
   unavailableIndicator?: boolean
 }
 
 const props = defineProps<Props>()
 defineEmits<{
   (e: 'edit', id: string): void
+  (e: 'logs', id: string): void
   (e: 'delete', id: string): void
   (e: 'command', command: CommandWithoutIds): void
 }>()
 
-// The unavailable-indicator tooltip used to always say "OpenShock isn't configured", which was
-// wrong for any other control type that can go unavailable (currently also Intiface, which can be
-// unreachable for two different reasons of its own).
+// Every control type that can go unavailable has its own reason, shown on the tile itself.
 const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
-  'open-shock-shocker': "OpenShock isn't configured",
-  'intiface-toy': "Intiface isn't connected, or every toy this control targets is offline",
-  'intiface-pattern': "Intiface isn't connected, or every toy this control targets is offline",
-  preset: "This preset no longer exists for the currently loaded avatar"
+  'open-shock-shocker': "OpenShock isn't set up",
+  'intiface-toy': 'Intiface or its toys are offline',
+  'intiface-pattern': 'Intiface or its toys are offline',
+  preset: 'This preset no longer exists'
 }
 
-const unavailableReason = computed(
-  () => UNAVAILABLE_REASON[props.control.type] ?? "Something this control depends on isn't available"
+const unavailableReason = computed(() => UNAVAILABLE_REASON[props.control.type] ?? 'Not available right now')
+
+provide(
+  TILE_BADGES,
+  computed<TileBadge[]>(() => [
+    ...(props.lockedIndicator ? [{ key: 'locked', icon: 'i-lucide-lock', label: 'Locked for viewers by the active profile', tone: 'warning' as const }] : []),
+    ...(props.unavailableIndicator && !props.lockedIndicator
+      ? [{ key: 'unavailable', icon: 'i-lucide-shield-off', label: `${unavailableReason.value}, so viewers can't use it`, tone: 'warning' as const }]
+      : []),
+    ...(props.lastUser ? [{ key: 'last-user', avatar: props.lastUser.avatar, label: `Last used by ${props.lastUser.displayName}` }] : [])
+  ])
 )
+
+// Locked/unavailable/offline tiles show a hatched scrim with the reason at the bottom, instead of
+// the old full black cover - the tile's name and state stay readable underneath.
+const blocker = computed<{ icon: string; label: string } | null>(() => {
+  if (props.offline) return { icon: 'i-lucide-wifi-off', label: 'Host offline' }
+  if (props.locked) return { icon: 'i-lucide-lock', label: 'Locked' }
+  if (props.unavailable) return { icon: 'i-lucide-shield-off', label: unavailableReason.value }
+
+  return null
+})
 </script>
 
 <template>
-  <div class="relative isolate">
+  <div
+    class="relative isolate h-full w-full"
+    :class="{ grayscale: offline }"
+  >
     <control-boolean
       v-if="control.type === 'boolean'"
       :icon="control.icon"
@@ -84,12 +112,7 @@ const unavailableReason = computed(
       :address="control.inputAddress"
       @update:value="$emit('command', { type: 'slider', value: $event })"
     />
-    <!-- Same picker UI as 'enum' - StepEnumControl is structurally identical to EnumControl (an
-    address + named integer options), just the AI-suggestible variant of it (see server's ai/
-    normalize.ts). This case was missing entirely, so an AI-generated step-enum control silently
-    rendered nothing at all - the same class of bug migrateControlGroups (useControls.ts) already
-    has to work around for the old 'intiface-vibrator' rename. -->
-    <control-enum
+    <control-step-enum
       v-else-if="control.type === 'step-enum'"
       :icon="control.icon"
       :title="control.name"
@@ -127,150 +150,59 @@ const unavailableReason = computed(
       :icon="control.icon"
       @run="$emit('command', { type: 'preset' })"
     />
-    <UPopover
-      v-if="lastUser"
-      class="absolute top-4 right-4 z-20 flex items-center"
-      :content="{ align: 'center', side: 'left', sideOffset: 8 }"
-    >
-      <UAvatar
-        :src="lastUser.avatar"
-        size="xs"
-      />
 
-      <template #content>
-        <slot
-          name="last-user"
-          :last-user="lastUser"
-        >
-          {{ lastUser }}
-        </slot>
-      </template>
-    </UPopover>
+    <div
+      v-if="blocker && !edit"
+      class="absolute inset-0 z-20 flex cursor-not-allowed items-end rounded-panel bg-black/45 bg-[repeating-linear-gradient(135deg,transparent_0_10px,rgb(255_255_255/0.05)_10px_20px)] p-(--tile-pad)"
+      @click.stop
+    >
+      <span class="flex min-w-0 items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-warning">
+        <UIcon
+          :name="blocker.icon"
+          class="size-3.5 shrink-0"
+        />
+        <span class="truncate">{{ blocker.label }}</span>
+      </span>
+    </div>
+
+    <!-- Edit mode: labeled, icon-over-text buttons big enough for a VR pointer. `.handle` is the
+    only element vue-draggable-plus grabs to reorder, so clicks on the other buttons never start a
+    drag. -->
     <div
       v-if="edit"
-      class="absolute inset-0 z-20 flex h-full w-full flex-col items-center justify-between gap-2 rounded-lg bg-primary/15 p-2 ring-2 ring-primary"
+      class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-panel bg-(--ui-bg)/75 p-2 ring-2 ring-primary/60"
     >
-      <!-- A primary-tinted scrim + ring, not a generic dark one - this reuses the same
-      "bg-primary/10 ring-primary" language ControlBase.vue already uses for its own `active`
-      state, so "editing" reads as its own distinct mode rather than a disabled/unavailable look
-      (those still use a flat black scrim - see the offline/locked/unavailable divs below). -->
-      <!-- The `.handle` class used to sit on UTooltip itself, forwarded onto its slotted child via
-      Reka UI's `as-child` prop-merging - fragile, since that merge target is an asynchronously-
-      rendered UIcon rather than an element guaranteed to exist as soon as this renders.
-      vue-draggable-plus's `handle: '.handle'` selector needs a real, always-present node to grab,
-      so it's now a plain span we render ourselves instead. -->
-      <UTooltip>
-        <span
-          class="handle bg-primary text-inverted flex cursor-grab items-center gap-1 rounded-full py-1 pr-3 pl-2 text-xs font-bold shadow-md transition-transform select-none hover:scale-105 active:cursor-grabbing active:scale-95"
+      <span
+        class="handle flex cursor-grab items-center gap-1 rounded-full bg-primary py-1 pr-3 pl-2 text-xs font-semibold text-inverted select-none active:cursor-grabbing"
+        title="Drag to move"
+      >
+        <UIcon
+          name="i-lucide-grip-vertical"
+          class="size-4"
+        />
+        Move
+      </span>
+      <div class="flex gap-2">
+        <button
+          v-for="action in [
+            { key: 'edit', icon: 'i-lucide-pen', label: 'Edit' },
+            { key: 'logs', icon: 'i-lucide-history', label: 'Activity' },
+            { key: 'delete', icon: 'i-lucide-trash-2', label: 'Delete' }
+          ] as const"
+          :key="action.key"
+          type="button"
+          class="flex size-[clamp(2.75rem,calc(var(--tile-cell)*0.3),3.5rem)] cursor-pointer flex-col items-center justify-center gap-0.5 rounded-field border border-default bg-elevated text-[10px] transition-colors hover:bg-accented"
+          :class="action.key === 'delete' ? 'text-error' : 'text-highlighted'"
+          :aria-label="action.label"
+          @click.stop="action.key === 'edit' ? $emit('edit', control.id) : action.key === 'logs' ? $emit('logs', control.id) : $emit('delete', control.id)"
         >
           <UIcon
-            name="i-lucide-grip-vertical"
-            class="size-4"
+            :name="action.icon"
+            class="size-5"
           />
-          Drag
-        </span>
-
-        <template #content>
-          Drag to Reorder
-        </template>
-      </UTooltip>
-
-      <!-- Labeled, not icon-only, and stretched across the full width - a bigger, harder-to-
-      mis-tap target than the small icon buttons this replaced, and the label removes any doubt
-      about which button does what while a whole grid of controls is in edit mode at once. A plain
-      flex row with a gap, not UButtonGroup - that component joins its buttons into one seamless
-      segmented control (shared edges, no gap by design), which isn't what's wanted between two
-      unrelated actions like these. `variant="subtle"` for Edit instead of `"solid"`: solid+neutral
-      inverts to a stark white pill in dark mode, too bright against this already-light
-      `bg-primary/15` scrim - Delete keeps `"solid"` since its error red doesn't have that
-      light/dark inversion problem. -->
-      <div class="flex w-full gap-2">
-        <UButton
-          label="Edit"
-          icon="i-lucide-pen-line"
-          color="neutral"
-          variant="subtle"
-          block
-          class="grow"
-          @click="$emit('edit', control.id)"
-        />
-        <UButton
-          label="Delete"
-          icon="i-lucide-trash-2"
-          color="error"
-          variant="solid"
-          block
-          class="grow"
-          @click="$emit('delete', control.id)"
-        />
+          {{ action.label }}
+        </button>
       </div>
     </div>
-    <div
-      v-if="offline"
-      class="absolute inset-0 z-20 flex h-full w-full cursor-pointer items-center justify-center rounded-lg bg-black/70"
-    >
-      <div class="flex flex-wrap items-center justify-center gap-4 text-white">
-        <UIcon
-          name="i-lucide-wifi-off"
-          class="size-16"
-        />
-        <span class="w-full text-center">Host Offline</span>
-      </div>
-    </div>
-    <div
-      v-if="locked && !offline"
-      class="absolute inset-0 z-20 flex h-full w-full cursor-pointer items-center justify-center rounded-lg bg-black/50 dark:bg-black/70"
-    >
-      <div class="flex flex-wrap items-center justify-center gap-4 text-white">
-        <UIcon
-          name="lucide:lock"
-          class="size-16"
-        />
-        <span class="w-full text-center">Unavailable</span>
-      </div>
-    </div>
-    <div
-      v-if="unavailable && !offline && !locked"
-      class="absolute inset-0 z-20 flex h-full w-full cursor-pointer items-center justify-center rounded-lg bg-black/50 dark:bg-black/70"
-    >
-      <div class="flex flex-wrap items-center justify-center gap-4 text-white">
-        <UIcon
-          name="lucide:shield-off"
-          class="size-16"
-        />
-        <span class="w-full text-center">Unavailable</span>
-      </div>
-    </div>
-    <!-- Bottom-left, not top-left: some control types (OpenShock) render their own tooltip icon
-    (e.g. shock/vibrate mode) at top-3 left-3 in their own component, and the edit-mode drag
-    handle above also claims that corner - either would sit directly on top of these otherwise. -->
-    <UTooltip
-      v-if="lockedIndicator"
-      class="absolute bottom-3 left-3 z-20 cursor-grab rounded-lg"
-    >
-      <UIcon
-        name="lucide:lock"
-        class="size-6"
-      />
-
-      <template #content>
-        This control is seen as locked
-      </template>
-    </UTooltip>
-    <UTooltip
-      v-if="unavailableIndicator && !lockedIndicator"
-      class="absolute bottom-3 left-3 z-20 cursor-grab rounded-lg"
-    >
-      <UIcon
-        name="lucide:shield-off"
-        class="size-6"
-      />
-
-      <template #content>
-        {{ unavailableReason }} - this control is unavailable to everyone
-      </template>
-    </UTooltip>
   </div>
 </template>
-
-<style scoped></style>

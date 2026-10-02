@@ -1,0 +1,155 @@
+/* Aurora — the shared look for the desktop client and the server site.
+
+   A dark, glassy theme whose colors come entirely from the user's two theme colors: Nuxt UI's
+   --ui-color-primary-* / --ui-color-secondary-* (repointed at runtime by applyThemeColor(), see
+   composables/useTheme.ts). Primary drives buttons, the selected page and anything switched on;
+   secondary drives values (sliders, selected options). Both tint the background glows and the
+   base itself, so picking a theme recolors the whole app, not just its accent.
+
+   Everything here is unlayered on purpose: Nuxt UI declares its tokens inside `@layer theme`, and
+   unlayered rules always win over layered ones, whatever order the stylesheets end up in. Both
+   apps force dark mode (the client via `colorMode: false` + a static `dark` class, the server via
+   its colorMode preference), so only the `.dark` scope needs values. */
+@import "@fontsource-variable/outfit";
+
+/* Corner radii for surfaces that hold content: `rounded-panel` for tiles, cards and page
+   sections, `rounded-field` for what sits inside them (switch and slider wells, options, notices,
+   code boxes). Fixed values from the design, not multiples of --ui-radius - that one is doubled
+   for Nuxt UI's controls and navigation, which keep their rounder look. */
+@theme {
+  --radius-panel: 1.5rem;
+  --radius-field: 1rem;
+}
+
+:root {
+  --font-sans: "Outfit Variable", "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui-radius: 0.5rem;
+}
+
+.dark {
+  --aurora-base: color-mix(in oklab, var(--ui-color-primary-950) 42%, #03070a);
+
+  --ui-bg: var(--aurora-base);
+  --ui-bg-muted: color-mix(in oklab, white 5%, var(--aurora-base));
+  --ui-bg-elevated: color-mix(in oklab, white 8%, var(--aurora-base));
+  --ui-bg-accented: color-mix(in oklab, white 14%, var(--aurora-base));
+  --ui-bg-inverted: #fff;
+
+  --ui-border: color-mix(in oklab, white 12%, transparent);
+  --ui-border-muted: color-mix(in oklab, white 8%, transparent);
+  --ui-border-accented: color-mix(in oklab, white 20%, transparent);
+  --ui-border-inverted: #fff;
+
+  --ui-text: #e8f1f0;
+  --ui-text-highlighted: #fff;
+  --ui-text-toned: color-mix(in oklab, var(--ui-color-primary-100) 25%, #c5d0d0);
+  --ui-text-muted: color-mix(in oklab, var(--ui-color-primary-200) 28%, #95a3a4);
+  --ui-text-dimmed: color-mix(in oklab, var(--ui-color-primary-200) 18%, #5f6d70);
+  --ui-text-inverted: var(--ui-color-primary-950);
+
+  /* Surfaces for panels that float over the background glows. */
+  --aurora-glass: color-mix(in oklab, white 6%, transparent);
+  --aurora-glass-strong: color-mix(in oklab, white 11%, transparent);
+  --aurora-well: color-mix(in oklab, black 26%, transparent);
+  --aurora-blur: 18px;
+
+  color-scheme: dark;
+}
+
+.dark body {
+  background:
+    radial-gradient(1100px 760px at 6% 0%, color-mix(in oklab, var(--ui-color-primary-500) 30%, transparent), transparent 62%),
+    radial-gradient(1000px 720px at 100% 100%, color-mix(in oklab, var(--ui-color-secondary-500) 20%, transparent), transparent 62%),
+    var(--aurora-base);
+  background-attachment: fixed;
+}
+
+/* A frosted panel. Use on anything that sits directly on the background glows. */
+@utility glass {
+  background-color: var(--aurora-glass);
+  border: 1px solid var(--ui-border);
+  backdrop-filter: blur(var(--aurora-blur));
+}
+
+@utility glass-strong {
+  background-color: var(--aurora-glass-strong);
+  border: 1px solid var(--ui-border-accented);
+  backdrop-filter: blur(var(--aurora-blur));
+}
+
+/* A recessed area inside a panel: switch tracks, slider tracks, option wells. */
+@utility well {
+  background-color: var(--aurora-well);
+  border: 1px solid var(--ui-border);
+}
+
+/* ---- Control tiles ----
+   Tiles are fixed-size squares so a grid of them lines up whatever the control type. Every size
+   comes from these variables, so one `data-density` attribute (s/m/l, the user's tile size
+   setting) rescales a whole grid - bigger tiles are easier to hit from VR. The defaults (m) live on
+   :root so a tile also renders correctly outside a grid, e.g. the control editor's preview. */
+:root {
+  --tile-cell: 184px;
+  --tile-gap: 12px;
+  --tile-pad: 13px;
+  --tile-title: 16px;
+  --tile-icon: 40px;
+  --tile-control: 52px;
+  --tile-option: 46px;
+  --tile-value: 32px;
+}
+
+[data-density="s"] {
+  --tile-cell: 150px;
+  --tile-gap: 10px;
+  --tile-pad: 11px;
+  --tile-title: 14px;
+  --tile-icon: 30px;
+  --tile-control: 44px;
+  --tile-option: 38px;
+  --tile-value: 26px;
+}
+
+[data-density="l"] {
+  --tile-cell: 224px;
+  --tile-gap: 14px;
+  --tile-pad: 15px;
+  --tile-title: 18px;
+  --tile-icon: 50px;
+  --tile-control: 60px;
+  --tile-option: 54px;
+  --tile-value: 38px;
+}
+
+/* `dense` packing lets one-cell tiles fill the holes two-cell tiles leave behind. Children carry
+   the span from utils/tiles.ts' controlTileSpan as `data-span`. */
+@utility tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--tile-cell));
+  grid-auto-rows: var(--tile-cell);
+  gap: var(--tile-gap);
+  grid-auto-flow: row dense;
+
+  & > [data-span="m"] {
+    grid-column: span 2;
+  }
+
+  & > [data-span="l"] {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+}
+
+/* Two stretchy columns instead of fixed cells, for narrow screens (the share page on a phone). */
+@utility tile-grid-fluid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

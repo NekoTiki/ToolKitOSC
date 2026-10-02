@@ -8,6 +8,9 @@ export interface Client {
   avatar: string
   displayName: string
   createdAt: number
+  // When they were last connected to the share page - see useClientsDb.ts. Not indexed, so no
+  // schema bump; viewers recorded before it existed don't have one until they next connect.
+  lastSeenAt?: number
   uniqueKey: string
 }
 

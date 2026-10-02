@@ -47,13 +47,25 @@ export function createGeminiProvider(apiKey: string, primaryModel: string): AiPr
       }
 
       const data = (await response.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[]
+        candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[]
       }
-      const content = data.candidates?.[0]?.content?.parts?.[0]?.text
+      const candidate = data.candidates?.[0]
+      const content = candidate?.content?.parts?.[0]?.text
+      const finishReason = candidate?.finishReason
 
-      if (!content) throw new Error('Gemini returned no content')
+      if (!content) throw new Error(`Gemini returned no content${finishReason ? ` (finish reason: ${finishReason})` : ''}`)
 
-      return JSON.parse(content) as AiSuggestionResult
+      // A reply cut off at maxOutputTokens is unparseable JSON - name that cause instead of
+      // surfacing a bare JSON.parse position error.
+      if (finishReason === 'MAX_TOKENS') {
+        throw new Error(`Gemini's reply was cut off at the ${profile.maxCompletionTokens}-token output limit (${content.length} characters)`)
+      }
+
+      try {
+        return JSON.parse(content) as AiSuggestionResult
+      } catch (error) {
+        throw new Error(`Gemini returned invalid JSON (finish reason: ${finishReason ?? 'unknown'}): ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+      }
     }
   }
 }

@@ -18,7 +18,7 @@ import type {
 } from '@vrc-osc-toolkit/shared-ui'
 import { useIntifaceControl, useOpenShockControl } from '@vrc-osc-toolkit/shared-ui'
 import type { ComputedRef } from 'vue'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, toRaw, watch } from 'vue'
 
 const controlsList = ref<ControlGroup[]>([])
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
@@ -51,18 +51,25 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   controlLastUser: typeof controlLastUser
   getControlLastUser: (groupId: string, controlId: string) => LastUser | undefined
   setControlLastUser: (groupId: string, controlId: string, lastUser: LastUser) => void
-  addGroup: () => void
+  // Returns the new group's id, so the caller can navigate to it.
+  addGroup: () => string
   updateGroup: (groupId: string, name: string) => void
   deleteGroup: (groupId: string) => void
   deleteGroups: (groupIds: string[]) => void
+  duplicateGroup: (groupId: string) => string | undefined
   setGroups: (groups: ControlGroup[]) => void
   setGroupHidden: (groupId: string, hidden: boolean) => void
+  setGroupsHidden: (groupIds: string[], hidden: boolean) => void
   isGroupHidden: (groupId: string) => boolean
   setGroupControls: (groupId: string, controls: ControlType[]) => void
   getControl: (groupId: string, controlId: string) => ControlType | undefined
   addControl: (groupId: string, control: ControlType) => void
   updateControl: (groupId: string, control: ControlType) => void
   deleteControl: (groupId: string, controlId: string) => void
+  // Keeps the control's id, so its lock-profile entries, pin and activity history follow it. Goes
+  // to the end of the target group unless `index` says where. Returns the index it was moved from.
+  moveControl: (fromGroupId: string, controlId: string, toGroupId: string, index?: number) => number | undefined
+  setControlPinned: (groupId: string, controlId: string, pinned: boolean) => void
   loadControls: (avatarId: string) => void
 
   // Returns the resolved OpenShock intensity/duration/shockers for an 'open-shock-shocker' command
@@ -148,14 +155,18 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     controlLastUser.value.get(groupId)!.set(controlId, lastUser)
   }
 
-  const addGroup = (): void => {
+  const addGroup = (): string => {
+    const id = self.crypto.randomUUID()
+
     controlsList.value.push({
-      id: self.crypto.randomUUID(),
+      id,
       name: `Group ${controls.value.length + 1}`,
       controls: []
     })
 
     saveControls()
+
+    return id
   }
 
   const updateGroup = (groupId: string, name: string): void => {
@@ -172,6 +183,29 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     controlsList.value = controls.value.filter((g) => g.id !== groupId)
 
     saveControls()
+  }
+
+  // A copy right after the original, with new ids for the group and every control in it - control
+  // ids key activity and lock profiles, so the copy starts with neither. Pins are dropped too, or
+  // Pinned would show every pinned control twice.
+  const duplicateGroup = (groupId: string): string | undefined => {
+    const index = controlsList.value.findIndex((g) => g.id === groupId)
+    const original = controlsList.value[index]
+
+    if (!original) return undefined
+
+    const copy: ControlGroup = {
+      ...structuredClone(toRaw(original)),
+      id: self.crypto.randomUUID(),
+      name: `${original.name} copy`
+    }
+
+    copy.controls = copy.controls.map((control) => ({ ...control, id: self.crypto.randomUUID(), pinned: false }))
+    controlsList.value.splice(index + 1, 0, copy)
+
+    saveControls()
+
+    return copy.id
   }
 
   // One state update + one save, not deleteGroup() looped per id - looping would otherwise fire
@@ -200,6 +234,17 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     if (!group) return
 
     group.hidden = hidden
+
+    saveControls()
+  }
+
+  // Bulk version for the Controls page's multi-select: one state update and one save.
+  const setGroupsHidden = (groupIds: string[], hidden: boolean): void => {
+    const ids = new Set(groupIds)
+
+    controlsList.value.forEach((group) => {
+      if (ids.has(group.id)) group.hidden = hidden
+    })
 
     saveControls()
   }
@@ -253,6 +298,35 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     if (!group) return
 
     group.controls = group.controls.filter((c) => c.id !== controlId)
+
+    saveControls()
+  }
+
+  // One state update + one save, so a viewer never sees the control missing from both groups.
+  const moveControl = (fromGroupId: string, controlId: string, toGroupId: string, index?: number): number | undefined => {
+    const from = controlsList.value.find((g) => g.id === fromGroupId)
+    const to = controlsList.value.find((g) => g.id === toGroupId)
+    const fromIndex = from?.controls.findIndex((c) => c.id === controlId) ?? -1
+
+    if (!from || !to || from === to || fromIndex < 0) return undefined
+
+    const [control] = from.controls.splice(fromIndex, 1)
+
+    to.controls.splice(index ?? to.controls.length, 0, control!)
+
+    saveControls()
+
+    return fromIndex
+  }
+
+  // Writes the raw stored control, not a copy from `controls` - that computed adds derived
+  // locked/unavailable flags that must never be saved.
+  const setControlPinned = (groupId: string, controlId: string, pinned: boolean): void => {
+    const control = controlsList.value.find((g) => g.id === groupId)?.controls.find((c) => c.id === controlId)
+
+    if (!control) return
+
+    control.pinned = pinned
 
     saveControls()
   }
@@ -390,8 +464,10 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     updateGroup,
     deleteGroup,
     deleteGroups,
+    duplicateGroup,
     setGroups,
     setGroupHidden,
+    setGroupsHidden,
     isGroupHidden,
     setGroupControls,
 
@@ -399,6 +475,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     addControl,
     updateControl,
     deleteControl,
+    moveControl,
+    setControlPinned,
 
     loadControls,
     handleCommand

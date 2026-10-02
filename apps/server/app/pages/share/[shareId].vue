@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Control, useMasonry } from '@vrc-osc-toolkit/shared-ui'
+import type { ControlType } from '@vrc-osc-toolkit/shared-ui'
+import { Control, controlTileSpan, randomGuestName } from '@vrc-osc-toolkit/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
 import type { ShareInfo } from '~~/server/api/share/[shareId].get'
@@ -43,39 +44,16 @@ useSeoMeta({
   twitterImage: ogImageUrl
 })
 
-const { controlGroups, authRequired, banned, status, hostStatus, open, close, sendMessage } =
-  useWebsocketClient(shareId)
+// The viewer side of the Cockpit layout (see the desktop client's Controls page): the host's
+// groups in a sidebar - or a row of chips on a phone - and the selected group's tiles filling the
+// page, in the host's theme. Sign-in, banned, offline and disconnected are full-page states
+// rather than modals.
+const { controlGroups, authRequired, banned, status, hostStatus, open, close, sendMessage } = useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
 const connectedOnce = ref(false)
-
-const authRequiredOpen = computed({
-  get: () => authRequired.value !== null,
-  set: (value) => {
-    if (!value) authRequired.value = null
-  }
-})
-
-const bannedOpen = computed({
-  get: () => banned.value !== null,
-  set: (value) => {
-    if (!value) banned.value = null
-  }
-})
-
 const wsOffline = computed(() => status.value === 'CLOSED')
-
-useMasonry(useTemplateRef('groupsGrid'))
-
-const handleChangeUsername = (username: string) => {
-  sendMessage('update-username', { displayName: username })
-  $fetch('/auth/set-username', {
-    method: 'POST',
-    body: { username }
-  })
-
-  authRequired.value = null
-}
+const hostOffline = computed(() => hostStatus.value !== 'online')
 
 watch(status, (newStatus) => {
   if (newStatus === 'OPEN') connectedOnce.value = true
@@ -84,144 +62,317 @@ watch(status, (newStatus) => {
 onMounted(open)
 onBeforeUnmount(close)
 onBeforeUnmount(removeTheme)
+
+const hostName = computed(() => shareInfo.value?.hostName ?? 'This host')
+
+// Each viewer picks their own tile size (their screen, not the host's), remembered per device. A
+// cookie, not localStorage: the server reads it too, so SSR renders the saved size - no hydration
+// mismatch on the S/M/L buttons and no flash of the wrong tile size.
+const density = useCookie<'s' | 'm' | 'l'>('share_tileDensity', { default: () => 'm', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
+
+const query = ref('')
+const search = computed(() => query.value.trim().toLowerCase())
+const selectedId = ref<string | null>(null)
+
+const selectedGroup = computed(() => controlGroups.value.find((group) => group.id === selectedId.value) ?? controlGroups.value[0] ?? null)
+
+const shown = computed<{ control: ControlType; groupId: string }[]>(() => {
+  if (search.value) {
+    return controlGroups.value.flatMap((group) =>
+      group.controls.filter((control) => control.name.toLowerCase().includes(search.value)).map((control) => ({ control, groupId: group.id }))
+    )
+  }
+
+  return selectedGroup.value?.controls.map((control) => ({ control, groupId: selectedGroup.value!.id })) ?? []
+})
+
+const selectGroup = (id: string): void => {
+  query.value = ''
+  selectedId.value = id
+}
+
+const totalControls = computed(() => controlGroups.value.reduce((n, group) => n + group.controls.length, 0))
+
+const sendCommand = (groupId: string, control: ControlType, command: object): void => {
+  sendMessage('command', { groupId, controlId: control.id, controlName: control.name, ...command })
+}
+
+// Username sign-in: the display name goes to the host over WS and into the session. Pre-filled
+// with a random name (set on mount, not during SSR, so it can't cause a hydration mismatch) - keep
+// it, reroll it, or type your own.
+const username = ref('')
+
+const rerollUsername = (): void => {
+  username.value = randomGuestName()
+}
+
+onMounted(rerollUsername)
+
+const submitUsername = (): void => {
+  const name = username.value.trim()
+
+  if (!name) return
+
+  sendMessage('update-username', { displayName: name })
+  void $fetch('/auth/set-username', { method: 'POST', body: { username: name } })
+  authRequired.value = null
+}
+
+// Which full-page state replaces the tiles, if any. Offline with controls still shows them, dimmed
+// under a banner, so viewers see what will come back.
+const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' | 'offline-empty' | 'empty' | null>(() => {
+  if (banned.value) return 'banned'
+  if (authRequired.value) return 'signin'
+  if (!connectedOnce.value) return 'connecting'
+  if (wsOffline.value) return 'disconnected'
+  if (!controlGroups.value.length) return hostOffline.value ? 'offline-empty' : 'empty'
+
+  return null
+})
 </script>
 
 <template>
-  <UMain class="gap-4 flex flex-col py-4">
-    <div
-      class="flex flex-wrap justify-center items-start gap-4"
-      :class="{ grow: !controlGroups.length }"
-    >
-      <UEmpty
-        v-if="status === 'OPEN' && hostStatus === 'online' && controlGroups.length === 0"
-        icon="lucide:circle-slash-2"
-        title="No Controls"
-        description="There are no controls available to display."
-        class="h-min self-center min-w-92"
-      />
-      <UEmpty
-        v-else-if="status === 'OPEN' && hostStatus !== 'online' && controlGroups.length === 0"
-        icon="lucide:wifi-off"
-        title="Host Offline"
-        description="The host is currently offline. Please try again later."
-        class="h-min self-center min-w-92"
-        :ui="{ avatar: 'animate-pulse' }"
-      />
-      <UEmpty
-        v-else-if="wsOffline && connectedOnce"
-        icon="lucide:cloud-off"
-        title="Disconnected"
-        class="h-min self-center min-w-92"
-      >
-        <template #description>
-          You are currently disconnected.<br />Please check your connection.
-        </template>
-        <template #actions>
-          <UButton
-            color="primary"
-            icon="lucide:refresh-cw"
-            label="Reconnect"
-            variant="subtle"
-            @click="open"
-          />
-        </template>
-      </UEmpty>
-      <UEmpty
-        v-else-if="!connectedOnce"
-        icon="lucide:loader-2"
-        title="Connecting..."
-        class="h-min self-center min-w-92"
-        :ui="{ avatar: 'animate-spin' }"
-      />
-      <!-- Same masonry layout as the desktop client's own control panel (App.vue, via shared-ui's
-      useMasonry) - each card keeps its definite, breakpoint-driven width (see the UCollapsible's
-      w-108/2xl:w-164 below) and only gets packed into whichever column is shortest. Its own
-      container (not the outer flex one above) so the empty/offline states above stay laid out as
-      before; the flex-wrap classes are just the pre-mount fallback. -->
+  <div class="flex h-[calc(100dvh-var(--ui-header-height))] flex-col">
+    <div class="flex min-h-15.5 shrink-0 items-center gap-2.5 border-b border-default px-4">
+      <div class="grid min-w-0 flex-1">
+        <span class="truncate text-[22px] leading-tight font-semibold text-highlighted">{{ hostName }}'s controls</span>
+        <span class="truncate font-mono text-[11px] text-muted">{{ totalControls }} controls shared</span>
+      </div>
+      <span class="flex h-10.5 shrink-0 items-center gap-2 rounded-2xl glass px-3 text-sm font-medium">
+        <span
+          class="size-2 rounded-full"
+          :class="hostOffline ? 'bg-error/70' : 'bg-success shadow-[0_0_6px_var(--ui-success)]'"
+        />
+        <span class="max-sm:hidden">{{ hostOffline ? 'Host offline' : 'Host online' }}</span>
+      </span>
       <div
-        v-else
-        ref="groupsGrid"
-        class="flex w-full flex-wrap items-start justify-center gap-4"
+        class="flex shrink-0 gap-0.5 rounded-[calc(var(--ui-radius)*4)] glass p-1 max-sm:hidden"
+        role="group"
+        aria-label="Tile size"
       >
-        <UCard
-          v-for="controlGroup in controlGroups"
-          :key="controlGroup.id"
-          class="w-fit max-w-full"
-          :ui="{ root: 'h-min', body: 'p-4 sm:p-4 space-y-4' }"
+        <button
+          v-for="size in (['s', 'm', 'l'] as const)"
+          :key="size"
+          type="button"
+          class="h-10 min-w-11 cursor-pointer rounded-2xl px-3 text-sm font-medium uppercase transition-colors"
+          :class="density === size ? 'bg-accented text-highlighted' : 'text-muted hover:text-default'"
+          :aria-pressed="density === size"
+          @click="density = size"
         >
-          <!-- A definite width (w-108/2xl:w-164), not max-w-full/w-full - snug-fits exactly 2
-          controls below 2xl (2*w-52 + 1*gap-4 = 27rem = w-108) and exactly 3 at 2xl and up
-          (3*w-52 + 2*gap-4 = 41rem = w-164), matching ControlGroup.vue's own reasoning in the
-          desktop client - including why it's 2xl and not the narrower lg first tried (the jump
-          to 3 columns lands right where the outer row also drops from 2 group cards side by side
-          to 1, at lg but not at 2xl, so lg compounded two reflows into one jarring resize range)
-          and why it has to be a real width, not a max-width, for the card to stay the same size
-          once #content is collapsed. -->
-          <UCollapsible
-            v-model:open="useControlGroupOpen(controlGroup.id).value"
-            class="flex w-108 2xl:w-164 flex-col gap-2"
-            :ui="{ content: 'overflow-visible' }"
-          >
-            <template #default="{ open: cOpen }">
-              <UButton
-                :label="controlGroup.name"
-                color="neutral"
-                variant="subtle"
-                trailing-icon="i-lucide-chevron-down"
-                block
-                :ui="{
-                  trailingIcon: ['transition-transform', cOpen ? 'duration-200 rotate-180' : '']
-                }"
-              />
-            </template>
-
-            <!-- flex-wrap + a fixed width per control, not CSS grid's auto-fit/auto-fill - see
-            ControlGroup.vue's matching comment in the desktop client: the UCollapsible above does
-            have a definite width (w-108/2xl:w-164), but flex-wrap already packs fixed-width
-            controls left-to-right and wraps once that width doesn't fit another one, with no
-            per-breakpoint column-count math to keep in sync by hand. -->
-            <template #content>
-              <div class="flex flex-wrap items-center justify-start gap-4">
-                <Control
-                  v-for="control in controlGroup.controls"
-                  :key="control.id"
-                  class="w-52 shrink-0"
-                  :control="control"
-                  :locked="control.locked"
-                  :unavailable="control.unavailable"
-                  :offline="hostStatus !== 'online'"
-                  :disconnected="wsOffline"
-                  @command="
-                    sendMessage('command', {
-                      groupId: controlGroup.id,
-                      controlId: control.id,
-                      controlName: control.name,
-                      ...$event
-                    })
-                  "
-                />
-              </div>
-            </template>
-          </UCollapsible>
-        </UCard>
+          {{ size }}
+        </button>
       </div>
     </div>
-    <AuthModal
-      v-model:open="authRequiredOpen"
-      :method="authRequired"
-      @update:username="handleChangeUsername"
-    />
-    <BannedModal
-      v-model:open="bannedOpen"
-      :scope="banned?.scope ?? null"
-      :reason="banned?.reason"
-    />
-  </UMain>
-</template>
 
-<style>
-html,
-body {
-  height: 100vh;
-}
-</style>
+    <div class="relative grid min-h-0 flex-1 lg:grid-cols-[16.5rem_minmax(0,1fr)]">
+      <aside class="flex min-h-0 flex-col gap-2.5 border-r border-default p-3.5 max-lg:hidden">
+        <UInput
+          v-model="query"
+          icon="i-lucide-search"
+          placeholder="Search controls"
+          :ui="{ base: 'rounded-2xl' }"
+        />
+        <nav
+          aria-label="Groups"
+          class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1.5"
+        >
+          <button
+            v-for="group in controlGroups"
+            :key="group.id"
+            type="button"
+            class="grid min-h-14.5 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 rounded-2xl border px-2.5 py-2 text-left transition-colors"
+            :class="!search && group.id === selectedGroup?.id ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
+            :title="group.name"
+            @click="selectGroup(group.id)"
+          >
+            <span
+              class="row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
+              :class="!search && group.id === selectedGroup?.id ? 'text-primary' : 'text-muted'"
+            >
+              <UIcon
+                name="i-lucide-folder"
+                class="size-4.5"
+              />
+            </span>
+            <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ group.name }}</b>
+            <small class="col-start-2 truncate text-xs text-muted">{{ group.controls.length }} controls</small>
+          </button>
+        </nav>
+      </aside>
+
+      <section class="relative flex min-h-0 min-w-0 flex-col">
+        <!-- Phones get a scrolling row of group chips instead of the sidebar. -->
+        <nav
+          v-if="controlGroups.length"
+          aria-label="Groups"
+          class="flex shrink-0 gap-2 overflow-x-auto px-4 pt-3 lg:hidden"
+        >
+          <button
+            v-for="group in controlGroups"
+            :key="group.id"
+            type="button"
+            class="flex h-11.5 shrink-0 cursor-pointer items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors"
+            :class="group.id === selectedGroup?.id ? 'border-primary/55 bg-primary/18' : 'border-default bg-(--aurora-glass)'"
+            @click="selectGroup(group.id)"
+          >
+            {{ group.name.length > 24 ? `${group.name.slice(0, 23)}…` : group.name }}
+            <small class="font-mono text-[11px] text-muted">{{ group.controls.length }}</small>
+          </button>
+        </nav>
+
+        <div
+          v-if="!pageState && hostOffline"
+          class="mx-4 mt-3 flex items-center gap-3 rounded-field border border-warning/40 bg-warning/10 px-3.5 py-3 text-sm lg:mx-5.5"
+        >
+          <UIcon
+            name="i-lucide-wifi-off"
+            class="size-5 shrink-0 text-warning"
+          />
+          <span>{{ hostName }} is offline. Controls are paused and come back by themselves.</span>
+        </div>
+
+        <div
+          v-if="!pageState"
+          class="flex min-w-0 shrink-0 items-center gap-3 px-4 pt-3.5 pb-3 max-lg:hidden lg:px-5.5"
+        >
+          <h2
+            class="truncate text-[28px] leading-tight font-semibold text-highlighted"
+            :title="search ? 'Search' : selectedGroup?.name"
+          >
+            {{ search ? 'Search' : selectedGroup?.name }}
+          </h2>
+          <span class="shrink-0 text-[13px] text-muted">{{ shown.length }} controls</span>
+        </div>
+
+        <div
+          v-if="!pageState"
+          class="min-h-0 flex-1 overflow-auto px-4 pb-5.5 max-lg:pt-3 lg:px-5.5"
+        >
+          <div
+            v-if="shown.length"
+            class="tile-grid max-sm:tile-grid-fluid"
+            :data-density="density"
+          >
+            <div
+              v-for="{ control, groupId } in shown"
+              :key="control.id"
+              :data-span="controlTileSpan(control)"
+            >
+              <Control
+                :control="control"
+                :locked="control.locked"
+                :unavailable="control.unavailable"
+                :offline="hostOffline"
+                @command="sendCommand(groupId, control, $event)"
+              />
+            </div>
+          </div>
+          <p
+            v-else
+            class="py-12 text-center text-muted"
+          >
+            {{ search ? `Nothing matches "${query.trim()}".` : 'No controls in this group.' }}
+          </p>
+        </div>
+
+        <ShareStateCard
+          v-else-if="pageState === 'connecting'"
+          icon="i-lucide-loader-circle"
+          title="Connecting"
+          :description="`Joining ${hostName}'s controls…`"
+          spin
+        />
+        <ShareStateCard
+          v-else-if="pageState === 'disconnected'"
+          icon="i-lucide-cloud-off"
+          title="You're disconnected"
+          description="Check your internet connection, then reconnect."
+        >
+          <UButton
+            size="xl"
+            block
+            icon="i-lucide-refresh-cw"
+            @click="open"
+          >
+            Reconnect
+          </UButton>
+        </ShareStateCard>
+        <ShareStateCard
+          v-else-if="pageState === 'signin'"
+          icon="i-lucide-user-round"
+          title="Sign in to join"
+          :description="`${hostName} asks viewers to sign in, so everyone can see who pressed what.`"
+        >
+          <UButton
+            size="xl"
+            block
+            icon="ic:baseline-discord"
+            target="_top"
+            href="/auth/discord"
+            class="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+          >
+            Sign in with Discord
+          </UButton>
+          <template v-if="authRequired === 'username'">
+            <span class="font-mono text-[11px] tracking-widest text-muted uppercase">or pick a display name</span>
+            <form
+              class="flex gap-2"
+              @submit.prevent="submitUsername"
+            >
+              <UInput
+                v-model="username"
+                size="xl"
+                placeholder="Display name"
+                aria-label="Display name"
+                class="min-w-0 flex-1"
+              />
+              <UButton
+                type="button"
+                size="xl"
+                color="neutral"
+                variant="subtle"
+                icon="i-lucide-dices"
+                aria-label="Random name"
+                title="Random name"
+                @click="rerollUsername"
+              />
+              <UButton
+                type="submit"
+                size="xl"
+                :disabled="!username.trim()"
+              >
+                Join
+              </UButton>
+            </form>
+          </template>
+        </ShareStateCard>
+        <ShareStateCard
+          v-else-if="pageState === 'banned'"
+          icon="i-lucide-ban"
+          tone="error"
+          title="You can't use these controls"
+          :description="`${hostName} blocked your ${banned?.scope === 'discord' ? 'Discord account' : 'IP address'} from this share page.`"
+        >
+          <p
+            v-if="banned?.reason"
+            class="rounded-field well px-3.5 py-2.5 text-left text-sm"
+          >
+            <b class="font-semibold">Reason:</b> {{ banned.reason }}
+          </p>
+        </ShareStateCard>
+        <ShareStateCard
+          v-else-if="pageState === 'offline-empty'"
+          icon="i-lucide-wifi-off"
+          :title="`${hostName} is offline`"
+          description="Their controls show up here by themselves when they open the desktop app."
+        />
+        <ShareStateCard
+          v-else
+          icon="i-lucide-inbox"
+          title="Nothing shared yet"
+          :description="`${hostName} is online but hasn't shared any controls. This page updates by itself.`"
+        />
+      </section>
+    </div>
+  </div>
+</template>

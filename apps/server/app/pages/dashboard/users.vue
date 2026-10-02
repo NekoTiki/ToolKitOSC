@@ -1,214 +1,270 @@
 <script setup lang="ts">
-interface AccessEntry {
-  discordId: string
-  username: string | null
-  displayName: string | null
-  avatarUrl: string | null
-  lastSeenAt: string
-  hasAccess: boolean
-  canSelectModel: boolean
-  grantedBy: string | null
-  grantedAt: string | null
-  note: string | null
-  // One overall pool per account per day (see the server's rateLimit.ts), not per-provider - null
-  // for a user with no access yet.
-  credits: { remaining: number } | null
-}
+import type { AccessEntry } from '~/composables/useAdminUserAccess'
+import { accessEntryName } from '~/composables/useAdminUserAccess'
 
-const { adminFetch, redirectIfUnauthorized } = useAdminApi()
-const toast = useToast()
+// Every account that has ever signed in, with its AI access at a glance. Managing one account
+// (credits, model choice, note, revoke) happens on its own page; granting access - including to
+// a Discord ID that hasn't signed in yet - happens from the panel here.
+const DAILY_CREDITS = 20
 
-// useFetch (not adminFetch/onMounted) so this actually runs during SSR - the middleware only
-// checks "logged in" (see middleware/admin.ts), the real admin check is this request's own
-// response, and awaiting it here means the initial HTML an admin gets already has the user list
-// in it instead of a guaranteed-empty shell that fills in after hydration.
-const {
-  data: usersResponse,
-  pending: loading,
-  error: usersError,
-  refresh: reloadUsers
-} = await useFetch<{ users: AccessEntry[] }>('/api/admin/users')
+const { redirectIfUnauthorized } = useAdminApi()
 
-if (usersError.value) await redirectIfUnauthorized(usersError.value)
+const { data, error, refresh } = await useFetch<{ users: AccessEntry[] }>('/api/admin/users')
 
-const users = computed(() => usersResponse.value?.users ?? [])
-const filter = ref('')
+if (error.value) await redirectIfUnauthorized(error.value)
+
+const users = computed(() => data.value?.users ?? [])
+const query = ref('')
+const filter = ref<'all' | 'access' | 'none'>('all')
+
+const matches = (user: AccessEntry, q: string): boolean =>
+  user.discordId.includes(q) || !!user.username?.toLowerCase().includes(q) || !!user.displayName?.toLowerCase().includes(q)
 
 const filteredUsers = computed(() => {
-  const q = filter.value.trim().toLowerCase()
-
-  if (!q) return users.value
+  const q = query.value.trim().toLowerCase()
 
   return users.value.filter(
-    (u) =>
-      u.discordId.includes(q) ||
-      u.username?.toLowerCase().includes(q) ||
-      u.displayName?.toLowerCase().includes(q)
+    (user) => (filter.value === 'all' || (filter.value === 'access') === user.hasAccess) && (!q || matches(user, q))
   )
 })
 
-async function grantAccess(discordId: string, canSelectModel: boolean): Promise<void> {
-  if (!discordId.trim()) return
+const accessCount = computed(() => users.value.filter((user) => user.hasAccess).length)
 
-  await adminFetch('/api/admin/users', {
-    method: 'POST',
-    body: { discordId: discordId.trim(), canSelectModel }
-  })
-  toast.add({ title: 'Access granted', icon: 'i-lucide-check', color: 'success' })
-  await reloadUsers()
+const filterItems = computed(() => [
+  { value: 'all' as const, label: `All · ${users.value.length}` },
+  { value: 'access' as const, label: `AI access · ${accessCount.value}` },
+  { value: 'none' as const, label: 'No access' }
+])
+
+// Grant panel: pick a known account without access, or paste any Discord ID.
+const granting = ref(false)
+const grantQuery = ref('')
+const grantPick = ref<string | null>(null)
+const grantNote = ref('')
+const grantModel = ref(false)
+const grantBusy = ref(false)
+
+const grantCandidates = computed(() => {
+  const q = grantQuery.value.trim().toLowerCase()
+
+  return q ? users.value.filter((user) => !user.hasAccess && matches(user, q)).slice(0, 8) : []
+})
+
+const rawDiscordId = computed(() => (/^\d{15,20}$/.test(grantQuery.value.trim()) ? grantQuery.value.trim() : null))
+const grantTarget = computed(() => grantPick.value ?? rawDiscordId.value)
+
+watch(grantQuery, () => (grantPick.value = null))
+
+const { grant } = useAdminUserAccess(refresh)
+
+const submitGrant = async (): Promise<void> => {
+  if (!grantTarget.value) return
+
+  grantBusy.value = true
+
+  try {
+    await grant(grantTarget.value, { canSelectModel: grantModel.value, note: grantNote.value })
+    granting.value = false
+    grantQuery.value = ''
+    grantNote.value = ''
+    grantModel.value = false
+  } finally {
+    grantBusy.value = false
+  }
 }
 
-async function revokeAccess(discordId: string): Promise<void> {
-  await adminFetch(`/api/admin/users/${discordId}`, { method: 'DELETE' })
-  toast.add({ title: 'Access revoked', icon: 'i-lucide-x', color: 'neutral' })
-  await reloadUsers()
-}
-
-async function toggleCanSelectModel(user: AccessEntry): Promise<void> {
-  await adminFetch(`/api/admin/users/${user.discordId}`, {
-    method: 'PATCH',
-    body: { canSelectModel: !user.canSelectModel }
-  })
-  await reloadUsers()
-}
-
-const creditPopoverFor = ref<string | null>(null)
-const creditAmount = ref(5)
-
-function openCreditPopover(discordId: string): void {
-  creditPopoverFor.value = creditPopoverFor.value === discordId ? null : discordId
-  creditAmount.value = 5
-}
-
-async function addCredits(discordId: string): Promise<void> {
-  if (creditAmount.value < 1) return
-
-  await adminFetch(`/api/admin/users/${discordId}/credits`, {
-    method: 'POST',
-    body: { amount: creditAmount.value }
-  })
-  toast.add({ title: `Added ${creditAmount.value} credits`, icon: 'i-lucide-check', color: 'success' })
-  creditPopoverFor.value = null
-  await reloadUsers()
-}
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <UCard>
-      <div class="mb-3 flex items-center justify-between gap-2">
-        <p class="text-sm font-medium">
-          Every known user ({{ filteredUsers.length }})
+  <div class="grid gap-4">
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="grid flex-1 gap-0.5">
+        <h1 class="text-[28px] leading-tight font-semibold text-highlighted">
+          Users
+        </h1>
+        <p class="text-[13px] text-muted">
+          Everyone who has signed in to this server
         </p>
-        <UInput
-          v-model="filter"
-          icon="i-lucide-search"
-          placeholder="Filter by name or id"
-          class="w-64"
+      </div>
+      <UButton
+        icon="i-lucide-user-plus"
+        @click="granting = !granting"
+      >
+        Grant AI access
+      </UButton>
+    </div>
+
+    <UCard
+      v-if="granting"
+      :ui="{ body: 'grid gap-3.5' }"
+    >
+      <div class="flex items-center gap-2">
+        <h2 class="flex-1 text-[17px] font-semibold text-highlighted">
+          Grant AI access
+        </h2>
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          aria-label="Close"
+          @click="granting = false"
         />
       </div>
-
+      <UFormField label="Find a user, or paste a Discord ID">
+        <UInput
+          v-model="grantQuery"
+          icon="i-lucide-search"
+          placeholder="Name or 18-digit Discord ID"
+          class="w-full"
+          autofocus
+        />
+      </UFormField>
       <div
-        v-if="loading"
-        class="py-8 text-center text-sm text-muted"
+        v-if="grantCandidates.length"
+        class="grid gap-1.5"
       >
-        Loading…
+        <button
+          v-for="user in grantCandidates"
+          :key="user.discordId"
+          type="button"
+          class="flex min-h-13.5 cursor-pointer items-center gap-3 rounded-field border px-3 text-left transition-colors"
+          :class="grantPick === user.discordId ? 'border-primary bg-primary/12' : 'border-transparent bg-(--aurora-well)'"
+          :aria-pressed="grantPick === user.discordId"
+          @click="grantPick = user.discordId"
+        >
+          <UAvatar
+            :src="user.avatarUrl ?? undefined"
+            :alt="accessEntryName(user)"
+            size="sm"
+          />
+          <span class="grid min-w-0 flex-1">
+            <b class="truncate font-medium">{{ accessEntryName(user) }}</b>
+            <small class="truncate font-mono text-[11px] text-muted">{{ user.discordId }}</small>
+          </span>
+          <UIcon
+            v-if="grantPick === user.discordId"
+            name="i-lucide-check"
+            class="size-5 text-primary"
+          />
+        </button>
       </div>
-
-      <div
-        v-else
-        class="flex flex-col divide-y divide-default"
+      <UAlert
+        v-else-if="rawDiscordId"
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-info"
+        title="This ID hasn't signed in yet"
+        description="They'll have access the first time they do."
+      />
+      <p
+        v-else-if="grantQuery.trim()"
+        class="text-sm text-muted"
       >
-        <div
+        No matching users without access.
+      </p>
+      <UFormField
+        label="Note"
+        description="Only admins see this."
+      >
+        <UInput
+          v-model="grantNote"
+          placeholder="Why they have access, for example: beta tester"
+          class="w-full"
+          :maxlength="500"
+        />
+      </UFormField>
+      <USwitch
+        v-model="grantModel"
+        label="Can pick a model"
+        description="Lets them choose the AI provider."
+      />
+      <UButton
+        icon="i-lucide-user-plus"
+        class="w-fit"
+        :disabled="!grantTarget"
+        :loading="grantBusy"
+        @click="submitGrant"
+      >
+        Grant access
+      </UButton>
+    </UCard>
+
+    <div class="flex flex-wrap items-center gap-2.5">
+      <UInput
+        v-model="query"
+        icon="i-lucide-search"
+        placeholder="Search name or Discord ID"
+        class="min-w-52 flex-1"
+      />
+      <AdminSegmented
+        v-model="filter"
+        :items="filterItems"
+        label="Filter"
+      />
+    </div>
+
+    <UCard :ui="{ body: 'p-0 sm:p-0' }">
+      <div
+        v-if="filteredUsers.length"
+        class="divide-y divide-default"
+      >
+        <NuxtLink
           v-for="user in filteredUsers"
           :key="user.discordId"
-          class="flex flex-col gap-2 py-3"
+          :to="`/dashboard/user/${user.discordId}`"
+          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-2.5 transition-colors hover:bg-(--aurora-glass) md:grid-cols-[auto_minmax(0,1fr)_9rem_7rem_8rem_auto]"
         >
-          <div class="flex flex-wrap items-center gap-3">
-            <UAvatar
-              :src="user.avatarUrl ?? undefined"
-              :alt="user.displayName ?? user.discordId"
-            />
-            <div class="min-w-0">
-              <p class="truncate font-medium">
-                {{ user.displayName || user.username || 'Unknown' }}
-              </p>
-              <p class="truncate text-xs text-muted">
-                {{ user.discordId }} · last seen {{ new Date(user.lastSeenAt).toLocaleString() }}
-              </p>
-            </div>
-
-            <div class="ml-auto flex flex-wrap items-center gap-2">
-              <UButton
-                :to="`/dashboard/user/${user.discordId}`"
-                size="xs"
-                variant="soft"
-                color="neutral"
-                icon="i-lucide-bar-chart-3"
-              >
-                Stats
-              </UButton>
-              <template v-if="user.hasAccess">
-                <UBadge
-                  v-if="user.credits"
-                  color="neutral"
-                  variant="subtle"
-                >
-                  Credits: {{ user.credits.remaining }}
-                </UBadge>
-                <UButton
-                  size="xs"
-                  variant="soft"
-                  icon="i-lucide-plus"
-                  @click="openCreditPopover(user.discordId)"
-                >
-                  Credits
-                </UButton>
-                <USwitch
-                  :model-value="user.canSelectModel"
-                  label="Can select model"
-                  @update:model-value="toggleCanSelectModel(user)"
-                />
-                <UButton
-                  size="xs"
-                  color="error"
-                  variant="soft"
-                  icon="i-lucide-user-minus"
-                  @click="revokeAccess(user.discordId)"
-                >
-                  Revoke
-                </UButton>
-              </template>
-              <UButton
-                v-else
-                size="xs"
-                icon="i-lucide-user-plus"
-                @click="grantAccess(user.discordId, false)"
-              >
-                Grant access
-              </UButton>
-            </div>
-          </div>
-
-          <div
-            v-if="creditPopoverFor === user.discordId"
-            class="flex flex-wrap items-center gap-2 rounded-md bg-elevated p-2"
+          <UAvatar
+            :src="user.avatarUrl ?? undefined"
+            :alt="accessEntryName(user)"
+            size="md"
+          />
+          <span class="grid min-w-0">
+            <b class="truncate font-medium text-highlighted">{{ accessEntryName(user) }}</b>
+            <small class="truncate font-mono text-[11.5px] text-muted">{{ user.discordId }}</small>
+          </span>
+          <NuxtTime
+            class="text-sm text-muted max-md:hidden"
+            :datetime="user.lastSeenAt"
+            day="numeric"
+            month="short"
+            hour="2-digit"
+            minute="2-digit"
+          />
+          <UBadge
+            :color="user.hasAccess ? 'success' : 'neutral'"
+            variant="subtle"
+            class="w-fit max-md:hidden"
           >
-            <UInputNumber
-              v-model="creditAmount"
-              :min="1"
-              :max="1000"
-              class="w-28"
-            />
-            <UButton
+            {{ user.hasAccess ? 'AI access' : 'No access' }}
+          </UBadge>
+          <span
+            v-if="user.hasAccess"
+            class="grid gap-1 max-md:hidden"
+          >
+            <span class="font-mono text-xs tabular-nums">{{ user.credits?.remaining ?? 0 }} / {{ DAILY_CREDITS }}</span>
+            <UProgress
+              :model-value="Math.min(user.credits?.remaining ?? 0, DAILY_CREDITS)"
+              :max="DAILY_CREDITS"
               size="xs"
-              @click="addCredits(user.discordId)"
-            >
-              Add
-            </UButton>
-          </div>
-        </div>
+            />
+          </span>
+          <span
+            v-else
+            class="text-sm text-dimmed max-md:hidden"
+          >—</span>
+          <UIcon
+            name="i-lucide-chevron-right"
+            class="size-5 text-muted"
+          />
+        </NuxtLink>
       </div>
+      <p
+        v-else
+        class="py-12 text-center text-muted"
+      >
+        {{ users.length ? 'No users match.' : 'Nobody has signed in yet.' }}
+      </p>
     </UCard>
   </div>
 </template>

@@ -17,6 +17,7 @@ import { AUTHENTICATED_MAX_PER_WINDOW, isRateLimited } from '@renderer/utils/rat
 import { getStableIp } from '@renderer/utils/stableIp'
 import type { ControlTypes } from '@vrc-osc-toolkit/shared-ui'
 import {
+  guestName,
   PROTOCOL_VERSION,
   useIntifaceControl,
   useIntifacePatternControl,
@@ -46,8 +47,9 @@ export type Client = {
 export const clients = ref<Client[]>([])
 
 // Mirrors useWebSocket's own `status` at module scope, same reasoning as `clients` above: the
-// actual socket is only ever opened once (by StatusBar.vue, the only place useWebsocketHost() is
-// called), but other places - e.g. SettingsModal's server status row - need to read the current
+// actual socket is only ever opened once (by StatusBar.vue, the only place useWebsocketHost() may be
+// called - every call opens its own socket, and two host sockets for one account keep kicking each
+// other off the server), but other places - e.g. Settings → Account's server status line - need to read the current
 // connection state without opening a second connection of their own.
 export const hostStatus = ref<WebSocketStatus>('CLOSED')
 // Set from auth-success/protocol-mismatch (both report the server's own version, whether or not
@@ -72,7 +74,7 @@ const clientsMap = computed<Record<string, Client>>(() => {
   return map
 })
 
-export const getGuestAvatar = (peerId: string, username: string = 'Guest'): string =>
+export const getGuestAvatar = (peerId: string, username: string = guestName(peerId)): string =>
   `https://ui-avatars.com/api/?name=${username}&background=random&size=256&${peerId}`
 
 export function useWebsocketHost(): {
@@ -84,16 +86,9 @@ export function useWebsocketHost(): {
   open: () => void
   close: WebSocket['close']
 } {
-  const { controls, visibleControls, setControlLastUser, getControl, isGroupHidden, handleCommand } =
+  const { visibleControls, setControlLastUser, getControl, isGroupHidden, handleCommand } =
     useControls(() => sendControls())
 
-  watch(
-    controls.value,
-    () => {
-      console.log('Controls changed')
-    },
-    { deep: true }
-  )
 
   const { increaseIpCount, increaseDiscordIdCount } = useCommandAnalytics()
   const { token, user, setToken } = useAuth()
@@ -236,13 +231,13 @@ export function useWebsocketHost(): {
           addClient({
             avatar:
               client.user?.discord?.avatar ||
-              getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || 'Guest'),
+              getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || guestName(client.peerId)),
             discordId: client.user?.discord?.id || null,
             displayName:
               client.user?.discord?.name ||
               client.user?.username ||
               client.user?.userDefinedDisplayName ||
-              'Guest',
+              guestName(client.peerId),
             ip
           })
         }
@@ -304,12 +299,12 @@ export function useWebsocketHost(): {
                 setControlLastUser(data.message.groupId, data.message.controlId, {
                   avatar:
                     client.user?.discord?.avatar ||
-                    getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || 'Guest'),
+                    getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || guestName(client.peerId)),
                   displayName:
                     client.user?.discord?.name ||
                     client.user?.username ||
                     client.user?.userDefinedDisplayName ||
-                    'Guest',
+                    guestName(client.peerId),
                   discordId: client.user?.discord?.id,
                   ip
                 })
@@ -349,13 +344,13 @@ export function useWebsocketHost(): {
           addClient({
             avatar:
               client.user?.discord?.avatar ||
-              getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || 'Guest'),
+              getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || guestName(client.peerId)),
             discordId: client.user?.discord?.id || null,
             displayName:
               client.user?.discord?.name ||
               client.user?.username ||
               client.user?.userDefinedDisplayName ||
-              'Guest',
+              guestName(client.peerId),
             ip
           })
         })
@@ -373,7 +368,17 @@ export function useWebsocketHost(): {
     }
   })
 
-  watch(status, (value) => (hostStatus.value = value), { immediate: true })
+  watch(
+    status,
+    (value) => {
+      hostStatus.value = value
+      // Nobody can reach your controls while this socket is down, so nobody is online - this also
+      // stamps everyone's "last seen" (see useClientsDb.ts). The server resends the list on
+      // reconnect.
+      if (value !== 'OPEN') onlineClients.value = []
+    },
+    { immediate: true }
+  )
 
   onMounted(() => open())
 
@@ -389,9 +394,17 @@ export function useWebsocketHost(): {
     send(JSON.stringify({ type, message }))
   }
 
+  // Signed out (or the token not loaded yet): nothing to authenticate with - the watch below sends
+  // it once a token arrives on an open socket.
   const initMessages = (): void => {
+    if (!token.value) return
+
     sendMessage('auth-token', { token: token.value, protocolVersion: PROTOCOL_VERSION })
   }
+
+  watch(token, (value) => {
+    if (value && status.value === 'OPEN') initMessages()
+  })
 
   const sendControls = (): void => {
     sendMessage('controls-update', { avatarId: avatarDetails.value?.id ?? null, groups: visibleControls.value })

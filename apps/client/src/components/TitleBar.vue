@@ -47,7 +47,7 @@ const close = (): void => void appWindow.close()
   this bar rather than the overlay. Stopping propagation here keeps that pointerdown from ever
   reaching `document`, without affecting the buttons' own @click handlers below. -->
   <div
-    class="pointer-events-auto relative z-50 flex h-9 shrink-0 items-center border-b border-default bg-default select-none"
+    class="pointer-events-auto relative z-50 flex h-9 shrink-0 items-center border-b border-default select-none"
     @pointerdown.stop
   >
     <div

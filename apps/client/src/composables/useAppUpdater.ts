@@ -2,16 +2,15 @@ import { check } from '@tauri-apps/plugin-updater'
 import type { Ref } from 'vue'
 import { onMounted, ref } from 'vue'
 
-// Guards the silent launch check below so it only ever runs once app-wide. SettingsModal.vue's
-// overlay is instantiated eagerly (see useSettingsModal.ts), so its own useAppUpdater() call
-// mounts around the same time as App.vue's - without this guard both fire their own check(),
-// and both then toast.add() an "Update available" toast with the same id, landing two entries
-// with the same key in the toasts array that Vue has to reconcile - which looks exactly like the
-// toast flashing/closing instantly.
+// Guards the silent launch check below so it only ever runs once app-wide. Every useAppUpdater()
+// caller registers its own onMounted check - without this guard each would fire check(), and each
+// would then toast.add() an "Update available" toast with the same id, landing two entries with
+// the same key in the toasts array that Vue has to reconcile - which looks exactly like the toast
+// flashing/closing instantly.
 let hasCheckedOnLaunch = false
 
 // Called both unconditionally from App.vue (silent - see useLogRetention.ts for the same
-// call-once-on-mount pattern) and on demand from SettingsModal.vue's "Check for Updates" button
+// call-once-on-mount pattern) and on demand from Settings → About's "Check for updates" button
 // (not silent - that click deserves feedback even when there's nothing to install).
 export function useAppUpdater(): {
   checking: Ref<boolean>
