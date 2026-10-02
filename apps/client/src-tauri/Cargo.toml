@@ -30,11 +30,11 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Dynamically loads openvr_api.dll at runtime (see src/steamvr.rs) - avoids the CMake + bindgen/
 # libclang build-time toolchain the community openvr/openvr_sys crates require.
 libloading = "0.9"
-# Creates the .lnk shortcut VRCX's own "Launch with VRChat" folder watches (see src/vrcx.rs).
-mslnk = "0.1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+# Creates the .lnk shortcut VRCX's own "Launch with VRChat" folder watches (see src/vrcx.rs).
+mslnk = "0.1"
 
 [profile.release]
 panic = "abort"

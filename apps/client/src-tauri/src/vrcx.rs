@@ -6,13 +6,18 @@
 //! layout: https://github.com/vrcx-team/VRCX/issues/1383
 use std::path::PathBuf;
 
-use directories::BaseDirs;
-use mslnk::ShellLink;
-
 const SHORTCUT_NAME: &str = "ToolKitOSC.lnk";
 
+#[cfg(target_os = "windows")]
 fn startup_dir() -> Option<PathBuf> {
-    Some(BaseDirs::new()?.data_dir().join("VRCX").join("startup"))
+    Some(directories::BaseDirs::new()?.data_dir().join("VRCX").join("startup"))
+}
+
+// The startup folder holds Windows .lnk shortcuts, so there's nothing to hook into elsewhere:
+// VRCX reads as not installed and the toggle stays unavailable.
+#[cfg(not(target_os = "windows"))]
+fn startup_dir() -> Option<PathBuf> {
+    None
 }
 
 pub fn is_vrcx_installed() -> bool {
@@ -36,12 +41,23 @@ pub fn set_auto_launch(enable: bool) -> Result<(), String> {
         return Ok(());
     }
 
+    create_shortcut(&path)
+}
+
+#[cfg(target_os = "windows")]
+fn create_shortcut(path: &std::path::Path) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe = exe.to_str().ok_or("Executable path contains invalid characters")?;
     let path = path.to_str().ok_or("VRCX startup folder path contains invalid characters")?;
 
-    let link = ShellLink::new(exe).map_err(|e| e.to_string())?;
+    let link = mslnk::ShellLink::new(exe).map_err(|e| e.to_string())?;
     link.create_lnk(path).map_err(|e| e.to_string())
+}
+
+// Unreachable in practice: shortcut_path() already fails when startup_dir() is None.
+#[cfg(not(target_os = "windows"))]
+fn create_shortcut(_path: &std::path::Path) -> Result<(), String> {
+    Err("VRCX auto-launch is only supported on Windows".to_string())
 }
 
 pub fn get_auto_launch() -> bool {
