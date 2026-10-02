@@ -254,6 +254,17 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
 
     const control = { ...model.value, name: model.value.name!.trim() } as ControlType
 
+    // Drop the empty rows the address lists start with, so they never become OSC addresses.
+    if (control.type === 'boolean-enum') {
+      control.inputs = control.inputs.map((input) => ({
+        ...input,
+        inputAddress: {
+          true: input.inputAddress.true.filter((addr) => addr.trim()),
+          false: input.inputAddress.false.filter((addr) => addr.trim())
+        }
+      }))
+    }
+
     if (!control.id) {
       control.id = getUUID()
       addControl(targetGroupId.value, control)
