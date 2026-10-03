@@ -142,6 +142,35 @@ pub fn start_intiface_central() -> Result<(), String> {
     Ok(())
 }
 
+/// Whether anything is listening on Intiface's address. The webview's WebSocket reports "nothing
+/// there" and "there, but closed on us" the same way (an error, then a close before it ever
+/// opened), so the frontend asks this to tell "it's running but refused us" apart from the rest.
+/// A closed port doesn't mean Intiface Central isn't running, though: it stops listening while a
+/// client is connected (confirmed live) - see `intiface_central_running` for that.
+#[tauri::command]
+pub async fn intiface_port_open(host: String, port: u16) -> bool {
+    let connect = tokio::net::TcpStream::connect((host.as_str(), port));
+    matches!(tokio::time::timeout(std::time::Duration::from_secs(1), connect).await, Ok(Ok(_)))
+}
+
+/// Whether an Intiface Central process is running on this machine, so auto-launch never opens a
+/// second copy - whether its server is busy with another client, stopped, or still starting up.
+/// Matches the process name rather than the path found by `find_intiface_central`, so a copy
+/// installed somewhere else still counts: `intiface_central.exe` on Windows, `intiface_central`
+/// in the Flatpak, `Intiface Central` on macOS.
+#[tauri::command]
+pub fn intiface_central_running() -> bool {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+
+    let mut system = System::new();
+    system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+
+    system.processes().values().any(|process| {
+        let name = process.name().to_string_lossy().to_lowercase();
+        name.starts_with("intiface_central") || name.starts_with("intiface central")
+    })
+}
+
 fn steamvr_manifest_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
