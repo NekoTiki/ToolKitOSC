@@ -30,6 +30,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Dynamically loads openvr_api.dll at runtime (see src/steamvr.rs) - avoids the CMake + bindgen/
 # libclang build-time toolchain the community openvr/openvr_sys crates require.
 libloading = "0.9"
+sysinfo = { version = "0.36.1", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
