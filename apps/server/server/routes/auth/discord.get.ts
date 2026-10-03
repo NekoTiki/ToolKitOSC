@@ -1,7 +1,7 @@
 export default defineOAuthDiscordEventHandler({
   config: {},
   async onSuccess(event, { user }) {
-    const { secure } = await getUserSession(event)
+    const { id, user: previous, secure } = await getUserSession(event)
 
     await replaceUserSession(event, {
       user: {
@@ -15,7 +15,10 @@ export default defineOAuthDiscordEventHandler({
       },
       secure: {
         ...secure,
-        desktopAuthRequestId: undefined
+        desktopAuthRequestId: undefined,
+        // Only a guest session is worth linking; switching from one Discord account to another
+        // shouldn't hand the old account's history to the new one.
+        guestId: previous?.discord ? undefined : id
       }
     })
 

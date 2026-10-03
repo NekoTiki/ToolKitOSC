@@ -49,6 +49,22 @@ export class CommandsDB extends Dexie {
         [discordId+createdAt]
       `
     })
+
+    // v4: a guest's log is looked up by their session id now (see utils/viewers.ts).
+    this.version(4).stores({
+      commands: `
+        ++id,
+        peerId,
+        discordId,
+        ip,
+        controlId,
+        createdAt,
+        [controlId+createdAt],
+        [ip+createdAt],
+        [discordId+createdAt],
+        [peerId+createdAt]
+      `
+    })
   }
 }
 

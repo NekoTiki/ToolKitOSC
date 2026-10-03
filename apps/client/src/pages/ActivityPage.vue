@@ -8,6 +8,7 @@ import { db as clientsDb } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
 import { formatCommandValue, isOpenShockCommandValue } from '@renderer/utils/commandLog'
+import { ownsCommand, viewerCommands, viewerLookup } from '@renderer/utils/viewers'
 import type { ControlTypes } from '@toolkitosc/shared-ui'
 import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
@@ -68,25 +69,23 @@ const commands = useLiveQuery(
   () => ({ ...query.value, viewer: viewer.value }),
   ({ range, control, viewer: client, type }) => {
     const from = since(range)
+
+    if (client && !control) return viewerCommands(client, { from, limit: ROW_LIMIT, filter: (command) => !type || command.type === type })
+
     const collection = control
       ? db.commands.where('[controlId+createdAt]').between([control, from], [control, Infinity])
-      : client?.discordId
-        ? db.commands.where('[discordId+createdAt]').between([client.discordId, from], [client.discordId, Infinity])
-        : client
-          ? db.commands.where('[ip+createdAt]').between([client.ip, from], [client.ip, Infinity])
-          : db.commands.where('createdAt').aboveOrEqual(from)
+      : db.commands.where('createdAt').aboveOrEqual(from)
 
     return collection
       .reverse()
-      .filter((command) => (!type || command.type === type) && (!client || !control || (command.discordId ?? null) === client.discordId || command.ip === client.ip))
+      .filter((command) => (!type || command.type === type) && (!client || ownsCommand(client, command)))
       .limit(ROW_LIMIT)
       .toArray()
   },
   [] as Command[]
 )
 
-const clientFor = (command: Command): Client | undefined =>
-  clients.value.find((client) => client.ip === command.ip && client.discordId === (command.discordId || null))
+const clientFor = computed(() => viewerLookup(clients.value))
 
 const controlName = computed(() => {
   if (!query.value.control) return null

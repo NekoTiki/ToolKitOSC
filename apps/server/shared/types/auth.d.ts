@@ -17,6 +17,10 @@ declare module '#auth-utils' {
   interface SecureSessionData {
     // Optional: only set while a desktop OAuth handoff is in flight, cleared once it completes.
     desktopAuthRequestId?: string
+    // The guest session id this viewer had before logging in with Discord (login gives them a new
+    // one). Sent to the host in the client list so it can fold their guest history into their
+    // Discord account.
+    guestId?: string
   }
 }
 

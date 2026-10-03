@@ -25,6 +25,7 @@ interface Client {
   sessionId: string
   user: User | null
   ip: string
+  guestId?: string
 }
 
 const getRoomId = (url: string): string | null => {
@@ -68,12 +69,12 @@ export default defineWebSocketHandler({
   async open(_peer) {
     const peer: Peer = _peer as unknown as Peer
 
-    const { id: sessionId, user } = await getUserSession(peer)
+    const { id: sessionId, user, secure } = await getUserSession(peer)
 
     const roomId = getRoomId(peer.request.url)
     const userIp = useWsIp(peer)
 
-    addClient(roomId!, sessionId, { peer, sessionId, user: user ?? null, ip: userIp })
+    addClient(roomId!, sessionId, { peer, sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
 
     const controls = hostControls.get(roomId!)
     const args = hostArgs.get(roomId!)!
