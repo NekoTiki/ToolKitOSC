@@ -83,6 +83,7 @@ pub fn run() {
             commands::intiface_central_available,
             commands::start_intiface_central,
             commands::intiface_port_open,
+            commands::intiface_central_running,
             commands::steamvr_available,
             commands::steamvr_set_auto_launch,
             commands::steamvr_get_auto_launch,

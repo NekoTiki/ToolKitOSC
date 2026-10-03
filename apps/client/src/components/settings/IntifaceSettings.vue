@@ -65,6 +65,8 @@ const statusInfo = computed<StatusInfo>(() => {
       return { icon: 'i-lucide-circle-x', class: 'text-error', label: 'Connection failed' }
     case 'refused':
       return { icon: 'i-lucide-ban', class: 'text-error', label: 'Intiface refused the connection' }
+    case 'busy':
+      return { icon: 'i-lucide-ban', class: 'text-error', label: 'Intiface Central isn\'t accepting connections' }
     default:
       return { icon: 'i-lucide-circle-dashed', class: 'text-muted', label: 'Disabled' }
   }
@@ -131,6 +133,14 @@ const batteryTone = (level: number): string => (level <= 15 ? 'bg-error/15 text-
         icon="i-lucide-ban"
         title="Intiface Central is running but refused the connection"
         :description="refusedReason || 'Another app may already be connected to it. Disconnect it in Intiface Central.'"
+      />
+      <UAlert
+        v-else-if="status === 'busy'"
+        color="error"
+        variant="subtle"
+        icon="i-lucide-ban"
+        title="Intiface Central is open but isn't accepting connections"
+        description="Another app may already be connected to it, or its server is stopped. Disconnect the other app or start the server in Intiface Central."
       />
       <UAlert
         v-else-if="launchesUsedUp"

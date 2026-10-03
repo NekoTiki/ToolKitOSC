@@ -103,9 +103,12 @@ export interface IntifaceDevice {
 // running, or its server isn't started); a retry is still scheduled while `enabled` stays true.
 // 'refused': something is listening at the URL but wouldn't accept us (e.g. another app is
 // already connected to Intiface Central) - launching it again wouldn't help, so auto-launch skips it.
+// 'busy': nothing is listening, but Intiface Central is running on this machine. It stops
+// listening while a client is connected, so either another app holds the connection or its server
+// is stopped. Launching another copy wouldn't help either, so auto-launch skips it.
 // 'launching': auto-launch opened Intiface Central and is giving it time to start its server.
 // Fail-closed like OpenShockStatus: only 'connected' counts as available.
-export type IntifaceStatus = 'disabled' | 'connecting' | 'connected' | 'error' | 'refused' | 'launching'
+export type IntifaceStatus = 'disabled' | 'connecting' | 'connected' | 'error' | 'refused' | 'busy' | 'launching'
 
 // Module-scope singletons - every useIntiface() caller shares the same connection/device list, so
 // a change made in Settings (or a toy being plugged in) is instantly reflected everywhere
@@ -294,15 +297,12 @@ const parseTarget = (): { host: string; port: number } | null => {
   }
 }
 
-// Opens Intiface Central if auto-launch applies. Returns whether a launch is in progress (just
-// made, or an earlier one still within its LAUNCH_RETRY_DELAY), so the status can say so. Only for
-// a local URL: launching the app here does nothing for an Intiface running on another machine.
-const maybeAutoLaunch = async (host: string): Promise<boolean> => {
+// Opens Intiface Central if auto-launch applies. Only called once it's known not to be running.
+// Returns whether a launch was made, so the status can say so.
+const maybeAutoLaunch = async (): Promise<boolean> => {
   await installedCheck
 
-  if (!autoLaunch.value || !installed.value || !LOCAL_HOSTS.includes(host)) return false
-  if (lastLaunchAt && Date.now() - lastLaunchAt < LAUNCH_RETRY_DELAY) return true
-  if (launchAttempts.value >= MAX_LAUNCH_ATTEMPTS) return false
+  if (!autoLaunch.value || !installed.value || launchAttempts.value >= MAX_LAUNCH_ATTEMPTS) return false
 
   lastLaunchAt = Date.now()
   launchAttempts.value++
@@ -317,23 +317,32 @@ const maybeAutoLaunch = async (host: string): Promise<boolean> => {
 }
 
 // A connection attempt failed before the handshake finished. The WebSocket API can't say why - a
-// closed port and a server that hangs up on us look the same - so ask the backend whether anything
-// is listening there: if so, Intiface is running but refused us; if not, it isn't running.
+// closed port and a server that hangs up on us look the same - so ask the backend:
+// - something is listening: Intiface is there but refused us ('refused').
+// - a launch is still within its LAUNCH_RETRY_DELAY: give it time ('launching').
+// - nothing listening, but Intiface Central is running: busy with another client or its server is
+//   stopped ('busy'). Checked by process, since it stops listening while a client is connected.
+// - not running: launch it if auto-launch is on ('launching'), else 'error'.
+// Only a local URL gets the process check and auto-launch: for an Intiface on another machine,
+// what runs here says nothing.
 const diagnoseFailure = async (): Promise<void> => {
   const reason = handshakeError
   const target = parseTarget()
+  const local = !!target && LOCAL_HOSTS.includes(target.host)
   const portOpen = target ? await api.intifacePortOpen(target.host, target.port).catch(() => false) : false
+  const launchPending = !!lastLaunchAt && Date.now() - lastLaunchAt < LAUNCH_RETRY_DELAY
+  // Unknown counts as running: never risk opening a second copy.
+  const running = !portOpen && !launchPending && local ? await api.intifaceCentralRunning().catch(() => true) : false
 
   // Turned off, or a new attempt (URL change) started while this was checking.
   if (!enabled.value || socket) return
 
-  if (portOpen) {
-    refusedReason.value = reason
-    status.value = 'refused'
-  } else {
-    refusedReason.value = ''
-    status.value = target && (await maybeAutoLaunch(target.host)) ? 'launching' : 'error'
-  }
+  refusedReason.value = portOpen ? reason : ''
+
+  if (portOpen) status.value = 'refused'
+  else if (launchPending) status.value = 'launching'
+  else if (running) status.value = 'busy'
+  else status.value = local && (await maybeAutoLaunch()) ? 'launching' : 'error'
 
   if (enabled.value && !socket) scheduleReconnect()
 }
@@ -352,7 +361,7 @@ const connect = (): void => {
 
   clearReconnectTimer()
   // Keep showing 'launching'/'refused' across retries instead of flickering to 'connecting' every 3s.
-  if (status.value !== 'launching' && status.value !== 'refused') status.value = 'connecting'
+  if (status.value !== 'launching' && status.value !== 'refused' && status.value !== 'busy') status.value = 'connecting'
   handshakeDone = false
   handshakeError = ''
 

@@ -35,6 +35,7 @@ const INTIFACE_TONE: Record<IntifaceStatus, StatusTone> = {
   launching: 'warning',
   error: 'error',
   refused: 'error',
+  busy: 'error',
   disabled: 'muted'
 }
 
