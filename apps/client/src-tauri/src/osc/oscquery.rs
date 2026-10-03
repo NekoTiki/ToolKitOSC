@@ -60,6 +60,10 @@ const AVATAR_LOAD_PULL_RETRY_DELAY: Duration = Duration::from_secs(2);
 async fn poll_avatar_changes(app: AppHandle, vrchat_osc: Arc<VRChatOSC>, addr: SocketAddr) {
     loop {
         if let Ok(node) = vrchat_osc.get_parameter_from_addr("/avatar/change", addr).await {
+            // VRChat answered, so it's still there - even if no parameter has changed (and so
+            // nothing was pushed) in a while. The frontend's connection status relies on this.
+            let _ = app.emit("vrc-osc-alive", ());
+
             if let Some(OscValue::String(avatar_id)) = node.value.and_then(|v| v.into_iter().next()) {
                 // Feeds the exact same path as a real push (dedup, caching, emit) - see
                 // osc::udp::handle_message.

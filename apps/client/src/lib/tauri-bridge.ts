@@ -40,6 +40,11 @@ export const api = {
   onOscMessageMerge: (callback: (msg: OSCMessage[]) => void): void => {
     void listen<OSCMessage[]>('vrc-osc-message-merge', (event) => callback(event.payload))
   },
+  // Fired every time VRChat answers the backend's periodic avatar check (see poll_avatar_changes),
+  // whether or not anything changed.
+  onOscAlive: (callback: () => void): void => {
+    void listen('vrc-osc-alive', () => callback())
+  },
   sendOscMessage: (msg: OscCommand): void => {
     void invoke('send_osc_message', { msg })
   },
