@@ -15,6 +15,9 @@ pub struct AppState {
     /// module-level `OSC_MESSAGES` Map.
     pub messages: Mutex<HashMap<String, OscMessage>>,
     pub avatar_details: Mutex<Option<AvatarDetails>>,
+    /// The last avatar ID whose OSC config couldn't be read (see `osc::udp::on_avatar_change`).
+    /// The poll retries it every tick, so this only keeps the warning to once per avatar.
+    pub unresolved_avatar: Mutex<Option<String>>,
     pub cache_throttle: CacheThrottle,
     /// The socket already `.connect()`-ed to VRChat's inbound OSC port (127.0.0.1:9000). Set
     /// once at startup by `osc::udp::run`; `commands::send_osc_message` sends directly on it.
@@ -49,6 +52,7 @@ impl Default for AppState {
         Self {
             messages: Mutex::new(HashMap::new()),
             avatar_details: Mutex::new(None),
+            unresolved_avatar: Mutex::new(None),
             cache_throttle: CacheThrottle::default(),
             sender_socket: Mutex::new(None),
             oscquery_target: Mutex::new(None),
