@@ -32,11 +32,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use vrchat_osc::{models::OscNode, models::OscRootNode, models::OscValue, ServiceType, VRChatOSC};
 
 use super::udp::{flatten_packet, handle_message};
+use super::{cache, codec};
 use crate::state::AppState;
+use crate::types::OscMessage;
 
 const SERVICE_NAME: &str = "toolkitosc";
 const VRCHAT_SERVICE_PREFIX: &str = "VRChat-Client-";
@@ -44,6 +46,12 @@ const VRCHAT_SERVICE_PREFIX: &str = "VRChat-Client-";
 /// A few seconds of lag on detecting an avatar swap is an acceptable trade for a plain HTTP GET
 /// on loopback instead of a full push subscription VRChat doesn't support here anyway.
 const AVATAR_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+/// How long `pull_on_avatar_load` waits after an avatar change before reading the parameter tree,
+/// so VRChat has finished swapping it over to the new avatar, and how long it waits before its
+/// one retry.
+const AVATAR_LOAD_PULL_DELAY: Duration = Duration::from_secs(1);
+const AVATAR_LOAD_PULL_RETRY_DELAY: Duration = Duration::from_secs(2);
 
 /// Runs until aborted (see `AppState::avatar_poll_task`). Deliberately has no special-cased retry
 /// logic for VRChat's avatar still loading, a transient GET failure, etc. - the next tick a few
@@ -160,6 +168,32 @@ fn osc_value_to_rosc_type(value: OscValue) -> Option<rosc::OscType> {
 /// cheap, non-disruptive default alongside a "re-pull everything" option.
 pub async fn force_pull_parameters(app: &AppHandle, missing_only: bool) -> Result<usize, String> {
     let state = app.state::<AppState>();
+    let values = fetch_parameter_values(app).await?;
+
+    let already_known: Option<HashSet<String>> =
+        missing_only.then(|| state.messages.lock().unwrap().keys().cloned().collect());
+
+    let mut pulled = 0usize;
+    for message in values {
+        if already_known.as_ref().is_some_and(|known| known.contains(&message.addr)) {
+            continue;
+        }
+
+        handle_message(app, message);
+        pulled += 1;
+    }
+
+    tracing::info!(
+        "Force-pulled {pulled} parameter(s) via OSCQuery{}",
+        if missing_only { " (missing only)" } else { " (all)" }
+    );
+
+    Ok(pulled)
+}
+
+/// Every current avatar parameter value in VRChat's OSCQuery tree, in one HTTP request.
+async fn fetch_parameter_values(app: &AppHandle) -> Result<Vec<rosc::OscMessage>, String> {
+    let state = app.state::<AppState>();
 
     let vrchat_osc =
         state.oscquery.lock().unwrap().clone().ok_or_else(|| "OSCQuery is not ready yet".to_string())?;
@@ -177,24 +211,79 @@ pub async fn force_pull_parameters(app: &AppHandle, missing_only: bool) -> Resul
     let mut leaves = Vec::new();
     collect_leaf_values(&root, &mut leaves);
 
-    let already_known: Option<HashSet<String>> =
-        missing_only.then(|| state.messages.lock().unwrap().keys().cloned().collect());
+    Ok(leaves
+        .into_iter()
+        .filter_map(|(address, value)| {
+            osc_value_to_rosc_type(value).map(|osc_type| rosc::OscMessage { addr: address, args: vec![osc_type] })
+        })
+        .collect())
+}
 
-    let mut pulled = 0usize;
-    for (address, value) in leaves {
-        if already_known.as_ref().is_some_and(|known| known.contains(&address)) {
-            continue;
+fn is_current_avatar(app: &AppHandle, avatar_id: &str) -> bool {
+    app.state::<AppState>().avatar_details.lock().unwrap().as_ref().is_some_and(|d| d.id == avatar_id)
+}
+
+/// Run (spawned) on every avatar change, after the saved values for that avatar have been replayed:
+/// reads every parameter's current value from VRChat, so the app shows the avatar's real state -
+/// including parameters that never change and so would never be pushed, and values that changed
+/// while the app was closed - instead of only what the last session saw.
+///
+/// Merged quietly rather than fed through `handle_message`: that would emit one
+/// `vrc-osc-message` per parameter, and the frontend's Parameter Log would record each one as a
+/// change. Only values that differ from what's already known are emitted, in a single
+/// `vrc-osc-message-merge` event that the frontend merges into its store (unlike
+/// `vrc-osc-message-bulk`, which replaces it).
+pub async fn pull_on_avatar_load(app: AppHandle, avatar_id: String) {
+    tokio::time::sleep(AVATAR_LOAD_PULL_DELAY).await;
+
+    let mut retried = false;
+    let values = loop {
+        // Switched again while waiting: these values would belong to the wrong avatar.
+        if !is_current_avatar(&app, &avatar_id) {
+            return;
         }
 
-        let Some(osc_type) = osc_value_to_rosc_type(value) else { continue };
-        handle_message(app, rosc::OscMessage { addr: address, args: vec![osc_type] });
-        pulled += 1;
+        match fetch_parameter_values(&app).await {
+            Ok(values) => break values,
+            Err(err) if !retried => {
+                tracing::debug!("Avatar-load parameter pull failed, retrying: {err}");
+                retried = true;
+                tokio::time::sleep(AVATAR_LOAD_PULL_RETRY_DELAY).await;
+            }
+            Err(err) => {
+                tracing::warn!("Couldn't load current parameter values for {avatar_id}: {err}");
+                return;
+            }
+        }
+    };
+
+    // Checked again after the request: the avatar may have changed while it was in flight.
+    if !is_current_avatar(&app, &avatar_id) {
+        return;
     }
 
-    tracing::info!(
-        "Force-pulled {pulled} parameter(s) via OSCQuery{}",
-        if missing_only { " (missing only)" } else { " (all)" }
-    );
+    let state = app.state::<AppState>();
+    let (changed, snapshot) = {
+        let mut messages = state.messages.lock().unwrap();
+        let changed: Vec<OscMessage> = values
+            .iter()
+            .map(codec::decode_message)
+            .filter(|message| messages.get(&message.address) != Some(message))
+            .collect();
 
-    Ok(pulled)
+        for message in &changed {
+            messages.insert(message.address.clone(), message.clone());
+        }
+
+        (changed, messages.clone())
+    };
+
+    tracing::info!("Loaded {} current parameter value(s) for {avatar_id} ({} changed)", values.len(), changed.len());
+
+    if changed.is_empty() {
+        return;
+    }
+
+    let _ = app.emit("vrc-osc-message-merge", &changed);
+    cache::save_throttled(app.clone(), &state.cache_throttle, avatar_id, snapshot);
 }

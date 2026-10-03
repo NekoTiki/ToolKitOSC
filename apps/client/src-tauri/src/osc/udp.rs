@@ -121,4 +121,8 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) {
             args: vec![crate::types::OscArg::Str(avatar_id.to_string())]
         }
     );
+
+    // The saved values above show instantly; the avatar's real current values replace them a
+    // moment later.
+    tauri::async_runtime::spawn(super::oscquery::pull_on_avatar_load(app.clone(), details.id.clone()));
 }

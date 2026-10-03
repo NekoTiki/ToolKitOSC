@@ -254,7 +254,7 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
           Pull all
         </UButton>
         <p class="px-1 text-xs text-muted">
-          Asks VRChat for values over OSCQuery.
+          Values load from VRChat when an avatar loads. Use these to ask again.
         </p>
       </div>
     </template>
