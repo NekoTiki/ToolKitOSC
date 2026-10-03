@@ -5,8 +5,16 @@ import { computed, ref } from 'vue'
 const DEFAULT_INTIFACE_URL = 'ws://localhost:12345'
 const URL_STORAGE_KEY = 'intiface_url'
 const ENABLED_STORAGE_KEY = 'intiface_enabled'
+const AUTO_LAUNCH_STORAGE_KEY = 'intiface_autoLaunch'
 const CLIENT_NAME = 'ToolKitOSC'
 const RECONNECT_DELAY = 3000
+
+// Auto-launch: how many times Intiface Central gets opened before giving up, and how long each
+// launch gets to start its server before the next one - without that gap the 3s reconnect loop
+// would open it 5 times in 15s.
+const MAX_LAUNCH_ATTEMPTS = 5
+const LAUNCH_RETRY_DELAY = 15000
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '::1']
 
 // Buttplug protocol (raw JSON messages exchanged with an Intiface Engine over WebSocket) - only
 // the subset needed to enumerate ScalarCmd-capable actuators and send ScalarCmd. No client
@@ -91,9 +99,13 @@ export interface IntifaceDevice {
 // stops every install from silently retrying a WebSocket connection to localhost forever.
 // 'connecting': a connection attempt is in flight, including auto-reconnect retries.
 // 'connected': the connection is open and the server handshake (RequestServerInfo) succeeded.
-// 'error': the last attempt failed; a retry is still scheduled while `enabled` stays true.
+// 'error': the last attempt failed and nothing is listening at the URL (Intiface Central isn't
+// running, or its server isn't started); a retry is still scheduled while `enabled` stays true.
+// 'refused': something is listening at the URL but wouldn't accept us (e.g. another app is
+// already connected to Intiface Central) - launching it again wouldn't help, so auto-launch skips it.
+// 'launching': auto-launch opened Intiface Central and is giving it time to start its server.
 // Fail-closed like OpenShockStatus: only 'connected' counts as available.
-export type IntifaceStatus = 'disabled' | 'connecting' | 'connected' | 'error'
+export type IntifaceStatus = 'disabled' | 'connecting' | 'connected' | 'error' | 'refused' | 'launching'
 
 // Module-scope singletons - every useIntiface() caller shares the same connection/device list, so
 // a change made in Settings (or a toy being plugged in) is instantly reflected everywhere
@@ -109,12 +121,23 @@ const devices = ref<Map<number, IntifaceDevice>>(new Map())
 // launch it instead of just reporting the failure.
 const installed = ref(false)
 
+const autoLaunch = ref<boolean>(localStorage.getItem(AUTO_LAUNCH_STORAGE_KEY) === 'true')
+// Launches since the last successful connection - reset once it connects.
+const launchAttempts = ref(0)
+// Intiface's own error message when it refused the handshake, if it sent one.
+const refusedReason = ref('')
+
 const BATTERY_POLL_INTERVAL = 30000
 
 let socket: WebSocket | null = null
 let messageId = 1
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let batteryPollTimer: ReturnType<typeof setInterval> | null = null
+let lastLaunchAt = 0
+// Per connection attempt: whether the handshake got as far as ServerInfo, and the error Intiface
+// replied with before that, if any.
+let handshakeDone = false
+let handshakeError = ''
 
 const nextId = (): number => messageId++
 
@@ -193,7 +216,9 @@ const handleServerMessage = (raw: string): void => {
 
   messages.forEach((message) => {
     if ('ServerInfo' in message) {
+      handshakeDone = true
       status.value = 'connected'
+      resetLaunchAttempts()
       send([{ RequestDeviceList: { Id: nextId() } }])
       stopBatteryPolling()
       batteryPollTimer = setInterval(requestBatteryReadings, BATTERY_POLL_INTERVAL)
@@ -238,8 +263,79 @@ const handleServerMessage = (raw: string): void => {
       devices.value = next
     } else if ('Error' in message) {
       console.error('Intiface error:', message.Error.ErrorMessage)
+
+      // Rejected during the handshake: close, and let onclose work out why (see diagnoseFailure).
+      if (!handshakeDone) {
+        handshakeError = message.Error.ErrorMessage
+        socket?.close()
+      }
     }
   })
+}
+
+const resetLaunchAttempts = (): void => {
+  launchAttempts.value = 0
+  lastLaunchAt = 0
+  refusedReason.value = ''
+}
+
+// Host and port the WebSocket URL points at, for intifacePortOpen. `new URL` keeps the brackets
+// around an IPv6 hostname, which a socket address doesn't want.
+const parseTarget = (): { host: string; port: number } | null => {
+  try {
+    const parsed = new URL(url.value || DEFAULT_INTIFACE_URL)
+
+    return {
+      host: parsed.hostname.replace(/^\[(.*)\]$/, '$1'),
+      port: Number(parsed.port) || (parsed.protocol === 'wss:' ? 443 : 80)
+    }
+  } catch {
+    return null
+  }
+}
+
+// Opens Intiface Central if auto-launch applies. Returns whether a launch is in progress (just
+// made, or an earlier one still within its LAUNCH_RETRY_DELAY), so the status can say so. Only for
+// a local URL: launching the app here does nothing for an Intiface running on another machine.
+const maybeAutoLaunch = async (host: string): Promise<boolean> => {
+  await installedCheck
+
+  if (!autoLaunch.value || !installed.value || !LOCAL_HOSTS.includes(host)) return false
+  if (lastLaunchAt && Date.now() - lastLaunchAt < LAUNCH_RETRY_DELAY) return true
+  if (launchAttempts.value >= MAX_LAUNCH_ATTEMPTS) return false
+
+  lastLaunchAt = Date.now()
+  launchAttempts.value++
+
+  try {
+    await api.startIntifaceCentral()
+  } catch (error) {
+    console.error('Failed to launch Intiface Central:', error)
+  }
+
+  return true
+}
+
+// A connection attempt failed before the handshake finished. The WebSocket API can't say why - a
+// closed port and a server that hangs up on us look the same - so ask the backend whether anything
+// is listening there: if so, Intiface is running but refused us; if not, it isn't running.
+const diagnoseFailure = async (): Promise<void> => {
+  const reason = handshakeError
+  const target = parseTarget()
+  const portOpen = target ? await api.intifacePortOpen(target.host, target.port).catch(() => false) : false
+
+  // Turned off, or a new attempt (URL change) started while this was checking.
+  if (!enabled.value || socket) return
+
+  if (portOpen) {
+    refusedReason.value = reason
+    status.value = 'refused'
+  } else {
+    refusedReason.value = ''
+    status.value = target && (await maybeAutoLaunch(target.host)) ? 'launching' : 'error'
+  }
+
+  if (enabled.value && !socket) scheduleReconnect()
 }
 
 const scheduleReconnect = (): void => {
@@ -255,7 +351,10 @@ const connect = (): void => {
   }
 
   clearReconnectTimer()
-  status.value = 'connecting'
+  // Keep showing 'launching'/'refused' across retries instead of flickering to 'connecting' every 3s.
+  if (status.value !== 'launching' && status.value !== 'refused') status.value = 'connecting'
+  handshakeDone = false
+  handshakeError = ''
 
   const ws = new WebSocket(url.value || DEFAULT_INTIFACE_URL)
 
@@ -264,18 +363,28 @@ const connect = (): void => {
   ws.onopen = () => {
     send([{ RequestServerInfo: { Id: nextId(), ClientName: CLIENT_NAME, MessageVersion: 3 } }])
   }
-  ws.onmessage = (ev) => handleServerMessage(ev.data)
-  ws.onerror = () => {
-    status.value = 'error'
+  // Everything below ignores a socket that's since been replaced (setUrl reconnects right away,
+  // and the old socket's close event lands after the new one already exists).
+  ws.onmessage = (ev) => {
+    if (socket === ws) handleServerMessage(ev.data)
   }
+  // Always followed by onclose, which sets the status.
+  ws.onerror = () => {}
   ws.onclose = () => {
+    if (socket !== ws) return
+
     devices.value = new Map()
     socket = null
     stopBatteryPolling()
 
-    if (enabled.value) {
-      status.value = 'error'
+    if (!enabled.value) return
+
+    // Dropped after being connected: retry as before, and diagnose that attempt if it fails.
+    if (handshakeDone) {
+      status.value = 'connecting'
       scheduleReconnect()
+    } else {
+      void diagnoseFailure()
     }
   }
 }
@@ -302,6 +411,11 @@ export function useIntiface(): {
   devices: Ref<Map<number, IntifaceDevice>>
   installed: Ref<boolean>
   launch: () => Promise<void>
+  autoLaunch: Ref<boolean>
+  setAutoLaunch: (value: boolean) => void
+  launchAttempts: Ref<number>
+  maxLaunchAttempts: number
+  refusedReason: Ref<string>
   setActuatorIntensity: (
     actuators: { deviceIndex: number; actuatorIndex: number; actuatorType: string }[],
     value: number
@@ -323,6 +437,7 @@ export function useIntiface(): {
     // Reconnect against the new URL immediately, same as OpenShock re-validating on setToken().
     if (enabled.value) {
       disconnect()
+      resetLaunchAttempts()
       connect()
     }
   }
@@ -330,9 +445,23 @@ export function useIntiface(): {
   const setEnabled = (value: boolean): void => {
     enabled.value = value
     localStorage.setItem(ENABLED_STORAGE_KEY, String(value))
+    resetLaunchAttempts()
 
     if (value) connect()
     else disconnect()
+  }
+
+  // Turning it on gives a fresh 5 tries, and retries right away if Intiface isn't running now
+  // rather than waiting for the next scheduled attempt.
+  const setAutoLaunch = (value: boolean): void => {
+    autoLaunch.value = value
+    localStorage.setItem(AUTO_LAUNCH_STORAGE_KEY, String(value))
+
+    if (!value) return
+
+    resetLaunchAttempts()
+
+    if (enabled.value && status.value === 'error' && !socket) connect()
   }
 
   const isAvailable = computed(() => status.value === 'connected')
@@ -402,6 +531,11 @@ export function useIntiface(): {
     devices,
     installed,
     launch,
+    autoLaunch,
+    setAutoLaunch,
+    launchAttempts,
+    maxLaunchAttempts: MAX_LAUNCH_ATTEMPTS,
+    refusedReason,
     setActuatorIntensity
   }
 }
@@ -412,8 +546,13 @@ export function useIntiface(): {
 connect()
 
 // Checked once at module load, same reasoning as connect() above - a filesystem check, not a
-// network one, so no retry loop is needed.
-api
+// network one, so no retry loop is needed. Kept as a promise so auto-launch can wait for the
+// answer: the first connection attempt above can fail before it arrives.
+const installedCheck: Promise<void> = api
   .intifaceCentralAvailable()
-  .then((value) => (installed.value = value))
-  .catch(() => (installed.value = false))
+  .then((value) => {
+    installed.value = value
+  })
+  .catch(() => {
+    installed.value = false
+  })

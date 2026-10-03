@@ -32,7 +32,9 @@ const OPENSHOCK_TONE: Record<OpenShockStatus, StatusTone> = {
 const INTIFACE_TONE: Record<IntifaceStatus, StatusTone> = {
   connected: 'success',
   connecting: 'warning',
+  launching: 'warning',
   error: 'error',
+  refused: 'error',
   disabled: 'muted'
 }
 

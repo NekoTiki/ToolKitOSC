@@ -20,6 +20,7 @@ export const api = {
   },
   intifaceCentralAvailable: (): Promise<boolean> => invoke('intiface_central_available'),
   startIntifaceCentral: (): Promise<void> => invoke('start_intiface_central'),
+  intifacePortOpen: (host: string, port: number): Promise<boolean> => invoke('intiface_port_open', { host, port }),
   steamVrAvailable: (): Promise<IntegrationAvailability> => invoke('steamvr_available'),
   steamVrSetAutoLaunch: (enable: boolean): Promise<void> => invoke('steamvr_set_auto_launch', { enable }),
   steamVrGetAutoLaunch: (): Promise<boolean> => invoke('steamvr_get_auto_launch'),

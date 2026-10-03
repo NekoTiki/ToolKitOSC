@@ -142,6 +142,16 @@ pub fn start_intiface_central() -> Result<(), String> {
     Ok(())
 }
 
+/// Whether anything is listening on Intiface's address. The webview's WebSocket reports "nothing
+/// there" and "there, but closed on us" the same way (an error, then a close before it ever
+/// opened), so the frontend asks this to tell "Intiface Central isn't running" (worth launching)
+/// apart from "it's running but refused us" (launching again wouldn't help).
+#[tauri::command]
+pub async fn intiface_port_open(host: String, port: u16) -> bool {
+    let connect = tokio::net::TcpStream::connect((host.as_str(), port));
+    matches!(tokio::time::timeout(std::time::Duration::from_secs(1), connect).await, Ok(Ok(_)))
+}
+
 fn steamvr_manifest_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
