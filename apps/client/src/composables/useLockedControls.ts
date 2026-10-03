@@ -12,7 +12,14 @@ export type LockedControlGroup = {
   limits?: Record<string, ControlLimits>
 }
 
+// What sessionStorage holds for an avatar whose last pick this session was "No profile" - kept
+// apart from no entry at all, which means "not picked yet this session, use the default".
+const NO_PROFILE = 'none'
+
 const currentLockedControlsGroup = ref<LockedControlGroup['id'] | null>(null)
+// The profile that turns on the first time the avatar loads in a session. Per avatar, kept across
+// restarts.
+const defaultLockedControlsGroup = ref<LockedControlGroup['id'] | null>(null)
 const lockedControlGroups = ref<LockedControlGroup[]>([])
 const lockedControls = computed<LockedControlGroup['lockedControls']>(
   () =>
@@ -23,10 +30,28 @@ const controlLimits = computed<NonNullable<LockedControlGroup['limits']>>(
   () => lockedControlGroups.value.find((g) => g.id === currentLockedControlsGroup.value)?.limits ?? {}
 )
 
+// "3 locked · 2 limited", counted against the controls that exist now (`controlIds`), so entries
+// left behind by deleted controls don't inflate it. A locked control doesn't count as limited.
+export const profileCounts = (
+  profile: Pick<LockedControlGroup, 'lockedControls' | 'limits'>,
+  controlIds: Set<string>
+): { locked: number; limited: number } => ({
+  locked: Object.keys(profile.lockedControls).filter((id) => controlIds.has(id)).length,
+  limited: Object.keys(profile.limits ?? {}).filter((id) => controlIds.has(id) && !profile.lockedControls[id]).length
+})
+
+export const profileSummary = (profile: Pick<LockedControlGroup, 'lockedControls' | 'limits'>, controlIds: Set<string>): string => {
+  const { locked, limited } = profileCounts(profile, controlIds)
+
+  return `${locked} locked${limited ? ` · ${limited} limited` : ''}`
+}
+
 export function useLockedControls(): {
   lockedControls: typeof lockedControls
   controlLimits: typeof controlLimits
   currentLockedControlsGroup: typeof currentLockedControlsGroup
+  defaultLockedControlsGroup: typeof defaultLockedControlsGroup
+  setDefaultLockedControlGroup: (groupId: LockedControlGroup['id'] | null) => void
   lockedControlGroups: typeof lockedControlGroups
   getLockedControlGroup: (groupId: LockedControlGroup['id']) => LockedControlGroup | undefined
   // Returns the new profile's id.
@@ -73,8 +98,16 @@ export function useLockedControls(): {
     lockedControlGroups.value = lockedControlGroups.value.filter((g) => g.id !== groupId)
 
     if (currentLockedControlsGroup.value === groupId) currentLockedControlsGroup.value = null
+    if (defaultLockedControlsGroup.value === groupId) setDefaultLockedControlGroup(null)
 
     saveLockedControlsGroups()
+  }
+
+  const setDefaultLockedControlGroup = (groupId: LockedControlGroup['id'] | null): void => {
+    defaultLockedControlsGroup.value = groupId
+
+    if (groupId) localStorage.setItem(`defaultLockedControlsGroup_${avatarId.value}`, groupId)
+    else localStorage.removeItem(`defaultLockedControlsGroup_${avatarId.value}`)
   }
 
   const saveLockedControlsGroups = (): void => {
@@ -90,20 +123,32 @@ export function useLockedControls(): {
     if (saved) lockedControlGroups.value = JSON.parse(saved)
     else lockedControlGroups.value = []
 
-    currentLockedControlsGroup.value = sessionStorage.getItem(
-      `lockedControlsGroupId_${avatarId.value}`
-    )
+    const exists = (id: string | null): id is string => !!id && lockedControlGroups.value.some((g) => g.id === id)
+
+    const storedDefault = localStorage.getItem(`defaultLockedControlsGroup_${avatarId.value}`)
+
+    defaultLockedControlsGroup.value = exists(storedDefault) ? storedDefault : null
+
+    // The last pick for this avatar this session wins, "No profile" included. sessionStorage is
+    // empty after a restart, so the first load of a session (or a pick whose profile has since
+    // been deleted) falls back to the avatar's default.
+    const picked = sessionStorage.getItem(`lockedControlsGroupId_${avatarId.value}`)
+
+    if (picked === NO_PROFILE) currentLockedControlsGroup.value = null
+    else if (exists(picked)) currentLockedControlsGroup.value = picked
+    else currentLockedControlsGroup.value = defaultLockedControlsGroup.value
   }
 
   watch(currentLockedControlsGroup, (newGroupId) => {
-    if (newGroupId) sessionStorage.setItem(`lockedControlsGroupId_${avatarId.value}`, newGroupId)
-    else sessionStorage.removeItem(`lockedControlsGroupId_${avatarId.value}`)
+    sessionStorage.setItem(`lockedControlsGroupId_${avatarId.value}`, newGroupId ?? NO_PROFILE)
   })
 
   return {
     lockedControls,
     controlLimits,
     currentLockedControlsGroup,
+    defaultLockedControlsGroup,
+    setDefaultLockedControlGroup,
 
     lockedControlGroups,
     getLockedControlGroup,

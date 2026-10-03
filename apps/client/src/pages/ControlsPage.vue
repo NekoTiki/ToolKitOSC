@@ -51,7 +51,7 @@ const {
 } = useControls()
 const { connected: oscConnected } = useOscConnection()
 const { avatarDetails } = useAvatarDetails()
-const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
+const { lockedControlGroups, currentLockedControlsGroup, defaultLockedControlsGroup } = useLockedControls()
 const { density, editMode } = useControlsView()
 const { openModal: confirm } = useAreYouSureModal()
 const { presets, applyPreset } = usePresets()
@@ -709,8 +709,8 @@ const mode = computed<'use' | 'edit'>({
           class="size-5 shrink-0 text-warning"
         />
         <div class="min-w-0 flex-1">
-          Profile "{{ activeProfile.name }}" is on
-          <small class="block text-muted">Controls it locks show a lock badge; viewers can't use them until you turn it off.</small>
+          Profile "{{ activeProfile.name }}" is on{{ activeProfile.id === defaultLockedControlsGroup ? ' (default for this avatar)' : '' }}
+          <small class="block text-muted">Controls it locks or limits show a badge; viewers are held to it until you turn it off.</small>
         </div>
         <UButton
           size="md"

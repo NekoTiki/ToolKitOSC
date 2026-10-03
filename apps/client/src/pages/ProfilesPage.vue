@@ -6,7 +6,7 @@ import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import type { LockedControlGroup } from '@renderer/composables/useLockedControls'
-import { useLockedControls } from '@renderer/composables/useLockedControls'
+import { profileCounts, profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
 import type { ControlLimits, ControlType } from '@toolkitosc/shared-ui'
 import { CONTROL_TYPE_LABELS, isOptionDisabled, LIMITABLE_CONTROL_TYPES, limitRange, normalizeLimits } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
@@ -23,8 +23,16 @@ const router = useRouter()
 const toast = useToast()
 const { avatarDetails } = useAvatarDetails()
 const { controls } = useControls()
-const { lockedControlGroups, currentLockedControlsGroup, getLockedControlGroup, addLockedControlGroup, updateLockedControlGroup, removeLockedControlGroup } =
-  useLockedControls()
+const {
+  lockedControlGroups,
+  currentLockedControlsGroup,
+  defaultLockedControlsGroup,
+  setDefaultLockedControlGroup,
+  getLockedControlGroup,
+  addLockedControlGroup,
+  updateLockedControlGroup,
+  removeLockedControlGroup
+} = useLockedControls()
 const { openModal: confirm } = useAreYouSureModal()
 
 const isNew = route.name === 'profile-new'
@@ -88,21 +96,20 @@ const allControls = computed(() => controls.value.flatMap((group) => group.contr
 const controlIds = computed(() => new Set(allControls.value.map((control) => control.id)))
 const controlTotal = computed(() => allControls.value.length)
 
-// Counted against the controls that exist now, so entries left behind by deleted controls don't
-// inflate them.
-const countLocked = (lockedControls: Record<string, boolean>): number =>
-  Object.keys(lockedControls).filter((id) => controlIds.value.has(id)).length
-const countLimited = (lockedControls: Record<string, boolean>, limits: Record<string, ControlLimits> = {}): number =>
-  Object.keys(limits).filter((id) => controlIds.value.has(id) && !lockedControls[id]).length
+const draftCounts = computed(() => profileCounts(draft.value ?? { lockedControls: {} }, controlIds.value))
 
-const lockedTotal = computed(() => countLocked(draft.value?.lockedControls ?? {}))
-const limitedTotal = computed(() => countLimited(draft.value?.lockedControls ?? {}, draft.value?.limits))
+const summary = (item: LockedControlGroup): string => profileSummary(item, controlIds.value)
 
-const summary = (lockedControls: Record<string, boolean>, limits?: Record<string, ControlLimits>): string => {
-  const limited = countLimited(lockedControls, limits)
+const defaultProfile = computed(() => lockedControlGroups.value.find((g) => g.id === defaultLockedControlsGroup.value) ?? null)
+const isDefault = computed(() => !!profileId.value && defaultLockedControlsGroup.value === profileId.value)
 
-  return `${countLocked(lockedControls)} locked${limited ? ` · ${limited} limited` : ''}`
-}
+const headerMeta = computed(() => {
+  const { locked, limited } = draftCounts.value
+
+  return [`${locked} of ${controlTotal.value} controls locked`, limited ? `${limited} limited` : '', isDefault.value ? 'Default' : '']
+    .filter(Boolean)
+    .join(' · ')
+})
 
 // --- Limits -------------------------------------------------------------------------------------
 
@@ -308,7 +315,24 @@ const profileMenu = (item: LockedControlGroup): DropdownMenuItem[][] => {
         icon: 'i-lucide-pen',
         onSelect: () => (item.id === profileId.value ? void focusName() : void router.push({ path: `/profiles/${item.id}`, query: { rename: '1' } }))
       },
-      { label: 'Duplicate', icon: 'i-lucide-copy', onSelect: () => duplicate(item) }
+      { label: 'Duplicate', icon: 'i-lucide-copy', onSelect: () => duplicate(item) },
+      defaultLockedControlsGroup.value === item.id
+        ? {
+            label: 'Remove default',
+            icon: 'i-lucide-star-off',
+            onSelect: () => {
+              setDefaultLockedControlGroup(null)
+              toast.add({ title: 'This avatar has no default profile now', icon: 'i-lucide-star-off' })
+            }
+          }
+        : {
+            label: 'Set as default',
+            icon: 'i-lucide-star',
+            onSelect: () => {
+              setDefaultLockedControlGroup(item.id)
+              toast.add({ title: `"${item.name}" is now the default for this avatar`, icon: 'i-lucide-star' })
+            }
+          }
     ],
     [{ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => void removeFromMenu(item) }]
   ]
@@ -328,7 +352,7 @@ onBeforeRouteLeave(async () => {
         <b class="text-xl font-semibold text-highlighted">Profiles</b>
       </div>
       <p class="shrink-0 px-0.5 text-[13px] leading-snug text-muted">
-        While a profile is on, viewers can't use the controls it locks, and only get the options and ranges it allows on the rest. You can still use everything.
+        While a profile is on, viewers can't use the controls it locks, and only get the options and ranges it allows on the rest. You can still use everything. The default profile turns on when this avatar first loads after the app starts.
       </p>
 
       <nav
@@ -351,7 +375,7 @@ onBeforeRouteLeave(async () => {
             v-if="currentLockedControlsGroup === null"
             class="row-span-2 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success"
           >Active</span>
-          <small class="col-start-2 truncate text-xs text-muted">Everything unlocked</small>
+          <small class="col-start-2 truncate text-xs text-muted">{{ defaultProfile ? `Everything unlocked · Default: ${defaultProfile.name}` : 'Everything unlocked' }}</small>
         </button>
         <div class="mx-1 h-px shrink-0 bg-(--ui-border)" />
 
@@ -377,6 +401,17 @@ onBeforeRouteLeave(async () => {
             <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.name }}</b>
             <span class="row-span-2 flex items-center gap-1">
               <span
+                v-if="defaultLockedControlsGroup === item.id"
+                class="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary"
+                title="Turns on when this avatar first loads"
+              >
+                <UIcon
+                  name="i-lucide-star"
+                  class="size-3"
+                />
+                Default
+              </span>
+              <span
                 v-if="currentLockedControlsGroup === item.id"
                 class="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning"
               >On</span>
@@ -396,7 +431,7 @@ onBeforeRouteLeave(async () => {
                 />
               </UDropdownMenu>
             </span>
-            <small class="col-start-2 truncate text-xs text-muted">{{ summary(item.lockedControls, item.limits) }}</small>
+            <small class="col-start-2 truncate text-xs text-muted">{{ summary(item) }}</small>
           </RouterLink>
         </UContextMenu>
       </nav>
@@ -420,7 +455,7 @@ onBeforeRouteLeave(async () => {
     >
       <PageHeader
         :title="isNew ? 'New profile' : profile?.name ?? 'Profile'"
-        :meta="`${lockedTotal} of ${controlTotal} controls locked${limitedTotal ? ` · ${limitedTotal} limited` : ''}`"
+        :meta="headerMeta"
         :crumbs="[{ label: 'Profiles', to: '/profiles' }, { label: isNew ? 'New' : profile?.name ?? '' }]"
       >
         <template
