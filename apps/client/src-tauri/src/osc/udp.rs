@@ -75,8 +75,15 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage) {
 
     if osc_msg.address == "/avatar/change" {
         if let Some(crate::types::OscArg::Str(avatar_id)) = osc_msg.args.first() {
-            tracing::info!("Avatar changed: {avatar_id}");
-            on_avatar_change(app, avatar_id);
+            if !on_avatar_change(app, avatar_id) {
+                // Forget the ID so the next poll tick isn't deduped and tries again: on a first
+                // install VRChat often hasn't written this avatar's OSC config yet (it only does
+                // once OSC is enabled), and without this the avatar would never show until the
+                // user switched avatars.
+                // Not emitted either, or the Parameter Log would get a line every retry.
+                state.messages.lock().unwrap().remove("/avatar/change");
+                return;
+            }
         }
     }
 
@@ -91,13 +98,23 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage) {
 
 /// Order matters and mirrors the original exactly: resolve avatar metadata, emit avatar details,
 /// swap the in-memory cache to that avatar's saved cache file, then emit the bulk replay — all
-/// *before* the individual `/avatar/change` message itself gets emitted by the caller.
-fn on_avatar_change(app: &AppHandle, avatar_id: &str) {
+/// *before* the individual `/avatar/change` message itself gets emitted by the caller. Returns
+/// `false` if the avatar's OSC config couldn't be read, so the caller can retry on the next poll.
+fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
+    let state = app.state::<AppState>();
+
     let Some(details) = avatar::get_avatar_details(avatar_id) else {
-        return;
+        // Retried every poll tick until it resolves - only warn once per avatar.
+        let mut unresolved = state.unresolved_avatar.lock().unwrap();
+        if unresolved.as_deref() != Some(avatar_id) {
+            tracing::warn!("No OSC config found yet for {avatar_id} - retrying (is OSC enabled in VRChat?)");
+            *unresolved = Some(avatar_id.to_string());
+        }
+        return false;
     };
 
-    let state = app.state::<AppState>();
+    tracing::info!("Avatar changed: {avatar_id}");
+    *state.unresolved_avatar.lock().unwrap() = None;
 
     *state.avatar_details.lock().unwrap() = Some(details.clone());
     let _ = app.emit("vrc-avatar-details", &details);
@@ -125,4 +142,6 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) {
     // The saved values above show instantly; the avatar's real current values replace them a
     // moment later.
     tauri::async_runtime::spawn(super::oscquery::pull_on_avatar_load(app.clone(), details.id.clone()));
+
+    true
 }
