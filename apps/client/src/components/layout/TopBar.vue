@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
-import { useLockedControls } from '@renderer/composables/useLockedControls'
+import { profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
@@ -17,7 +18,7 @@ const { avatarDetails } = useAvatarDetails()
 const { controls } = useControls()
 const { user, loggedIn } = useAuth()
 const { authUrl } = useWebsocketAuth()
-const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
+const { lockedControlGroups, currentLockedControlsGroup, defaultLockedControlsGroup } = useLockedControls()
 const toast = useToast()
 const router = useRouter()
 
@@ -26,6 +27,50 @@ const controlCount = computed(() => controls.value.reduce((n, group) => n + grou
 const activeProfile = computed(
   () => lockedControlGroups.value.find((group) => group.id === currentLockedControlsGroup.value) ?? null
 )
+
+const profileLabel = computed(() => {
+  if (!activeProfile.value) return 'No profile'
+
+  return activeProfile.value.id === defaultLockedControlsGroup.value ? `${activeProfile.value.name} · Default` : activeProfile.value.name
+})
+
+const controlIds = computed(() => new Set(controls.value.flatMap((group) => group.controls.map((control) => control.id))))
+
+// The profile chip's picker: switch profiles from any page. The pick is remembered for this avatar
+// for the rest of the session (see useLockedControls.ts).
+const profileItems = computed<DropdownMenuItem[][]>(() => [
+  [
+    {
+      label: 'No profile',
+      description: 'Everything unlocked',
+      icon: 'i-lucide-lock-open',
+      type: 'checkbox',
+      checked: currentLockedControlsGroup.value === null,
+      onSelect: () => (currentLockedControlsGroup.value = null)
+    },
+    ...lockedControlGroups.value.map(
+      (profile): DropdownMenuItem => ({
+        label: profile.name,
+        description: [profile.id === defaultLockedControlsGroup.value ? 'Default' : '', profileSummary(profile, controlIds.value)]
+          .filter(Boolean)
+          .join(' · '),
+        icon: profile.id === defaultLockedControlsGroup.value ? 'i-lucide-star' : 'i-lucide-lock',
+        type: 'checkbox',
+        checked: currentLockedControlsGroup.value === profile.id,
+        onSelect: () => (currentLockedControlsGroup.value = profile.id)
+      })
+    )
+  ],
+  [
+    lockedControlGroups.value.length
+      ? {
+          label: 'Manage profiles…',
+          icon: 'i-lucide-settings-2',
+          onSelect: () => void router.push(activeProfile.value ? `/profiles/${activeProfile.value.id}` : '/profiles')
+        }
+      : { label: 'New profile…', icon: 'i-lucide-plus', onSelect: () => void router.push('/profiles/new') }
+  ]
+])
 
 // The share page's room is keyed by the host's Discord id (see the server's host.ts `getRoomId`),
 // so there's nothing to share until that's known. `/s/<code>` is a reversible re-encoding of that
@@ -62,13 +107,19 @@ const copyShareLink = async (): Promise<void> => {
       </span>
     </div>
 
-    <StatusChip
+    <UDropdownMenu
       v-if="avatarDetails?.id"
-      icon="i-lucide-lock"
-      :label="activeProfile?.name ?? 'No profile'"
-      :tone="activeProfile ? 'warning' : 'muted'"
-      @click="router.push(activeProfile ? `/profiles/${activeProfile.id}` : '/profiles')"
-    />
+      :items="profileItems"
+      size="xl"
+      :content="{ align: 'end' }"
+      :ui="{ content: 'min-w-72' }"
+    >
+      <StatusChip
+        icon="i-lucide-lock"
+        :label="profileLabel"
+        :tone="activeProfile ? 'warning' : 'muted'"
+      />
+    </UDropdownMenu>
 
     <StatusBar v-if="loggedIn" />
 
