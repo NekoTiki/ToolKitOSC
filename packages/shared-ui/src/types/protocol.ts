@@ -177,6 +177,9 @@ export interface ClientListEntry {
     email?: string
   } | null
   sessionId?: string
+  // The guest session id this viewer had before logging in with Discord, if they did - lets the
+  // host merge that guest's history into their Discord account. Older servers never send it.
+  guestId?: string
 }
 
 // Desktop client ("host") -> server, over /host. `args-initial` is accepted by the Nitro route

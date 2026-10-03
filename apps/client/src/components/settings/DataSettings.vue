@@ -28,7 +28,7 @@ const clients = useLiveQuery(
 
 // A ban targets an IP or a Discord id; show the viewer it matches when one is known.
 const banLabel = (ban: BannedClient): string =>
-  clients.value.find((client) => (ban.scope === 'ip' ? client.ip === ban.value : client.discordId === ban.value))?.displayName ??
+  clients.value.find((client) => (ban.scope === 'ip' ? client.ips.includes(ban.value) : client.discordId === ban.value))?.displayName ??
   (ban.scope === 'ip' ? 'Unknown viewer (IP)' : 'Unknown viewer (Discord)')
 
 const setRetention = (days: number): void => {

@@ -4,9 +4,8 @@ import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStat
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
-import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
+import { describeViewer, useClientsDb } from '@renderer/composables/useClientsDb'
 import { useClientType } from '@renderer/composables/useClientType'
-import { useCommandAnalytics } from '@renderer/composables/useCommandAnalytics'
 import { useCommandsDb } from '@renderer/composables/useCommandsDb'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -14,10 +13,8 @@ import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
 import { AUTHENTICATED_MAX_PER_WINDOW, isRateLimited } from '@renderer/utils/rateLimit'
-import { getStableIp } from '@renderer/utils/stableIp'
-import type { ControlTypes } from '@toolkitosc/shared-ui'
+import type { ClientListEntry, ControlTypes } from '@toolkitosc/shared-ui'
 import {
-  guestName,
   INTIFACE_PATTERN_OFF_ID,
   isOptionDisabled,
   limitRange,
@@ -33,31 +30,13 @@ import type { Ref, ShallowRef } from 'vue'
 import { watch } from 'vue'
 import { computed, onMounted, ref } from 'vue'
 
-export type Client = {
-  user: {
-    discord?: {
-      id: string
-      avatar: string
-      name: string
-    }
-    userDefinedDisplayName?: string
-    username?: string
-    email?: string
-  } | null
-  peerId: string
-  ip: string
-}
+export type Client = ClientListEntry
 
 export const clients = ref<Client[]>([])
 
 // `clients` has one entry per connection, so the same person on several browsers/tabs shows up
 // more than once - this counts people instead, keyed the same way the Viewers page groups them.
-export const uniqueClientCount = computed(
-  () =>
-    new Set(
-      clients.value.map((client) => formatUniqueKey(getStableIp(client.ip), client.user?.discord?.id || null))
-    ).size
-)
+export const uniqueClientCount = computed(() => new Set(clients.value.map((client) => describeViewer(client).key)).size)
 
 // Mirrors useWebSocket's own `status` at module scope, same reasoning as `clients` above: the
 // actual socket is only ever opened once (by StatusBar.vue, the only place useWebsocketHost() may be
@@ -87,9 +66,6 @@ const clientsMap = computed<Record<string, Client>>(() => {
   return map
 })
 
-export const getGuestAvatar = (peerId: string, username: string = guestName(peerId)): string =>
-  `https://ui-avatars.com/api/?name=${username}&background=random&size=256&${peerId}`
-
 export function useWebsocketHost(): {
   clients: typeof clients
   status: ShallowRef<WebSocketStatus>
@@ -103,7 +79,6 @@ export function useWebsocketHost(): {
     useControls(() => sendControls())
 
 
-  const { increaseIpCount, increaseDiscordIdCount } = useCommandAnalytics()
   const { token, user, setToken } = useAuth()
   const { avatarDetails } = useAvatarDetails()
 
@@ -167,7 +142,7 @@ export function useWebsocketHost(): {
     sendMessage('args-update', msg)
   })
 
-  const { onlineClients, add: addClient } = useClientsDb()
+  const { onlineClients, upsertViewers } = useClientsDb()
   const { isBanned } = useBannedClientsDb()
   const { add: addCommandToDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
@@ -233,26 +208,13 @@ export function useWebsocketHost(): {
         const client = clientsMap.value[data.from]
 
         if (client) {
-          const ip = getStableIp(client.ip)
-
           if (!client.user) {
             client.user = {
               userDefinedDisplayName: data.message.displayName
             }
           } else client.user.userDefinedDisplayName = data.message.displayName
 
-          addClient({
-            avatar:
-              client.user?.discord?.avatar ||
-              getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || guestName(client.peerId)),
-            discordId: client.user?.discord?.id || null,
-            displayName:
-              client.user?.discord?.name ||
-              client.user?.username ||
-              client.user?.userDefinedDisplayName ||
-              guestName(client.peerId),
-            ip
-          })
+          void upsertViewers([describeViewer(client)])
         }
       } else if (data.type === 'command') {
         const client = clientsMap.value[data.from]
@@ -274,10 +236,11 @@ export function useWebsocketHost(): {
           // allowed range. The relay already did this, but the host has the final say.
           const control = getControl(data.message.groupId, data.message.controlId)
           const command = control ? sanitizeCommand(control, data.message) : undefined
-          const ip = getStableIp(client.ip)
+          const viewer = describeViewer(client)
+          const { ip } = viewer
 
           if (command !== null && !isGroupHidden(data.message.groupId)) {
-            const banned = isBanned(ip, client.user?.discord?.id)
+            const banned = isBanned(ip, viewer.discordId)
             const clientValid = checkClient(clientType.value, client)
 
             if (banned) {
@@ -309,20 +272,11 @@ export function useWebsocketHost(): {
                 reason: 'You are sending commands too quickly - slow down.'
               })
             } else {
-              increaseIpCount(ip)
-              if (client.user?.discord?.id) increaseDiscordIdCount(client.user.discord?.id)
-
               if (control) {
                 setControlLastUser(data.message.groupId, data.message.controlId, {
-                  avatar:
-                    client.user?.discord?.avatar ||
-                    getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || guestName(client.peerId)),
-                  displayName:
-                    client.user?.discord?.name ||
-                    client.user?.username ||
-                    client.user?.userDefinedDisplayName ||
-                    guestName(client.peerId),
-                  discordId: client.user?.discord?.id,
+                  avatar: viewer.avatar,
+                  displayName: viewer.displayName,
+                  discordId: viewer.discordId ?? undefined,
                   ip
                 })
               }
@@ -340,7 +294,7 @@ export function useWebsocketHost(): {
                 type: data.message.type,
                 value:
                   openShockResult ?? ('value' in sent ? sent.value : undefined),
-                discordId: client.user?.discord?.id,
+                discordId: viewer.discordId ?? undefined,
                 peerId: client.peerId,
                 ip
               })
@@ -350,28 +304,10 @@ export function useWebsocketHost(): {
       } else if (data.type === 'client-list') {
         clients.value = data.message
 
-        onlineClients.value = data.message.map((client: Client) => {
-          const ip = getStableIp(client.ip)
+        const viewers = (data.message as Client[]).map(describeViewer)
 
-          return formatUniqueKey(ip, client.user?.discord?.id || null)
-        })
-
-        data.message.forEach((client: Client) => {
-          const ip = getStableIp(client.ip)
-
-          addClient({
-            avatar:
-              client.user?.discord?.avatar ||
-              getGuestAvatar(client.peerId, client.user?.userDefinedDisplayName || guestName(client.peerId)),
-            discordId: client.user?.discord?.id || null,
-            displayName:
-              client.user?.discord?.name ||
-              client.user?.username ||
-              client.user?.userDefinedDisplayName ||
-              guestName(client.peerId),
-            ip
-          })
-        })
+        onlineClients.value = new Set(viewers.map((viewer) => viewer.key))
+        void upsertViewers(viewers)
       } else if (data.type === 'ai-credits-update') {
         useAiCredits().applyUpdate(data.message)
       } else if (data.type === 'ai-access-update') {
@@ -393,7 +329,7 @@ export function useWebsocketHost(): {
       // Nobody can reach your controls while this socket is down, so nobody is online - this also
       // stamps everyone's "last seen" (see useClientsDb.ts). The server resends the list on
       // reconnect.
-      if (value !== 'OPEN') onlineClients.value = []
+      if (value !== 'OPEN') onlineClients.value = new Set()
     },
     { immediate: true }
   )

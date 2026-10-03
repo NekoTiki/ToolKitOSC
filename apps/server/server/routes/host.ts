@@ -63,7 +63,8 @@ export const sendClientListToHost = (roomId: RoomId) => {
       ip: client.ip,
       // `peerId` here must match `from`/the clientList map key, which is the session id
       // (see ws/[ws].ts addClient), not crossws' own ephemeral client.peer.id.
-      peerId: client.sessionId
+      peerId: client.sessionId,
+      guestId: client.guestId
     }))
   })
 }

@@ -2,6 +2,7 @@ import type { Client } from '@renderer/db/clients.db'
 import { db as clientsDb } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
+import { viewerLookup } from '@renderer/utils/viewers'
 import { from, useObservable } from '@vueuse/rxjs'
 import type { Subscription } from 'dexie'
 import { liveQuery } from 'dexie'
@@ -15,9 +16,6 @@ export interface ControlActivity {
   lastUsers: ComputedRef<Record<string, Client | undefined>>
   latest: ComputedRef<{ command: Command; client?: Client } | null>
 }
-
-const findClient = (clients: Client[], command: Command): Client | undefined =>
-  clients.find((client) => client.ip === command.ip && client.discordId === (command.discordId || null))
 
 export function useControlActivity(controlIds: Ref<string[]>): ControlActivity {
   const clients = useObservable(from(liveQuery(() => clientsDb.clients.toArray())), {
@@ -55,16 +53,18 @@ export function useControlActivity(controlIds: Ref<string[]>): ControlActivity {
 
   onScopeDispose(() => subscription?.unsubscribe())
 
+  const findClient = computed(() => viewerLookup(clients.value))
+
   const lastUsers = computed(() => {
     const record: Record<string, Client | undefined> = {}
 
-    lastCommands.value.forEach((command) => (record[command.controlId] = findClient(clients.value, command)))
+    lastCommands.value.forEach((command) => (record[command.controlId] = findClient.value(command)))
 
     return record
   })
 
   const latest = computed(() =>
-    latestCommand.value ? { command: latestCommand.value, client: findClient(clients.value, latestCommand.value) } : null
+    latestCommand.value ? { command: latestCommand.value, client: findClient.value(latestCommand.value) } : null
   )
 
   return { lastUsers, latest }

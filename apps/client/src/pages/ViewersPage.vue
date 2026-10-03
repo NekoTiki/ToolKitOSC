@@ -4,14 +4,14 @@ import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { useBanViewerModal } from '@renderer/composables/useBanViewerModal'
-import { formatUniqueKey, useClientsDb } from '@renderer/composables/useClientsDb'
+import { useClientsDb } from '@renderer/composables/useClientsDb'
 import { useLiveQuery } from '@renderer/composables/useLiveQuery'
 import type { Client } from '@renderer/db/clients.db'
 import { db as clientsDb } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
-import { db } from '@renderer/db/commands.db'
 import { formatCommandValue } from '@renderer/utils/commandLog'
 import { timeAgo } from '@renderer/utils/time'
+import { countViewerCommands, viewerCommands } from '@renderer/utils/viewers'
 import { useNow } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -24,7 +24,7 @@ const RECENT_LIMIT = 10
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const { onlineClients } = useClientsDb()
+const { isOnline } = useClientsDb()
 const { isBanned, ban, unban } = useBannedClientsDb()
 const { openModal: openBanModal } = useBanViewerModal()
 const { openModal: confirm } = useAreYouSureModal()
@@ -41,8 +41,6 @@ const search = ref('')
 const now = useNow({ interval: 30_000 })
 
 const lastSeen = (client: Client): string | null => (client.lastSeenAt ? timeAgo(client.lastSeenAt, now.value) : null)
-
-const isOnline = (client: Client): boolean => onlineClients.value.includes(formatUniqueKey(client.ip, client.discordId))
 
 const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -74,16 +72,10 @@ watch(
 
 const banned = computed(() => (selected.value ? isBanned(selected.value.ip, selected.value.discordId) : undefined))
 
-// A viewer's commands are matched by Discord id when they have one, else by IP - the same rule the
-// old per-client log used.
 const commandsFor = (client: Client | null): Promise<{ count: number; recent: Command[] }> => {
   if (!client) return Promise.resolve({ count: 0, recent: [] })
 
-  const range = client.discordId
-    ? db.commands.where('[discordId+createdAt]').between([client.discordId, 0], [client.discordId, Infinity])
-    : db.commands.where('[ip+createdAt]').between([client.ip, 0], [client.ip, Infinity])
-
-  return Promise.all([range.count(), range.clone().reverse().limit(RECENT_LIMIT).toArray()]).then(([count, recent]) => ({ count, recent }))
+  return Promise.all([countViewerCommands(client), viewerCommands(client, { limit: RECENT_LIMIT })]).then(([count, recent]) => ({ count, recent }))
 }
 
 const activity = useLiveQuery(selected, commandsFor, { count: 0, recent: [] as Command[] })
@@ -92,11 +84,10 @@ const showIp = ref(false)
 
 watch(selectedId, () => (showIp.value = false))
 
-const maskedIp = computed(() => {
-  const ip = selected.value?.ip ?? ''
-
-  return showIp.value ? ip : ip.replace(/[^.:]+(?=[.:][^.:]+$)|[^.:]+$/g, '•••')
-})
+// Most recent first. Hidden by default, since the page may be on stream.
+const maskedIps = computed(() =>
+  (selected.value?.ips ?? []).map((ip) => (showIp.value ? ip : ip.replace(/[^.:]+(?=[.:][^.:]+$)|[^.:]+$/g, '•••')))
+)
 
 const doBan = async (): Promise<void> => {
   const client = selected.value
@@ -275,11 +266,18 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
             <dd class="truncate font-mono">
               {{ selected.discordId ?? '—' }}
             </dd>
-            <dt class="text-muted">
-              IP address
+            <dt class="self-start pt-1 text-muted">
+              {{ maskedIps.length > 1 ? `IP addresses (${maskedIps.length})` : 'IP address' }}
             </dt>
-            <dd class="flex min-w-0 items-center gap-2 font-mono">
-              <span class="truncate">{{ maskedIp }}</span>
+            <dd class="flex min-w-0 items-start gap-2 font-mono">
+              <span class="grid min-w-0 gap-0.5 pt-1">
+                <span
+                  v-for="(ip, index) in maskedIps"
+                  :key="index"
+                  class="truncate"
+                  :class="{ 'text-muted': index > 0 }"
+                >{{ ip }}</span>
+              </span>
               <UButton
                 size="sm"
                 color="neutral"
