@@ -4617,6 +4617,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
 
 [[package]]
+name = "toolkitosc"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "directories",
+ "libloading 0.9.0",
+ "mslnk",
+ "rosc",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "vrchat_osc",
+ "winreg 0.56.0",
+]
+
+[[package]]
 name = "tower"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4894,30 +4918,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "toolkitosc"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "chrono",
- "directories",
- "libloading 0.9.0",
- "mslnk",
- "rosc",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "vrchat_osc",
- "winreg 0.56.0",
-]
 
 [[package]]
 name = "vrchat_osc"
