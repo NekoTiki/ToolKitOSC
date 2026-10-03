@@ -35,6 +35,11 @@ export const api = {
   onOscMessageBulk: (callback: (msg: OSCMessage[]) => void): void => {
     void listen<OSCMessage[]>('vrc-osc-message-bulk', (event) => callback(event.payload))
   },
+  // Current values read from VRChat after an avatar loads (see the backend's
+  // pull_on_avatar_load): merged into what's known, not a replacement like the bulk event.
+  onOscMessageMerge: (callback: (msg: OSCMessage[]) => void): void => {
+    void listen<OSCMessage[]>('vrc-osc-message-merge', (event) => callback(event.payload))
+  },
   sendOscMessage: (msg: OscCommand): void => {
     void invoke('send_osc_message', { msg })
   },
