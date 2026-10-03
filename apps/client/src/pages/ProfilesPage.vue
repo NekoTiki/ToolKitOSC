@@ -7,16 +7,17 @@ import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import type { LockedControlGroup } from '@renderer/composables/useLockedControls'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
-import type { ControlType } from '@toolkitosc/shared-ui'
-import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
+import type { ControlLimits, ControlType } from '@toolkitosc/shared-ui'
+import { CONTROL_TYPE_LABELS, isOptionDisabled, LIMITABLE_CONTROL_TYPES, limitRange, normalizeLimits } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
-// Lock profiles: named sets of controls that are locked for everyone while the profile is on
-// (a "stream safe" or "public world" mode, say). The list, with "No profile" first, lives in the
-// sidebar; the selected profile opens in an editor with a switch per control and an Allow all
-// switch per group. Replaces the two locked-control-group modals.
+// Profiles: named sets of rules for viewers while the profile is on (a "stream safe" or "public
+// world" mode, say). Each control can be locked, or - for pickers, sliders and toys - limited to
+// some options or a range. The list, with "No profile" first, lives in the sidebar; the selected
+// profile opens in an editor with a switch per control, an Allow all switch per group, and a Limits
+// panel under each control that supports them. Replaces the two locked-control-group modals.
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
@@ -42,13 +43,18 @@ watch(
 interface Draft {
   name: string
   lockedControls: Record<string, boolean>
+  limits: Record<string, ControlLimits>
 }
 
 const initial = (): Draft | null => {
-  if (isNew) return { name: '', lockedControls: {} }
+  if (isNew) return { name: '', lockedControls: {}, limits: {} }
   if (!profile.value) return null
 
-  return { name: profile.value.name, lockedControls: _.cloneDeep(profile.value.lockedControls) }
+  return {
+    name: profile.value.name,
+    lockedControls: _.cloneDeep(profile.value.lockedControls),
+    limits: _.cloneDeep(profile.value.limits ?? {})
+  }
 }
 
 const draft = ref<Draft | null>(initial())
@@ -78,8 +84,108 @@ const allowedCount = (controlsList: ControlType[]): number => controlsList.filte
 
 const setGroupAllowed = (controlsList: ControlType[], allowed: boolean): void => controlsList.forEach((control) => setAllowed(control, allowed))
 
-const lockedTotal = computed(() => Object.keys(draft.value?.lockedControls ?? {}).length)
-const controlTotal = computed(() => controls.value.reduce((n, group) => n + group.controls.length, 0))
+const allControls = computed(() => controls.value.flatMap((group) => group.controls))
+const controlIds = computed(() => new Set(allControls.value.map((control) => control.id)))
+const controlTotal = computed(() => allControls.value.length)
+
+// Counted against the controls that exist now, so entries left behind by deleted controls don't
+// inflate them.
+const countLocked = (lockedControls: Record<string, boolean>): number =>
+  Object.keys(lockedControls).filter((id) => controlIds.value.has(id)).length
+const countLimited = (lockedControls: Record<string, boolean>, limits: Record<string, ControlLimits> = {}): number =>
+  Object.keys(limits).filter((id) => controlIds.value.has(id) && !lockedControls[id]).length
+
+const lockedTotal = computed(() => countLocked(draft.value?.lockedControls ?? {}))
+const limitedTotal = computed(() => countLimited(draft.value?.lockedControls ?? {}, draft.value?.limits))
+
+const summary = (lockedControls: Record<string, boolean>, limits?: Record<string, ControlLimits>): string => {
+  const limited = countLimited(lockedControls, limits)
+
+  return `${countLocked(lockedControls)} locked${limited ? ` · ${limited} limited` : ''}`
+}
+
+// --- Limits -------------------------------------------------------------------------------------
+
+const isLimitable = (control: ControlType): boolean => (LIMITABLE_CONTROL_TYPES as readonly string[]).includes(control.type)
+const limitsOf = (control: ControlType): ControlLimits | undefined => draft.value?.limits[control.id]
+const isLimited = (control: ControlType): boolean => !isLocked(control) && !!limitsOf(control)
+
+// Stored normalized, so a range dragged back to 0-100 % or a chip turned back on leaves no entry.
+const setLimits = (control: ControlType, limits: ControlLimits | undefined): void => {
+  if (!draft.value) return
+
+  const normalized = normalizeLimits(limits)
+
+  if (normalized) draft.value.limits[control.id] = normalized
+  else delete draft.value.limits[control.id]
+}
+
+const hasRange = (control: ControlType): boolean => control.type === 'slider' || control.type === 'intiface-toy'
+
+const rangeOf = (control: ControlType): number[] => {
+  const { min, max } = limitRange(limitsOf(control))
+
+  return [Math.round(min * 100), Math.round(max * 100)]
+}
+
+const setRange = (control: ControlType, value: number | number[] | undefined): void => {
+  if (!Array.isArray(value) || value.length < 2) return
+
+  const [min, max] = [Math.min(value[0]!, value[1]!), Math.max(value[0]!, value[1]!)]
+
+  setLimits(control, { ...limitsOf(control), min: min / 100, max: max / 100 })
+}
+
+interface LimitOption {
+  key: string | number
+  name: string
+  icon?: string
+}
+
+// The choices a viewer sees on the tile, keyed the way ControlLimits.disabledOptions stores them.
+// A Toy Pattern's "Off" isn't listed: it can't be blocked.
+const optionsOf = (control: ControlType): LimitOption[] => {
+  if (control.type === 'enum') return control.options.map((option) => ({ key: option.value, name: option.name, icon: option.icon }))
+  if (control.type === 'boolean-enum') return control.inputs.map((input) => ({ key: input.id, name: input.name, icon: input.icon }))
+  if (control.type === 'intiface-pattern') return control.allowedPatterns.map((pattern) => ({ key: pattern.id, name: pattern.name, icon: pattern.icon }))
+
+  return []
+}
+
+const isBlocked = (control: ControlType, key: string | number): boolean => isOptionDisabled(limitsOf(control), key)
+
+// Enum and Toggle Logic keep at least one option: blocking every one is what Locked is for. A Toy
+// Pattern always keeps "Off", so all of its patterns can be blocked.
+const isLastAllowed = (control: ControlType, key: string | number): boolean =>
+  control.type !== 'intiface-pattern' &&
+  !isBlocked(control, key) &&
+  optionsOf(control).filter((option) => !isBlocked(control, option.key)).length === 1
+
+const toggleOption = (control: ControlType, key: string | number): void => {
+  if (isLastAllowed(control, key)) return
+
+  const disabled = limitsOf(control)?.disabledOptions ?? []
+
+  setLimits(control, {
+    ...limitsOf(control),
+    disabledOptions: disabled.includes(key) ? disabled.filter((k) => k !== key) : [...disabled, key]
+  })
+}
+
+// Which controls have their Limits panel open. Not part of the draft.
+const expanded = ref(new Set<string>())
+
+const toggleExpanded = (control: ControlType): void => {
+  const next = new Set(expanded.value)
+
+  if (!next.delete(control.id)) next.add(control.id)
+  expanded.value = next
+}
+
+// Leaves out entries for controls that no longer exist. Skipped while no controls are loaded, so a
+// profile is never emptied just because the avatar's controls aren't there yet.
+const pruned = <T,>(record: Record<string, T>): Record<string, T> =>
+  controlTotal.value ? _.pickBy(record, (_value, id) => controlIds.value.has(id)) : record
 
 const isActive = computed(() => !!profileId.value && currentLockedControlsGroup.value === profileId.value)
 
@@ -98,7 +204,7 @@ const save = (): boolean => {
     return false
   }
 
-  const data = { name, lockedControls: draft.value.lockedControls }
+  const data = { name, lockedControls: pruned(draft.value.lockedControls), limits: pruned(draft.value.limits) }
 
   if (isNew) {
     saved.value = true
@@ -108,6 +214,7 @@ const save = (): boolean => {
     void router.push(`/profiles/${id}`)
   } else {
     updateLockedControlGroup(profileId.value!, data)
+    draft.value = { ...draft.value, ...data }
     snapshot = JSON.stringify(draft.value)
     toast.add({ title: `Saved "${name}"`, icon: 'i-lucide-check', color: 'success' })
   }
@@ -154,7 +261,11 @@ onMounted(() => {
 })
 
 const duplicate = (item: LockedControlGroup): void => {
-  const id = addLockedControlGroup({ name: `${item.name} copy`, lockedControls: _.cloneDeep(item.lockedControls) })
+  const id = addLockedControlGroup({
+    name: `${item.name} copy`,
+    lockedControls: _.cloneDeep(item.lockedControls),
+    limits: _.cloneDeep(item.limits ?? {})
+  })
 
   toast.add({ title: `Duplicated "${item.name}"`, icon: 'i-lucide-copy' })
   void router.push(`/profiles/${id}`)
@@ -217,7 +328,7 @@ onBeforeRouteLeave(async () => {
         <b class="text-xl font-semibold text-highlighted">Profiles</b>
       </div>
       <p class="shrink-0 px-0.5 text-[13px] leading-snug text-muted">
-        While a profile is on, the controls it locks can't be used by anyone.
+        While a profile is on, viewers can't use the controls it locks, and only get the options and ranges it allows on the rest. You can still use everything.
       </p>
 
       <nav
@@ -285,7 +396,7 @@ onBeforeRouteLeave(async () => {
                 />
               </UDropdownMenu>
             </span>
-            <small class="col-start-2 truncate text-xs text-muted">{{ Object.keys(item.lockedControls).length }} controls locked</small>
+            <small class="col-start-2 truncate text-xs text-muted">{{ summary(item.lockedControls, item.limits) }}</small>
           </RouterLink>
         </UContextMenu>
       </nav>
@@ -309,7 +420,7 @@ onBeforeRouteLeave(async () => {
     >
       <PageHeader
         :title="isNew ? 'New profile' : profile?.name ?? 'Profile'"
-        :meta="`${lockedTotal} of ${controlTotal} controls locked`"
+        :meta="`${lockedTotal} of ${controlTotal} controls locked${limitedTotal ? ` · ${limitedTotal} limited` : ''}`"
         :crumbs="[{ label: 'Profiles', to: '/profiles' }, { label: isNew ? 'New' : profile?.name ?? '' }]"
       >
         <template
@@ -377,7 +488,7 @@ onBeforeRouteLeave(async () => {
             name="i-lucide-lock"
             class="size-5 shrink-0 text-warning"
           />
-          <span>This profile is on. Locked controls show a lock and can't be used by anyone, including you.</span>
+          <span>This profile is on. Viewers can't use locked controls, and limited ones only within their limits. You can still use everything.</span>
         </div>
       </FormSection>
 
@@ -400,27 +511,108 @@ onBeforeRouteLeave(async () => {
           <div
             v-for="control in group.controls"
             :key="control.id"
-            class="flex min-h-14.5 items-center gap-3.5 py-2"
+            class="grid py-2"
           >
-            <span class="grid size-10 shrink-0 place-items-center rounded-md bg-(--aurora-well) text-muted">
-              <UIcon
-                :name="controlIcon(control)"
-                class="size-5"
+            <div class="flex min-h-14.5 items-center gap-3.5">
+              <span class="grid size-10 shrink-0 place-items-center rounded-md bg-(--aurora-well) text-muted">
+                <UIcon
+                  :name="controlIcon(control)"
+                  class="size-5"
+                />
+              </span>
+              <div class="grid min-w-0 flex-1">
+                <b class="truncate font-medium text-highlighted">{{ control.name }}</b>
+                <small class="text-xs text-muted">{{ CONTROL_TYPE_LABELS[control.type] }}</small>
+              </div>
+              <UButton
+                v-if="isLimitable(control) && !isLocked(control)"
+                icon="i-lucide-sliders-horizontal"
+                :trailing-icon="expanded.has(control.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                color="neutral"
+                variant="ghost"
+                :aria-expanded="expanded.has(control.id)"
+                @click="toggleExpanded(control)"
+              >
+                Limits
+              </UButton>
+              <span
+                class="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                :class="isLocked(control) ? 'bg-warning/15 text-warning' : isLimited(control) ? 'bg-info/15 text-info' : 'bg-success/15 text-success'"
+              >{{ isLocked(control) ? 'Locked' : isLimited(control) ? 'Limited' : 'Allowed' }}</span>
+              <USwitch
+                :model-value="!isLocked(control)"
+                :aria-label="`Allow ${control.name}`"
+                @update:model-value="setAllowed(control, $event)"
               />
-            </span>
-            <div class="grid min-w-0 flex-1">
-              <b class="truncate font-medium text-highlighted">{{ control.name }}</b>
-              <small class="text-xs text-muted">{{ CONTROL_TYPE_LABELS[control.type] }}</small>
             </div>
-            <span
-              class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-              :class="isLocked(control) ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success'"
-            >{{ isLocked(control) ? 'Locked' : 'Allowed' }}</span>
-            <USwitch
-              :model-value="!isLocked(control)"
-              :aria-label="`Allow ${control.name}`"
-              @update:model-value="setAllowed(control, $event)"
-            />
+
+            <!-- Limits: what viewers may do with a control that stays allowed. Indented to line up
+            with the control's name. -->
+            <div
+              v-if="isLimitable(control) && !isLocked(control) && expanded.has(control.id)"
+              class="my-1 ml-13.5 grid gap-3 rounded-field bg-(--aurora-well) p-3.5"
+            >
+              <template v-if="hasRange(control)">
+                <div class="flex items-center justify-between gap-3 text-sm">
+                  <span class="text-muted">Viewers can set it between</span>
+                  <b class="font-semibold text-highlighted tabular-nums">{{ rangeOf(control)[0] }} % – {{ rangeOf(control)[1] }} %</b>
+                </div>
+                <USlider
+                  :model-value="rangeOf(control)"
+                  :min="0"
+                  :max="100"
+                  :step="1"
+                  size="lg"
+                  :aria-label="`${control.name} range for viewers`"
+                  @update:model-value="setRange(control, $event)"
+                />
+              </template>
+
+              <template v-else>
+                <span class="text-sm text-muted">Viewers can pick</span>
+                <div class="flex flex-wrap gap-2">
+                  <UButton
+                    v-if="control.type === 'intiface-pattern'"
+                    icon="i-lucide-power-off"
+                    color="primary"
+                    variant="soft"
+                    disabled
+                    title="Off is always available, so viewers can stop the toy"
+                  >
+                    Off
+                  </UButton>
+                  <UButton
+                    v-for="option in optionsOf(control)"
+                    :key="option.key"
+                    :icon="isBlocked(control, option.key) ? 'i-lucide-ban' : option.icon || 'i-lucide-check'"
+                    :color="isBlocked(control, option.key) ? 'neutral' : 'primary'"
+                    :variant="isBlocked(control, option.key) ? 'outline' : 'soft'"
+                    :class="{ 'line-through opacity-70': isBlocked(control, option.key) }"
+                    :disabled="isLastAllowed(control, option.key)"
+                    :title="isLastAllowed(control, option.key) ? 'At least one option stays allowed. Lock the control instead.' : undefined"
+                    :aria-pressed="!isBlocked(control, option.key)"
+                    @click="toggleOption(control, option.key)"
+                  >
+                    {{ option.name }}
+                  </UButton>
+                </div>
+              </template>
+
+              <div
+                v-if="limitsOf(control)"
+                class="flex justify-end"
+              >
+                <UButton
+                  icon="i-lucide-rotate-ccw"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  @click="setLimits(control, undefined)"
+                >
+                  Remove limits
+                </UButton>
+              </div>
+            </div>
           </div>
           <p
             v-if="!group.controls.length"
@@ -436,7 +628,7 @@ onBeforeRouteLeave(async () => {
       v-else
       icon="i-lucide-lock"
       title="No profiles yet"
-      description="A profile locks chosen controls for everyone at once, for example while streaming or in a public world."
+      description="A profile locks or limits chosen controls for viewers at once, for example while streaming or in a public world."
     >
       <template #actions>
         <UButton

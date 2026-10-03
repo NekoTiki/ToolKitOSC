@@ -78,6 +78,10 @@ export interface BaseControl {
   // usable regardless of any lock group. Computed client-side (see useControls.ts) and enforced
   // host-side the same way `locked` is (see useWebsocketHost.ts).
   unavailable?: boolean
+  // Set by the host's active profile, like `locked`: narrows what viewers may do with a control
+  // that is still usable. Computed client-side (see useControls.ts), never saved, and enforced by
+  // sanitizeCommand (utils/controlLimits.ts) on the host and the relay.
+  limits?: ControlLimits
   type: ControlTypes
   // Tile width in a tile grid. Left unset, the width is automatic (see utils/tiles.ts'
   // controlTileSpan): one cell for most types, two for option pickers. 'wide' asks for two cells.
@@ -87,6 +91,22 @@ export interface BaseControl {
 }
 
 export type ControlSize = 'normal' | 'wide'
+
+// What a profile allows viewers to do with one control. Every field is optional; absent = no limit.
+// Options are keyed by something stable rather than their index, so reordering them in the editor
+// doesn't change which ones are blocked, and a disabled list (not an allowed one) means an option
+// added later starts out allowed.
+export interface ControlLimits {
+  // Slider and Toy: the range a viewer can set, 0-1.
+  min?: number
+  max?: number
+  // Enum: option `value`s. Toggle Logic: input `id`s. Toy Pattern: pattern `id`s - never 'off',
+  // which stays available so a viewer can always stop a toy.
+  disabledOptions?: (string | number)[]
+}
+
+// The control types a profile can set limits on.
+export const LIMITABLE_CONTROL_TYPES = ['boolean-enum', 'enum', 'slider', 'intiface-toy', 'intiface-pattern'] as const satisfies ControlTypes[]
 
 export interface BooleanControl extends BaseControl {
   type: 'boolean'

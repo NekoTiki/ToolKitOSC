@@ -792,6 +792,7 @@ const mode = computed<'use' | 'edit'>({
                 :last-user="lastUsers[item.control.id]"
                 :locked-indicator="item.control.locked"
                 :unavailable-indicator="item.control.unavailable"
+                :limited-indicator="!!item.control.limits"
                 @edit="openEditor(item.groupId, item.control.id)"
                 @logs="openActivity(item.control.id)"
                 @delete="deleteTile(item)"

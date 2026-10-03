@@ -20,6 +20,10 @@ export interface WsEnvelope<Type extends string, Message> {
 //
 // v2: 'controls-update' (host -> server) changed from a bare ControlGroup[] to
 // ControlsUpdateMessage (adds `avatarId`) - see that type's own comment.
+//
+// Additive, no bump: controls may carry an optional `limits` (ControlLimits, from the host's active
+// profile). An older server forwards it untouched and an older viewer page ignores it; the host
+// enforces it either way, so mixed versions keep working.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility

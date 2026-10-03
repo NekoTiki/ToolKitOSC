@@ -11,6 +11,8 @@ const { get } = useOscMessages()
 const props = defineProps<{
   title: string
   icon?: string
+  // Option keys the active profile blocks for viewers (see ControlLimits).
+  disabledOptions?: (string | number)[]
   address: string
   items: EnumControl['options']
 }>()
@@ -20,7 +22,7 @@ const emit = defineEmits<{ (e: 'update:value', index: number): void }>()
 const currentValue = computed(() => get<number>(props.address, 0))
 
 const options = computed(() =>
-  props.items.map((item) => ({ key: item.value, name: item.name, icon: item.icon, selected: item.value === currentValue.value }))
+  props.items.map((item) => ({ key: item.value, name: item.name, icon: item.icon, disabled: !!props.disabledOptions?.includes(item.value), selected: item.value === currentValue.value }))
 )
 </script>
 

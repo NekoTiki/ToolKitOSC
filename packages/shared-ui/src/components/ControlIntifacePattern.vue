@@ -17,6 +17,8 @@ const props = defineProps<{
   title: string
   icon?: string
   patterns: IntifacePatternRef[]
+  // Pattern ids the active profile blocks for viewers. Never 'off'.
+  disabledOptions?: (string | number)[]
 }>()
 
 const emit = defineEmits<{ (e: 'update:value', patternId: string): void }>()
@@ -33,7 +35,7 @@ const chips = computed<IntifacePatternRef[]>(() => [
 ])
 
 const options = computed(() =>
-  chips.value.map((chip) => ({ key: chip.id, name: chip.name, icon: chip.icon, selected: chip.id === currentPatternId.value }))
+  chips.value.map((chip) => ({ key: chip.id, name: chip.name, icon: chip.icon, disabled: chip.id !== INTIFACE_PATTERN_OFF_ID && !!props.disabledOptions?.includes(chip.id), selected: chip.id === currentPatternId.value }))
 )
 </script>
 

@@ -60,7 +60,7 @@ const badges = inject(
         v-for="badge in badges"
         :key="badge.key"
         class="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-(--aurora-well)"
-        :class="badge.tone === 'warning' ? 'text-warning' : 'text-muted'"
+        :class="badge.tone === 'warning' ? 'text-warning' : badge.tone === 'info' ? 'text-info' : 'text-muted'"
         :title="badge.label"
       >
         <img

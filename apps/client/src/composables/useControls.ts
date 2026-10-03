@@ -17,6 +17,7 @@ import type {
   StepEnumControl
 } from '@toolkitosc/shared-ui'
 import { useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
+import _ from 'lodash'
 import type { ComputedRef } from 'vue'
 import { computed, ref, toRaw, watch } from 'vue'
 
@@ -82,7 +83,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   ) => OpenShockCommandResult | undefined
 } {
   const { avatarDetails } = useAvatarDetails(() => loadControls())
-  const { lockedControls } = useLockedControls()
+  const { lockedControls, controlLimits } = useLockedControls()
   const { command: osCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
   const {
@@ -101,6 +102,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       controls: controlGroup.controls.map((control) => ({
         ...control,
         locked: lockedControls.value[control.id] ?? false,
+        limits: controlLimits.value[control.id],
         // OpenShock/Intiface controls are unavailable to everyone - same as a locked control -
         // unless the service is actually reachable (see useOpenShock.ts/useIntiface.ts). An
         // Intiface toy/pattern control is additionally unavailable when every toy it targets has
@@ -180,7 +182,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   }
 
   const deleteGroup = (groupId: string): void => {
-    controlsList.value = controls.value.filter((g) => g.id !== groupId)
+    controlsList.value = controlsList.value.filter((g) => g.id !== groupId)
 
     saveControls()
   }
@@ -214,7 +216,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const deleteGroups = (groupIds: string[]): void => {
     const idsToDelete = new Set(groupIds)
 
-    controlsList.value = controls.value.filter((g) => !idsToDelete.has(g.id))
+    controlsList.value = controlsList.value.filter((g) => !idsToDelete.has(g.id))
 
     saveControls()
   }
@@ -223,7 +225,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   // a time like the other setters here - the new order is the only thing that changed, so it's
   // taken as-is instead of matched back up by id.
   const setGroups = (groups: ControlGroup[]): void => {
-    controlsList.value = groups
+    // Callers pass groups from `controls`, so drop the derived flags it adds.
+    controlsList.value = groups.map((group) => ({
+      ...group,
+      controls: group.controls.map((control) => _.omit(control, ['locked', 'unavailable', 'limits']) as ControlType)
+    }))
 
     saveControls()
   }
@@ -341,8 +347,9 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     }
   }
 
+  // The raw list, not `controls`: the derived locked/unavailable/limits flags must never be saved.
   const saveControls = (): void => {
-    localStorage.setItem(`controls_${avatarId.value}`, JSON.stringify(controls.value))
+    localStorage.setItem(`controls_${avatarId.value}`, JSON.stringify(controlsList.value))
   }
 
   const handleCommand = (
