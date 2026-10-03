@@ -8,7 +8,7 @@ export interface TileBadge {
   label: string
   icon?: string
   avatar?: string
-  tone?: 'warning' | 'muted'
+  tone?: 'warning' | 'info' | 'muted'
 }
 
 export const TILE_BADGES: InjectionKey<ComputedRef<TileBadge[]>> = Symbol('tile-badges')

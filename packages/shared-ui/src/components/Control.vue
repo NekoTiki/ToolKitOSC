@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, provide } from 'vue'
 
-import type { CommandWithoutIds, ControlType, LastUser } from '../types/controls'
+import type { CommandWithoutIds, ControlLimits, ControlType, LastUser } from '../types/controls'
 import ControlBoolean from './ControlBoolean.vue'
 import ControlBooleanEnum from './ControlBooleanEnum.vue'
 import ControlBooleanGroup from './ControlBooleanGroup.vue'
@@ -25,9 +25,13 @@ type Props = {
   // Blocking states (viewer side): the tile can't be used at all.
   locked?: boolean
   unavailable?: boolean
+  // The active profile's limits (viewer side): blocked options can't be picked, sliders stop at the
+  // range.
+  limits?: ControlLimits
   // Informational states (host side): the host can still use the tile, but viewers can't.
   lockedIndicator?: boolean
   unavailableIndicator?: boolean
+  limitedIndicator?: boolean
 }
 
 const props = defineProps<Props>()
@@ -52,6 +56,9 @@ provide(
   TILE_BADGES,
   computed<TileBadge[]>(() => [
     ...(props.lockedIndicator ? [{ key: 'locked', icon: 'i-lucide-lock', label: 'Locked for viewers by the active profile', tone: 'warning' as const }] : []),
+    ...(props.limitedIndicator && !props.lockedIndicator
+      ? [{ key: 'limited', icon: 'i-lucide-sliders-horizontal', label: 'Limited for viewers by the active profile', tone: 'info' as const }]
+      : []),
     ...(props.unavailableIndicator && !props.lockedIndicator
       ? [{ key: 'unavailable', icon: 'i-lucide-shield-off', label: `${unavailableReason.value}, so viewers can't use it`, tone: 'warning' as const }]
       : []),
@@ -95,6 +102,7 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :icon="control.icon"
       :title="control.name"
       :items="control.inputs"
+      :disabled-options="limits?.disabledOptions"
       @update:value="$emit('command', { type: 'boolean-enum', value: $event })"
     />
     <control-enum
@@ -103,6 +111,7 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :title="control.name"
       :address="control.inputAddress"
       :items="control.options"
+      :disabled-options="limits?.disabledOptions"
       @update:value="$emit('command', { type: 'enum', value: $event })"
     />
     <control-slider
@@ -110,6 +119,7 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :title="control.name"
       :icon="control.icon"
       :address="control.inputAddress"
+      :limits="limits"
       @update:value="$emit('command', { type: 'slider', value: $event })"
     />
     <control-step-enum
@@ -134,6 +144,7 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :control-id="control.id"
       :title="control.name"
       :icon="control.icon"
+      :limits="limits"
       @update:value="$emit('command', { type: 'intiface-toy', value: $event })"
     />
     <control-intiface-pattern
@@ -142,6 +153,7 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :title="control.name"
       :icon="control.icon"
       :patterns="control.allowedPatterns"
+      :disabled-options="limits?.disabledOptions"
       @update:value="$emit('command', { type: 'intiface-pattern', value: $event })"
     />
     <control-preset

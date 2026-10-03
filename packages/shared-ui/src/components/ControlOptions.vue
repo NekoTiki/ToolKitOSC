@@ -8,6 +8,8 @@ export interface ControlOption {
   name: string
   icon?: string
   selected: boolean
+  // Blocked by the host's active profile: shown, but can't be picked.
+  disabled?: boolean
 }
 
 const props = defineProps<{
@@ -33,18 +35,27 @@ const columns = Math.min(4, Math.max(1, props.options.length))
       type="button"
       role="radio"
       :aria-checked="option.selected"
-      :title="option.name"
-      class="flex h-(--tile-option) min-w-0 cursor-pointer items-center justify-center gap-1.5 border px-2 text-[calc(var(--tile-title)*0.82)] transition-colors"
+      :aria-disabled="option.disabled || undefined"
+      :title="option.disabled ? `${option.name} (blocked by the streamer)` : option.name"
+      class="flex h-(--tile-option) min-w-0 items-center justify-center gap-1.5 border px-2 text-[calc(var(--tile-title)*0.82)] transition-colors"
       :class="[
         pill ? 'rounded-full' : 'rounded-field',
         option.selected
           ? 'border-secondary bg-secondary font-semibold text-(--ui-color-secondary-950)'
-          : 'border-default bg-(--aurora-well) text-muted hover:text-default'
+          : option.disabled
+            ? 'border-dashed border-default bg-(--aurora-well) text-dimmed'
+            : 'border-default bg-(--aurora-well) text-muted hover:text-default',
+        option.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
       ]"
-      @click.stop="emit('select', index)"
+      @click.stop="!option.disabled && emit('select', index)"
     >
       <UIcon
-        v-if="option.icon"
+        v-if="option.disabled"
+        name="i-lucide-lock"
+        class="size-3.5 shrink-0"
+      />
+      <UIcon
+        v-else-if="option.icon"
         :name="option.icon"
         class="size-4 shrink-0"
       />

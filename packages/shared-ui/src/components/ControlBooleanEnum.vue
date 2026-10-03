@@ -12,6 +12,8 @@ const { get } = useOscMessages()
 const props = defineProps<{
   title: string
   icon?: string
+  // Option keys the active profile blocks for viewers (see ControlLimits).
+  disabledOptions?: (string | number)[]
   items: BooleanEnumControl['inputs']
 }>()
 
@@ -49,7 +51,7 @@ const currentId = computed((): string | undefined => {
 })
 
 const options = computed(() =>
-  props.items.map((item) => ({ key: item.id, name: item.name, icon: item.icon, selected: item.id === currentId.value }))
+  props.items.map((item) => ({ key: item.id, name: item.name, icon: item.icon, disabled: !!props.disabledOptions?.includes(item.id), selected: item.id === currentId.value }))
 )
 </script>
 

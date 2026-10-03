@@ -2,6 +2,7 @@ import type { Peer } from 'crossws'
 
 import type { User } from '#auth-utils'
 import type { ViewerToServerMessage } from '#shared/types/protocol'
+import { sanitizeCommand } from '#shared/utils/controlLimits'
 import {
   hostArgs,
   hostControls,
@@ -130,6 +131,22 @@ export default defineWebSocketHandler({
       }
 
       if (data.type === 'command') {
+        // Check the command against the controls this room's viewers were sent (locks, the active
+        // profile's limits, value types) so a hand-written message never reaches the host or the
+        // stats. A control the cache doesn't know is passed on as-is: the host decides, and logs it.
+        const control = hostControls
+          .get(roomId!)
+          ?.find((group) => group.id === data.message.groupId)
+          ?.controls.find((c) => c.id === data.message.controlId)
+
+        if (control) {
+          const command = sanitizeCommand(control, data.message)
+
+          if (!command) return
+
+          data.message = { ...data.message, ...command }
+        }
+
         scheduleControlActivation(roomId!, data.message.groupId, data.message.controlId, data.message.type)
       }
 

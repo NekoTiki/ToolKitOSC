@@ -1,11 +1,15 @@
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { getUUID } from '@renderer/utils/uuid'
+import type { ControlLimits } from '@toolkitosc/shared-ui'
 import { computed, ref, watch } from 'vue'
 
 export type LockedControlGroup = {
   id: string
   name: string
   lockedControls: Record<string, boolean>
+  // Per-control limits for viewers, keyed by control id. Optional: profiles saved before limits
+  // existed load as "no limits".
+  limits?: Record<string, ControlLimits>
 }
 
 const currentLockedControlsGroup = ref<LockedControlGroup['id'] | null>(null)
@@ -15,9 +19,13 @@ const lockedControls = computed<LockedControlGroup['lockedControls']>(
     lockedControlGroups.value.find((g) => g.id === currentLockedControlsGroup.value)
       ?.lockedControls ?? {}
 )
+const controlLimits = computed<NonNullable<LockedControlGroup['limits']>>(
+  () => lockedControlGroups.value.find((g) => g.id === currentLockedControlsGroup.value)?.limits ?? {}
+)
 
 export function useLockedControls(): {
   lockedControls: typeof lockedControls
+  controlLimits: typeof controlLimits
   currentLockedControlsGroup: typeof currentLockedControlsGroup
   lockedControlGroups: typeof lockedControlGroups
   getLockedControlGroup: (groupId: LockedControlGroup['id']) => LockedControlGroup | undefined
@@ -55,6 +63,7 @@ export function useLockedControls(): {
     if (group) {
       group.name = lockedControlsGroup.name
       group.lockedControls = lockedControlsGroup.lockedControls
+      group.limits = lockedControlsGroup.limits
     }
 
     saveLockedControlsGroups()
@@ -93,6 +102,7 @@ export function useLockedControls(): {
 
   return {
     lockedControls,
+    controlLimits,
     currentLockedControlsGroup,
 
     lockedControlGroups,

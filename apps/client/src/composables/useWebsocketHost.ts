@@ -18,7 +18,11 @@ import { getStableIp } from '@renderer/utils/stableIp'
 import type { ControlTypes } from '@toolkitosc/shared-ui'
 import {
   guestName,
+  INTIFACE_PATTERN_OFF_ID,
+  isOptionDisabled,
+  limitRange,
   PROTOCOL_VERSION,
+  sanitizeCommand,
   useIntifaceControl,
   useIntifacePatternControl,
   useOpenShockControl
@@ -95,7 +99,7 @@ export function useWebsocketHost(): {
   open: () => void
   close: WebSocket['close']
 } {
-  const { visibleControls, setControlLastUser, getControl, isGroupHidden, handleCommand } =
+  const { controls, visibleControls, setControlLastUser, getControl, isGroupHidden, handleCommand } =
     useControls(() => sendControls())
 
 
@@ -167,8 +171,8 @@ export function useWebsocketHost(): {
   const { isBanned } = useBannedClientsDb()
   const { add: addCommandToDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
-  const { lastUpdate: intifaceLastUpdate } = useIntifaceControl()
-  const { lastUpdate: intifacePatternLastUpdate } = useIntifacePatternControl()
+  const { lastUpdate: intifaceLastUpdate, controlValue: intifaceValues } = useIntifaceControl()
+  const { lastUpdate: intifacePatternLastUpdate, controlValue: intifacePatternValues } = useIntifacePatternControl()
   const { clientType } = useClientType()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
@@ -265,10 +269,14 @@ export function useWebsocketHost(): {
           // keeps the server/viewers from ever learning it exists, but a viewer that cached an
           // older `controls-update` (or a hand-crafted command) could still send one, so this is
           // enforced host-side too rather than trusted to never arrive.
+          // sanitizeCommand also applies the active profile's limits: a blocked option or a value
+          // of the wrong type is dropped the same way, and slider/toy values are clamped to the
+          // allowed range. The relay already did this, but the host has the final say.
           const control = getControl(data.message.groupId, data.message.controlId)
+          const command = control ? sanitizeCommand(control, data.message) : undefined
           const ip = getStableIp(client.ip)
 
-          if (!control?.locked && !control?.unavailable && !isGroupHidden(data.message.groupId)) {
+          if (command !== null && !isGroupHidden(data.message.groupId)) {
             const banned = isBanned(ip, client.user?.discord?.id)
             const clientValid = checkClient(clientType.value, client)
 
@@ -322,7 +330,8 @@ export function useWebsocketHost(): {
               // For an open-shock-shocker command, the intensity/duration/shockers actually applied
               // are randomized inside handleCommand and weren't known yet when this message arrived
               // - run it first and log its result instead of the (always absent) message value.
-              const openShockResult = control ? handleCommand(control, data.message) : undefined
+              const openShockResult = control && command ? handleCommand(control, command) : undefined
+              const sent = command ?? data.message
 
               addCommandToDb({
                 groupId: data.message.groupId,
@@ -330,7 +339,7 @@ export function useWebsocketHost(): {
                 controlName: control?.name || data.message.controlName || data.message.controlId,
                 type: data.message.type,
                 value:
-                  openShockResult ?? ('value' in data.message ? data.message.value : undefined),
+                  openShockResult ?? ('value' in sent ? sent.value : undefined),
                 discordId: client.user?.discord?.id,
                 peerId: client.peerId,
                 ip
@@ -459,6 +468,32 @@ export function useWebsocketHost(): {
   )
 
   watch([selectedPrimary, selectedSecondary], () => sendTheme())
+
+  // When a profile turns on, or its limits change while it's on, bring running toys within the new
+  // limits: a toy above its new max drops to it, and a pattern that's now blocked stops. Only ever
+  // lowers, so it can't start anything; slider and enum avatar state is left alone.
+  watch(
+    () => controls.value.flatMap((group) => group.controls).map((control) => [control, control.limits] as const),
+    (entries, previous) => {
+      const before = new Map(previous?.map(([control, limits]) => [control.id, JSON.stringify(limits)]))
+
+      entries.forEach(([control, limits]) => {
+        if (!limits || before.get(control.id) === JSON.stringify(limits)) return
+
+        if (control.type === 'intiface-toy') {
+          const { max } = limitRange(limits)
+
+          if ((intifaceValues.value.get(control.id) ?? 0) > max) handleCommand(control, { type: 'intiface-toy', value: max })
+        } else if (control.type === 'intiface-pattern') {
+          const current = intifacePatternValues.value.get(control.id)
+
+          if (current && current !== INTIFACE_PATTERN_OFF_ID && isOptionDisabled(limits, current)) {
+            handleCommand(control, { type: 'intiface-pattern', value: INTIFACE_PATTERN_OFF_ID })
+          }
+        }
+      })
+    }
+  )
 
   return { clients, status, data, sendMessage, send, open, close }
 }
