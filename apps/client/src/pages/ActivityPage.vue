@@ -16,11 +16,11 @@ import { useRoute, useRouter } from 'vue-router'
 // Every command viewers sent, newest first, in one log with filters for time, viewer, control
 // and type - replacing the per-control and per-viewer log slideovers. A tile's Activity button and
 // a viewer's "See all" open it pre-filtered through the query string.
-type Range = 'hour' | 'today' | 'week' | 'all'
+type Range = 'hour' | 'day' | 'week' | 'all'
 
 const RANGES: { value: Range; label: string }[] = [
   { value: 'hour', label: 'Last hour' },
-  { value: 'today', label: 'Today' },
+  { value: 'day', label: 'Last 24h' },
   { value: 'week', label: '7 days' },
   { value: 'all', label: 'All' }
 ]
@@ -33,7 +33,7 @@ const router = useRouter()
 const { controls } = useControls()
 
 const query = computed(() => ({
-  range: (RANGES.some((r) => r.value === route.query.range) ? route.query.range : 'today') as Range,
+  range: (RANGES.some((r) => r.value === route.query.range) ? route.query.range : 'day') as Range,
   viewer: typeof route.query.viewer === 'string' ? Number(route.query.viewer) : null,
   control: typeof route.query.control === 'string' ? route.query.control : null,
   type: typeof route.query.type === 'string' ? (route.query.type as ControlTypes) : null
@@ -57,7 +57,7 @@ const since = (range: Range): number => {
   const now = Date.now()
 
   if (range === 'hour') return now - 60 * 60 * 1000
-  if (range === 'today') return new Date(new Date().setHours(0, 0, 0, 0)).getTime()
+  if (range === 'day') return now - 24 * 60 * 60 * 1000
   if (range === 'week') return now - 7 * 24 * 60 * 60 * 1000
 
   return 0
@@ -153,7 +153,7 @@ const COLUMNS = 'grid-cols-[6.5rem_minmax(0,11rem)_minmax(0,1fr)_7.5rem_minmax(0
               :color="query.range === range.value ? 'primary' : 'neutral'"
               :variant="query.range === range.value ? 'soft' : 'subtle'"
               class="rounded-full"
-              @click="setFilter('range', range.value === 'today' ? null : range.value)"
+              @click="setFilter('range', range.value === 'day' ? null : range.value)"
             >
               {{ range.label }}
             </UButton>
