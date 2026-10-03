@@ -47,6 +47,9 @@ export const viewerCommands = (
     viewerCollections(client, from).map((collection) => (filter ? collection.filter(filter) : collection).limit(limit).toArray())
   ).then((lists) => newestFirst(lists, limit))
 
+export const viewerCommandIds = (client: Client): Promise<number[]> =>
+  Promise.all(viewerCollections(client, 0).map((collection) => collection.primaryKeys())).then((ids) => ids.flat())
+
 export const countViewerCommands = (client: Client): Promise<number> =>
   Promise.all(viewerCollections(client, 0).map((collection) => collection.count())).then((counts) => counts.reduce((a, b) => a + b, 0))
 

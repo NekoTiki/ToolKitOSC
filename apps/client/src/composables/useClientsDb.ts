@@ -1,6 +1,8 @@
 import type { Client } from '@renderer/db/clients.db'
 import { db, mergeClients } from '@renderer/db/clients.db'
+import { db as commandsDb } from '@renderer/db/commands.db'
 import { getStableIp } from '@renderer/utils/stableIp'
+import { viewerCommandIds } from '@renderer/utils/viewers'
 import type { ClientListEntry } from '@toolkitosc/shared-ui'
 import { guestName } from '@toolkitosc/shared-ui'
 import { shallowRef, watch } from 'vue'
@@ -88,12 +90,30 @@ const upsertViewers = (viewers: Viewer[]): Promise<void> =>
     })
     .catch((error) => console.error('Failed to record viewers', error))
 
+// Deletes everything this viewer did from the activity log; returns how many actions that was.
+const clearViewerActivity = async (client: Client): Promise<number> => {
+  const ids = await viewerCommandIds(client)
+
+  await commandsDb.commands.bulkDelete(ids)
+
+  return ids.length
+}
+
+// Forgets a viewer and their activity. Their bans stay: deleting someone isn't unbanning them.
+// The log goes first, so a failure never leaves actions behind with nobody to show them under.
+const deleteViewer = async (client: Client): Promise<void> => {
+  await clearViewerActivity(client)
+  if (client.id !== undefined) await db.clients.delete(client.id)
+}
+
 export function useClientsDb(): {
   onlineClients: typeof onlineClients
   isOnline: (client: Client) => boolean
   upsertViewers: typeof upsertViewers
+  clearViewerActivity: typeof clearViewerActivity
+  deleteViewer: typeof deleteViewer
 } {
   const isOnline = (client: Client): boolean => onlineClients.value.has(client.key)
 
-  return { onlineClients, isOnline, upsertViewers }
+  return { onlineClients, isOnline, upsertViewers, clearViewerActivity, deleteViewer }
 }
