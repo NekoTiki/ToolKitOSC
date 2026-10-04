@@ -4,6 +4,7 @@ import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAuth } from '@renderer/composables/useAuth'
 import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
+import { useShareSettings } from '@renderer/composables/useShareSettings'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
 import { encodeShareCode } from '@toolkitosc/shared-ui'
@@ -11,6 +12,7 @@ import { computed } from 'vue'
 
 const { user, loggedIn } = useAuth()
 const { clientType, setClient } = useClientType()
+const { showViewers, setShowViewers } = useShareSettings()
 const toast = useToast()
 
 // Keyed by the host's Discord id (see the server's host.ts), as a reversible short code.
@@ -88,5 +90,14 @@ const OPTIONS: { value: ClientType; label: string; description: string; icon: st
         @click="setClient(option.value)"
       />
     </div>
+  </FormSection>
+
+  <FormSection>
+    <USwitch
+      :model-value="showViewers"
+      label="Show viewers to each other"
+      description="Viewers see who else is on your share page, and who pressed what. Turn it off to keep names private; actions still show, without a name."
+      @update:model-value="setShowViewers(!!$event)"
+    />
   </FormSection>
 </template>
