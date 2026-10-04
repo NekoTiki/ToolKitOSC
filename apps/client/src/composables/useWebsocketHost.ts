@@ -9,6 +9,7 @@ import { useClientType } from '@renderer/composables/useClientType'
 import { useCommandsDb } from '@renderer/composables/useCommandsDb'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
+import { useShareSettings } from '@renderer/composables/useShareSettings'
 import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
@@ -149,6 +150,7 @@ export function useWebsocketHost(): {
   const { lastUpdate: intifaceLastUpdate, controlValue: intifaceValues } = useIntifaceControl()
   const { lastUpdate: intifacePatternLastUpdate, controlValue: intifacePatternValues } = useIntifacePatternControl()
   const { clientType } = useClientType()
+  const { shareSettings } = useShareSettings()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
   const { status, data, send, open, close } = useWebSocket(() => `${serverWsUrl.value}/host`, {
@@ -187,6 +189,7 @@ export function useWebsocketHost(): {
         useAiAccess().applyUpdate(data.message.aiAccess)
         sendControls()
         sendTheme()
+        sendMessage('share-settings', shareSettings.value)
       } else if (data.type === 'auth-error') {
         console.error('Authentication failed:', data.message)
         setToken(undefined)
@@ -286,18 +289,17 @@ export function useWebsocketHost(): {
               // - run it first and log its result instead of the (always absent) message value.
               const openShockResult = control && command ? handleCommand(control, command) : undefined
               const sent = command ?? data.message
-
-              addCommandToDb({
+              const accepted = {
                 groupId: data.message.groupId,
                 controlId: data.message.controlId,
                 controlName: control?.name || data.message.controlName || data.message.controlId,
                 type: data.message.type,
-                value:
-                  openShockResult ?? ('value' in sent ? sent.value : undefined),
-                discordId: viewer.discordId ?? undefined,
-                peerId: client.peerId,
-                ip
-              })
+                value: openShockResult ?? ('value' in sent ? sent.value : undefined)
+              }
+
+              addCommandToDb({ ...accepted, discordId: viewer.discordId ?? undefined, peerId: client.peerId, ip })
+              // Shown to every viewer as the share page's last action (see the server's host.ts).
+              sendMessage('command-accepted', { ...accepted, peerId: client.peerId })
             }
           }
         }
@@ -404,6 +406,10 @@ export function useWebsocketHost(): {
   )
 
   watch([selectedPrimary, selectedSecondary], () => sendTheme())
+
+  watch(shareSettings, (settings) => {
+    if (status.value === 'OPEN') sendMessage('share-settings', settings)
+  })
 
   // When a profile turns on, or its limits change while it's on, bring running toys within the new
   // limits: a toy above its new max drops to it, and a pattern that's now blocked stops. Only ever

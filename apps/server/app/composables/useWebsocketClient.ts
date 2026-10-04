@@ -1,4 +1,4 @@
-import type { ControlGroup, ServerToViewerMessage } from '@toolkitosc/shared-ui'
+import type { ControlGroup, PresenceEntry, ServerToViewerMessage, ViewerActionMessage } from '@toolkitosc/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
 import { useIntifaceControl } from '~/composables/useIntifaceControl'
@@ -27,6 +27,11 @@ export function useWebsocketClient(roomId: string) {
   const hostStatus = ref<'online' | 'offline'>('offline')
   const authRequired = ref<'username' | 'discord' | null>(null)
   const banned = ref<{ scope: 'ip' | 'discord'; reason?: string } | null>(null)
+  // Who is on the page right now. null while the host hides viewers from each other (or the
+  // server is too old to send it).
+  const viewers = ref<PresenceEntry[] | null>(null)
+  const you = ref<string | null>(null)
+  const lastAction = ref<ViewerActionMessage | null>(null)
 
   const { status, data, send, open, close } = useWebSocket(`/ws/${roomId}`, {
     heartbeat: {
@@ -77,6 +82,15 @@ export function useWebsocketClient(roomId: string) {
       } else if (data.type === 'theme-update') {
         if (data.message.primary) setTheme('primary', data.message.primary)
         if (data.message.secondary) setTheme('secondary', data.message.secondary)
+      } else if (data.type === 'presence') {
+        you.value = data.message.you
+        viewers.value = data.message.viewers
+      } else if (data.type === 'viewer-action') {
+        lastAction.value = data.message
+
+        const actor = viewers.value?.find((viewer) => viewer.id === data.message.viewer?.id)
+
+        if (actor) actor.lastActiveAt = data.message.at
       }
     }
   })
@@ -85,6 +99,9 @@ export function useWebsocketClient(roomId: string) {
     controlGroups,
     authRequired,
     banned,
+    viewers,
+    you,
+    lastAction,
     status,
     hostStatus,
     data,

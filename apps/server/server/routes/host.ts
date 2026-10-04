@@ -2,14 +2,27 @@ import type { Peer } from 'crossws'
 import jwt from 'jsonwebtoken'
 
 import type { User } from '#auth-utils'
-import type { ControlGroup, HostToServerMessage, OSCArg } from '#shared/types/protocol'
+import type {
+  ControlGroup,
+  HostToServerMessage,
+  OSCArg,
+  ShareSettingsMessage,
+  ViewerActionMessage
+} from '#shared/types/protocol'
 import {
   KNOWN_CONTROL_TYPES,
   MIN_SUPPORTED_PROTOCOL_VERSION,
   PROTOCOL_VERSION
 } from '#shared/types/protocol'
 import { upsertUserFromAuth } from '~~/server/db/users'
-import { clientList, sendToClient, sendToEveryoneInRoom } from '~~/server/routes/ws/[ws]'
+import {
+  broadcastPresence,
+  clientList,
+  presenceOf,
+  sendToClient,
+  sendToEveryoneInRoom,
+  showViewers
+} from '~~/server/routes/ws/[ws]'
 import { getAiAccess } from '~~/server/utils/ai/access'
 import { recordControlInventory } from '~~/server/utils/controlStats'
 import { useWsIp } from '~~/server/utils/useWsIp'
@@ -25,6 +38,10 @@ export const hostList = new Map<RoomId, Host>()
 export const hostControls = new Map<RoomId, ControlGroup[]>()
 export const hostArgs = new Map<RoomId, Record<string, OSCArg[]>>()
 export const hostTheme = new Map<RoomId, { primary: string | null; secondary: string | null }>()
+export const hostShareSettings = new Map<RoomId, ShareSettingsMessage>()
+// The room's most recent accepted command, with the viewer always filled in - hidden per send while
+// the host hides viewers. Replayed to anyone who joins, so the bar isn't empty until the next one.
+export const hostLastAction = new Map<RoomId, ViewerActionMessage>()
 
 interface Host {
   peer: Peer
@@ -207,6 +224,36 @@ export default defineWebSocketHandler({
     } else if (data.type === 'theme-update') {
       hostTheme.set(roomId!, data.message)
       sendToEveryoneInRoom(roomId!, message.text())
+    } else if (data.type === 'share-settings') {
+      hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false })
+      broadcastPresence(roomId)
+    } else if (data.type === 'command-accepted') {
+      const client = clientList.get(roomId)?.get(data.message.peerId)
+
+      if (!client) return
+
+      const at = Date.now()
+
+      client.lastActiveAt = at
+
+      // Each viewer updates the actor's "active" label from this message, so the whole list isn't
+      // re-sent for every step of a dragged slider.
+      const { id, name, avatar } = presenceOf(client)
+      const action: ViewerActionMessage = {
+        viewer: { id, name, avatar },
+        groupId: data.message.groupId,
+        controlId: data.message.controlId,
+        controlName: data.message.controlName,
+        type: data.message.type,
+        value: data.message.value,
+        at
+      }
+
+      hostLastAction.set(roomId, action)
+      sendToEveryoneInRoom(roomId, {
+        type: 'viewer-action',
+        message: showViewers(roomId) ? action : { ...action, viewer: null }
+      })
     }
   },
   close(peer) {
@@ -219,6 +266,9 @@ export default defineWebSocketHandler({
     if (!roomId || hostList.get(roomId)?.peer.id !== peer.id) return
 
     removeClient(roomId)
+    // Share settings are kept: viewers who stay on the page while the host is away must not suddenly
+    // see each other because the host's choice was forgotten.
+    hostLastAction.delete(roomId)
     sendToEveryoneInRoom(roomId, { type: 'host-status', message: 'offline' })
   },
   error(peer, error) {

@@ -3,7 +3,7 @@
 // and the Nitro routes server/routes/host.ts + server/routes/ws/[ws].ts. Shapes below are taken
 // directly from those call sites, not guessed.
 import type { ControlCommand, ControlGroup, ControlTypes } from './controls'
-import type { OpenShockControlValue } from './openShock'
+import type { OpenShockCommandResult, OpenShockControlValue } from './openShock'
 import type { OSCArg } from './osc'
 import type { ColorFamilyWithoutNeutral } from './theme'
 
@@ -125,6 +125,10 @@ export interface IntifacePatternValueUpdateMessage {
   value: string
 }
 
+// The value a command was run with, as the host logs it: the command's own value, or for a
+// shocker (whose command carries none) what was actually sent to OpenShock.
+export type CommandValue = boolean | number | string | OpenShockCommandResult
+
 export interface ClientInvalidMessage {
   peerId: string
   reason: string
@@ -182,6 +186,55 @@ export interface ClientListEntry {
   guestId?: string
 }
 
+// The host's share-page settings that the server enforces when talking to viewers. An older host
+// never sends it, and the server falls back to the defaults (everything shown).
+export interface ShareSettingsMessage {
+  // Viewers see who else is on the share page, and who pressed what.
+  showViewers: boolean
+}
+
+// Sent by the host once it actually ran a viewer's command (past its ban, sign-in and rate-limit
+// checks), so the server can show it to everyone as the room's last action. Mirrors what the host
+// logs: `value` is the applied value, or the OpenShock result for a shocker.
+export interface CommandAcceptedMessage {
+  peerId: string
+  groupId: string
+  controlId: string
+  controlName: string
+  type: ControlTypes
+  value?: CommandValue
+}
+
+// One viewer on the share page, as other viewers see them. `id` is an opaque hash of the viewer's
+// session, never the session id itself (that's their login cookie) - and no IP.
+export interface PresenceEntry {
+  id: string
+  name: string
+  // Discord avatar URL. Guests have none; the page draws their initials.
+  avatar?: string
+  discord: boolean
+  // Last time one of their commands was accepted. Unset until they do something.
+  lastActiveAt?: number
+}
+
+export interface PresenceMessage {
+  // The recipient's own entry id, or null while they aren't in the list yet.
+  you: string | null
+  // null when the host hides viewers from each other.
+  viewers: PresenceEntry[] | null
+}
+
+export interface ViewerActionMessage {
+  // null when the host hides viewers from each other.
+  viewer: Pick<PresenceEntry, 'id' | 'name' | 'avatar'> | null
+  groupId: string
+  controlId: string
+  controlName: string
+  type: ControlTypes
+  value?: CommandValue
+  at: number
+}
+
 // Desktop client ("host") -> server, over /host. `args-initial` is accepted by the Nitro route
 // (server/routes/host.ts) but the current client never sends it (it only ever sends per-address
 // `args-update`) — kept here to match what the server actually handles, not just what's used today.
@@ -197,6 +250,8 @@ export type HostToServerMessage =
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'rate-limited', RateLimitedMessage>
+  | WsEnvelope<'share-settings', ShareSettingsMessage>
+  | WsEnvelope<'command-accepted', CommandAcceptedMessage>
 
 // Server -> desktop client, over /host. `command`/`update-username` are relays of a viewer's
 // message with a `from` (session id) field appended directly onto the envelope, not nested.
@@ -227,6 +282,8 @@ export type ServerToViewerMessage =
   | WsEnvelope<'rate-limited', RateLimitedMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>
   | WsEnvelope<'welcome', string>
+  | WsEnvelope<'presence', PresenceMessage>
+  | WsEnvelope<'viewer-action', ViewerActionMessage>
 
 // Browser viewer -> server, over /ws/[roomId].
 export type ViewerToServerMessage =

@@ -1,12 +1,17 @@
+import { createHash } from 'node:crypto'
+
 import type { Peer } from 'crossws'
 
 import type { User } from '#auth-utils'
-import type { ViewerToServerMessage } from '#shared/types/protocol'
+import type { PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
 import { sanitizeCommand } from '#shared/utils/controlLimits'
+import { guestName } from '#shared/utils/guestName'
 import {
   hostArgs,
   hostControls,
+  hostLastAction,
   hostList,
+  hostShareSettings,
   hostTheme,
   sendClientListToHost,
   sendMessageToHost
@@ -21,11 +26,65 @@ type PeerId = string
 export const clientList = new Map<RoomId, Map<PeerId, Client>>()
 
 interface Client {
-  peer: Peer
+  // Every open tab of this session, by crossws peer id. The client stays listed until the last one
+  // closes.
+  peers: Map<string, Peer>
   sessionId: string
   user: User | null
   ip: string
   guestId?: string
+  lastActiveAt?: number
+}
+
+// Opaque id other viewers see instead of the session id (see PresenceEntry). One per Discord
+// account, so someone signed in on two devices is one viewer; one per session for a guest.
+const publicIdOf = (client: Client): string =>
+  createHash('sha256')
+    .update(client.user?.discord?.id ? `discord:${client.user.discord.id}` : client.sessionId)
+    .digest('hex')
+    .slice(0, 16)
+
+// Same priority as the desktop app's describeViewer (apps/client's useClientsDb.ts), so a viewer
+// has the same name on the share page as in the streamer's Viewers page.
+const displayNameOf = (client: Client): string =>
+  client.user?.discord?.name || client.user?.username || client.user?.userDefinedDisplayName || guestName(client.sessionId)
+
+export const showViewers = (roomId: RoomId): boolean => hostShareSettings.get(roomId)?.showViewers ?? true
+
+export const presenceOf = (client: Client): PresenceEntry => ({
+  id: publicIdOf(client),
+  name: displayNameOf(client),
+  avatar: client.user?.discord?.avatar,
+  discord: !!client.user?.discord?.id,
+  lastActiveAt: client.lastActiveAt
+})
+
+// One entry per viewer: a Discord account's sessions are merged, keeping its latest activity.
+const roomPresence = (roomId: RoomId): PresenceEntry[] | null => {
+  if (!showViewers(roomId)) return null
+
+  const entries = new Map<string, PresenceEntry>()
+
+  for (const client of clientList.get(roomId)?.values() ?? []) {
+    const entry = presenceOf(client)
+    const seen = entries.get(entry.id)
+
+    if (!seen || (entry.lastActiveAt ?? 0) > (seen.lastActiveAt ?? 0)) entries.set(entry.id, entry)
+  }
+
+  return Array.from(entries.values())
+}
+
+// Sends each viewer the room's list, with their own entry marked. Called on join, leave, rename,
+// and when the host changes whether viewers may see each other.
+export const broadcastPresence = (roomId: RoomId) => {
+  const viewers = roomPresence(roomId)
+
+  for (const client of clientList.get(roomId)?.values() ?? []) {
+    for (const peer of client.peers.values()) {
+      peer.send({ type: 'presence', message: { you: publicIdOf(client), viewers } })
+    }
+  }
 }
 
 const getRoomId = (url: string): string | null => {
@@ -39,30 +98,51 @@ const getRoomId = (url: string): string | null => {
   return null
 }
 
-const addClient = (roomId: RoomId, peerId: PeerId, data: Client) => {
+const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client, 'peers'>) => {
   if (!clientList.has(roomId)) {
     clientList.set(roomId, new Map())
   }
 
-  clientList.get(roomId)!.set(peerId, data)
+  const room = clientList.get(roomId)!
+  const existing = room.get(peerId)
+
+  // Another tab of a session that's already here: same viewer, one more connection.
+  if (existing) {
+    existing.peers.set(peer.id, peer)
+    existing.user = data.user
+    peer.send({ type: 'presence', message: { you: publicIdOf(existing), viewers: roomPresence(roomId) } })
+    return
+  }
+
+  room.set(peerId, { ...data, peers: new Map([[peer.id, peer]]) })
 
   sendClientListToHost(roomId)
+  broadcastPresence(roomId)
 }
 
-const removeClient = (roomId: RoomId, peerId: PeerId) => {
-  clientList.get(roomId)?.delete(peerId)
+const removeClient = (roomId: RoomId, peerId: PeerId, peer: Pick<Peer, 'id'>) => {
+  const client = clientList.get(roomId)?.get(peerId)
+
+  if (!client) return
+
+  client.peers.delete(peer.id)
+
+  if (client.peers.size) return
+
+  clientList.get(roomId)!.delete(peerId)
 
   sendClientListToHost(roomId)
+  broadcastPresence(roomId)
 }
 
 export const sendToEveryoneInRoom = (roomId: RoomId, data: unknown) => {
-  for (const [_, { peer }] of clientList.get(roomId)?.entries() ?? []) {
-    peer.send(data)
+  for (const { peers } of clientList.get(roomId)?.values() ?? []) {
+    for (const peer of peers.values()) peer.send(data)
   }
 }
 
 export const sendToClient = (roomId: RoomId, peerId: PeerId, data: unknown) => {
-  clientList.get(roomId)?.get(peerId)?.peer.send(data)
+  for (const peer of clientList.get(roomId)?.get(peerId)?.peers.values() ?? []) peer.send(data)
 }
 
 export default defineWebSocketHandler({
@@ -74,7 +154,7 @@ export default defineWebSocketHandler({
     const roomId = getRoomId(peer.request.url)
     const userIp = useWsIp(peer)
 
-    addClient(roomId!, sessionId, { peer, sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
+    addClient(roomId!, sessionId, peer, { sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
 
     const controls = hostControls.get(roomId!)
     const args = hostArgs.get(roomId!)!
@@ -98,6 +178,12 @@ export default defineWebSocketHandler({
       type: 'welcome',
       message: `Welcome ${user?.discord?.name || 'Anonymous'}! Your peer ID is ${sessionId} to the room ${roomId}`
     })
+
+    const lastAction = hostLastAction.get(roomId!)
+
+    if (lastAction) {
+      peer.send({ type: 'viewer-action', message: showViewers(roomId!) ? lastAction : { ...lastAction, viewer: null } })
+    }
   },
   async message(peer, message) {
     if (message.text() === 'ping') {
@@ -149,6 +235,15 @@ export default defineWebSocketHandler({
         }
 
         scheduleControlActivation(roomId!, data.message.groupId, data.message.controlId, data.message.type)
+      } else {
+        // Mirror the host's copy (see useWebsocketHost.ts), so the new name shows in everyone's list.
+        const client = clientList.get(roomId!)?.get(sessionId)
+        const displayName = typeof data.message.displayName === 'string' ? data.message.displayName.trim().slice(0, 64) : ''
+
+        if (client && displayName) {
+          client.user = { ...(client.user ?? { username: '', email: '' }), userDefinedDisplayName: displayName }
+          broadcastPresence(roomId!)
+        }
       }
 
       sendMessageToHost(roomId!, data.type, data.message, {
@@ -161,7 +256,7 @@ export default defineWebSocketHandler({
 
     const roomId = getRoomId(peer.request.url)
 
-    removeClient(roomId!, sessionId)
+    removeClient(roomId!, sessionId, peer)
     clearRateLimit(`${roomId}:${sessionId}`)
   },
   error(peer, error) {
