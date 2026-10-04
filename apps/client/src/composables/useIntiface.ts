@@ -222,7 +222,10 @@ const handleServerMessage = (raw: string): void => {
       handshakeDone = true
       status.value = 'connected'
       resetLaunchAttempts()
-      send([{ RequestDeviceList: { Id: nextId() } }])
+      // Bluetooth toys only show up once the server scans for them - start it here so nobody has
+      // to press "Start Scanning" in Intiface Central. Found toys arrive as DeviceAdded below; an
+      // Error reply (no adapter, already scanning) is only logged now that the handshake is done.
+      send([{ RequestDeviceList: { Id: nextId() } }, { StartScanning: { Id: nextId() } }])
       stopBatteryPolling()
       batteryPollTimer = setInterval(requestBatteryReadings, BATTERY_POLL_INTERVAL)
     } else if ('DeviceList' in message) {
