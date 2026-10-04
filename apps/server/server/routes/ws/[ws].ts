@@ -33,12 +33,16 @@ interface Client {
   user: User | null
   ip: string
   guestId?: string
-  // Opaque id other viewers see instead of the session id (see PresenceEntry).
-  publicId: string
   lastActiveAt?: number
 }
 
-const publicIdOf = (sessionId: string): string => createHash('sha256').update(sessionId).digest('hex').slice(0, 16)
+// Opaque id other viewers see instead of the session id (see PresenceEntry). One per Discord
+// account, so someone signed in on two devices is one viewer; one per session for a guest.
+const publicIdOf = (client: Client): string =>
+  createHash('sha256')
+    .update(client.user?.discord?.id ? `discord:${client.user.discord.id}` : client.sessionId)
+    .digest('hex')
+    .slice(0, 16)
 
 // Same priority as the desktop app's describeViewer (apps/client's useClientsDb.ts), so a viewer
 // has the same name on the share page as in the streamer's Viewers page.
@@ -48,15 +52,28 @@ const displayNameOf = (client: Client): string =>
 export const showViewers = (roomId: RoomId): boolean => hostShareSettings.get(roomId)?.showViewers ?? true
 
 export const presenceOf = (client: Client): PresenceEntry => ({
-  id: client.publicId,
+  id: publicIdOf(client),
   name: displayNameOf(client),
   avatar: client.user?.discord?.avatar,
   discord: !!client.user?.discord?.id,
   lastActiveAt: client.lastActiveAt
 })
 
-const roomPresence = (roomId: RoomId): PresenceEntry[] | null =>
-  showViewers(roomId) ? Array.from(clientList.get(roomId)?.values() ?? [], presenceOf) : null
+// One entry per viewer: a Discord account's sessions are merged, keeping its latest activity.
+const roomPresence = (roomId: RoomId): PresenceEntry[] | null => {
+  if (!showViewers(roomId)) return null
+
+  const entries = new Map<string, PresenceEntry>()
+
+  for (const client of clientList.get(roomId)?.values() ?? []) {
+    const entry = presenceOf(client)
+    const seen = entries.get(entry.id)
+
+    if (!seen || (entry.lastActiveAt ?? 0) > (seen.lastActiveAt ?? 0)) entries.set(entry.id, entry)
+  }
+
+  return Array.from(entries.values())
+}
 
 // Sends each viewer the room's list, with their own entry marked. Called on join, leave, rename,
 // and when the host changes whether viewers may see each other.
@@ -65,7 +82,7 @@ export const broadcastPresence = (roomId: RoomId) => {
 
   for (const client of clientList.get(roomId)?.values() ?? []) {
     for (const peer of client.peers.values()) {
-      peer.send({ type: 'presence', message: { you: client.publicId, viewers } })
+      peer.send({ type: 'presence', message: { you: publicIdOf(client), viewers } })
     }
   }
 }
@@ -81,7 +98,7 @@ const getRoomId = (url: string): string | null => {
   return null
 }
 
-const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client, 'peers' | 'publicId'>) => {
+const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client, 'peers'>) => {
   if (!clientList.has(roomId)) {
     clientList.set(roomId, new Map())
   }
@@ -93,11 +110,11 @@ const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client
   if (existing) {
     existing.peers.set(peer.id, peer)
     existing.user = data.user
-    peer.send({ type: 'presence', message: { you: existing.publicId, viewers: roomPresence(roomId) } })
+    peer.send({ type: 'presence', message: { you: publicIdOf(existing), viewers: roomPresence(roomId) } })
     return
   }
 
-  room.set(peerId, { ...data, peers: new Map([[peer.id, peer]]), publicId: publicIdOf(peerId) })
+  room.set(peerId, { ...data, peers: new Map([[peer.id, peer]]) })
 
   sendClientListToHost(roomId)
   broadcastPresence(roomId)

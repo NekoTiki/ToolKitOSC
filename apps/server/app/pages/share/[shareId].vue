@@ -335,15 +335,6 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
           </p>
         </div>
 
-        <!-- Under the tiles on a desktop; a floating pill over them on a phone. -->
-        <ShareLastAction
-          v-if="!pageState && lastAction"
-          :action="lastAction"
-          :control-groups="controlGroups"
-          :you="you"
-          class="mx-5.5 mb-3.5 shrink-0 rounded-2xl max-lg:absolute max-lg:inset-x-3.5 max-lg:bottom-3.5 max-lg:z-10 max-lg:m-0 max-lg:h-12 max-lg:rounded-full max-lg:bg-(--ui-bg) max-lg:shadow-[0_10px_30px_-10px_rgba(0,0,0,.6)]"
-        />
-
         <ShareStateCard
           v-else-if="pageState === 'connecting'"
           icon="i-lucide-loader-circle"
@@ -440,6 +431,15 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
           icon="i-lucide-inbox"
           title="Nothing shared yet"
           :description="`${hostName} is online but hasn't shared any controls. This page updates by itself.`"
+        />
+
+        <!-- Under the tiles on a desktop; a floating pill over them on a phone. -->
+        <ShareLastAction
+          v-if="!pageState && lastAction"
+          :action="lastAction"
+          :control-groups="controlGroups"
+          :you="you"
+          class="mx-5.5 mb-3.5 shrink-0 rounded-2xl max-lg:absolute max-lg:inset-x-3.5 max-lg:bottom-3.5 max-lg:z-10 max-lg:m-0 max-lg:h-12 max-lg:rounded-full max-lg:bg-(--ui-bg) max-lg:shadow-[0_10px_30px_-10px_rgba(0,0,0,.6)]"
         />
       </section>
     </div>
