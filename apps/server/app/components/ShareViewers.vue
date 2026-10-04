@@ -40,7 +40,7 @@ const activity = (viewer: PresenceEntry): string => {
       <li
         v-for="viewer in sorted"
         :key="viewer.id"
-        class="flex h-10 min-w-0 items-center gap-2.5 rounded-2xl px-2 text-[13.5px]"
+        class="flex h-10 min-w-0 items-center gap-2.5 rounded-field px-2 text-[13.5px]"
       >
         <ViewerAvatar
           :id="viewer.id"

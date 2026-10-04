@@ -439,7 +439,7 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
           :action="lastAction"
           :control-groups="controlGroups"
           :you="you"
-          class="mx-5.5 mb-3.5 shrink-0 rounded-2xl max-lg:absolute max-lg:inset-x-3.5 max-lg:bottom-3.5 max-lg:z-10 max-lg:m-0 max-lg:h-12 max-lg:rounded-full max-lg:bg-(--ui-bg) max-lg:shadow-[0_10px_30px_-10px_rgba(0,0,0,.6)]"
+          class="mx-5.5 mb-3.5 shrink-0 rounded-field max-lg:absolute max-lg:inset-x-3.5 max-lg:bottom-3.5 max-lg:z-10 max-lg:m-0 max-lg:h-12 max-lg:rounded-full max-lg:bg-(--ui-bg) max-lg:shadow-[0_10px_30px_-10px_rgba(0,0,0,.6)]"
         />
       </section>
     </div>
