@@ -60,7 +60,8 @@ useSeoMeta({
 // groups in a sidebar - or a row of chips on a phone - and the selected group's tiles filling the
 // page, in the host's theme. Sign-in, banned, offline and disconnected are full-page states
 // rather than modals.
-const { controlGroups, authRequired, banned, status, hostStatus, open, close, sendMessage } = useWebsocketClient(shareId)
+const { controlGroups, authRequired, banned, viewers, you, lastAction, status, hostStatus, open, close, sendMessage } =
+  useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
 const connectedOnce = ref(false)
@@ -172,6 +173,30 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
         />
         <span class="max-sm:hidden">{{ hostOffline ? 'Host offline' : 'Host online' }}</span>
       </span>
+      <!-- Phones have no sidebar, so the list opens from here. -->
+      <UPopover
+        v-if="viewers"
+        :content="{ align: 'end' }"
+      >
+        <button
+          type="button"
+          class="flex h-10.5 shrink-0 cursor-pointer items-center gap-2 rounded-2xl glass px-3 text-sm font-medium"
+          :aria-label="`${viewers.length} here now`"
+        >
+          <UIcon
+            name="i-lucide-users"
+            class="size-4"
+          />
+          {{ viewers.length }}
+        </button>
+        <template #content>
+          <ShareViewers
+            :viewers="viewers"
+            :you="you"
+            class="w-72 p-2"
+          />
+        </template>
+      </UPopover>
       <div
         class="flex shrink-0 gap-0.5 rounded-[calc(var(--ui-radius)*4)] glass p-1 max-sm:hidden"
         role="group"
@@ -225,6 +250,12 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
             <small class="col-start-2 truncate text-xs text-muted">{{ group.controls.length }} controls</small>
           </button>
         </nav>
+        <ShareViewers
+          v-if="viewers?.length"
+          :viewers="viewers"
+          :you="you"
+          class="shrink-0 border-t border-default pt-1"
+        />
       </aside>
 
       <section class="relative flex min-h-0 min-w-0 flex-col">
@@ -274,6 +305,7 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
         <div
           v-if="!pageState"
           class="min-h-0 flex-1 overflow-auto px-4 pb-5.5 max-lg:pt-3 lg:px-5.5"
+          :class="{ 'max-lg:pb-20': lastAction }"
         >
           <div
             v-if="shown.length"
@@ -302,6 +334,15 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
             {{ search ? `Nothing matches "${query.trim()}".` : 'No controls in this group.' }}
           </p>
         </div>
+
+        <!-- Under the tiles on a desktop; a floating pill over them on a phone. -->
+        <ShareLastAction
+          v-if="!pageState && lastAction"
+          :action="lastAction"
+          :control-groups="controlGroups"
+          :you="you"
+          class="mx-5.5 mb-3.5 shrink-0 rounded-2xl max-lg:absolute max-lg:inset-x-3.5 max-lg:bottom-3.5 max-lg:z-10 max-lg:m-0 max-lg:h-12 max-lg:rounded-full max-lg:bg-(--ui-bg) max-lg:shadow-[0_10px_30px_-10px_rgba(0,0,0,.6)]"
+        />
 
         <ShareStateCard
           v-else-if="pageState === 'connecting'"

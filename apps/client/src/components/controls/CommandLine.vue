@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Client } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
-import { formatCommandValue } from '@renderer/utils/commandLog'
+import { formatCommandValue } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 // The log line under the Controls page's tiles: the latest command anyone sent, so the host can
