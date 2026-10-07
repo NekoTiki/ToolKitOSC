@@ -35,6 +35,7 @@ invite can drive your avatar, toys and shockers in real time.
 - **Lock profiles** decide which controls viewers are allowed to touch.
 - **Stop everything** from the top bar, a global hotkey or the `TKOSC/Panic` avatar parameter: every toy and
   shocker stops, and viewers see a paused page until you resume.
+- Optionally post viewer actions to your **VRChat chatbox**, so the people in your instance see who's controlling you.
 
 ### 🔌 Integrations
 

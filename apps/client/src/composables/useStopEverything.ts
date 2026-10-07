@@ -1,3 +1,4 @@
+import { useChatbox } from '@renderer/composables/useChatbox'
 import { cancelPendingShocks } from '@renderer/composables/useControls'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
@@ -6,7 +7,7 @@ import { api } from '@renderer/lib/tauri-bridge'
 import { isRegistered, register, unregister } from '@tauri-apps/plugin-global-shortcut'
 import { useIntifaceControl } from '@toolkitosc/shared-ui'
 import type { Ref } from 'vue'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 const PAUSED_STORAGE_KEY = 'stopEverything_paused'
 const HOTKEY_STORAGE_KEY = 'stopEverything_hotkey'
@@ -136,12 +137,16 @@ export function useStopEverything(): {
   return { paused, hotkey, hotkeyError, stop, resume, toggle, setHotkey, registerHotkey }
 }
 
-// The triggers that work while the app isn't in front: the hotkey and the avatar parameter. Called
-// once, from App.vue.
+// The triggers that work while the app isn't in front (the hotkey and the avatar parameter), and the
+// chatbox notice. Called once, from App.vue.
 export function useStopEverythingTriggers(): void {
-  const { stop, registerHotkey } = useStopEverything()
+  const { paused, stop, registerHotkey } = useStopEverything()
+  const { announceNotice } = useChatbox()
 
   void registerHotkey()
+
+  // So people in the instance know why nothing reacts.
+  watch(paused, (value) => announceNotice(value ? 'Viewer controls paused' : 'Viewer controls are back on'))
 
   // Live changes only, not the values read when an avatar loads: a parameter saved as on must not
   // pause you every time you switch into that avatar. Works while already paused too: it stops

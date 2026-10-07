@@ -4,6 +4,7 @@ import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStat
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
+import { useChatbox } from '@renderer/composables/useChatbox'
 import { describeViewer, useClientsDb } from '@renderer/composables/useClientsDb'
 import { useClientType } from '@renderer/composables/useClientType'
 import { useCommandsDb } from '@renderer/composables/useCommandsDb'
@@ -151,7 +152,8 @@ export function useWebsocketHost(): {
   const { lastUpdate: intifaceLastUpdate, controlValue: intifaceValues } = useIntifaceControl()
   const { lastUpdate: intifacePatternLastUpdate, controlValue: intifacePatternValues } = useIntifacePatternControl()
   const { clientType } = useClientType()
-  const { shareSettings } = useShareSettings()
+  const { shareSettings, showViewers } = useShareSettings()
+  const { announceAction } = useChatbox()
   const { paused } = useStopEverything()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
@@ -306,6 +308,14 @@ export function useWebsocketHost(): {
               addCommandToDb({ ...accepted, discordId: viewer.discordId ?? undefined, peerId: client.peerId, ip })
               // Shown to every viewer as the share page's last action (see the server's host.ts).
               sendMessage('command-accepted', { ...accepted, peerId: client.peerId })
+              // And to the instance, in VRChat's chatbox, if the host turned it on. Names follow
+              // the share page's own setting.
+              announceAction({
+                ...accepted,
+                viewerKey: viewer.key,
+                viewerName: showViewers.value ? viewer.displayName : null,
+                control
+              })
             }
           }
         }
