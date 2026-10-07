@@ -2,6 +2,7 @@
 import AboutSettings from '@renderer/components/settings/AboutSettings.vue'
 import AccountSettings from '@renderer/components/settings/AccountSettings.vue'
 import AppearanceSettings from '@renderer/components/settings/AppearanceSettings.vue'
+import ChatboxSettings from '@renderer/components/settings/ChatboxSettings.vue'
 import DataSettings from '@renderer/components/settings/DataSettings.vue'
 import IntifaceSettings from '@renderer/components/settings/IntifaceSettings.vue'
 import OpenShockSettings from '@renderer/components/settings/OpenShockSettings.vue'
