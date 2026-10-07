@@ -96,6 +96,8 @@ export function useIntifacePatterns(): {
   // slider, most notably), so a manually-adjusted toy doesn't keep fighting a pattern still running
   // underneath it.
   releaseActuators: (actuators: IntifaceActuatorRef[], exceptControlId?: string) => void
+  // Stops every running pattern and zeroes its toys, whichever avatar's control started it.
+  stopAllPatterns: () => void
 } {
   const { setActuatorIntensity } = useIntiface()
   const { setValue: setPatternValue } = useIntifacePatternControl()
@@ -159,5 +161,13 @@ export function useIntifacePatterns(): {
     setPatternValue(controlId, patternId)
   }
 
-  return { playPattern, stopPattern, releaseActuators }
+  const stopAllPatterns = (): void => {
+    Array.from(runningPatterns.entries()).forEach(([controlId, entry]) => {
+      stopPattern(controlId)
+      setActuatorIntensity(entry.actuators, 0)
+      setPatternValue(controlId, INTIFACE_PATTERN_OFF_ID)
+    })
+  }
+
+  return { playPattern, stopPattern, releaseActuators, stopAllPatterns }
 }

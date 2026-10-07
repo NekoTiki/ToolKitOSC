@@ -7,6 +7,7 @@ import IntifaceSettings from '@renderer/components/settings/IntifaceSettings.vue
 import OpenShockSettings from '@renderer/components/settings/OpenShockSettings.vue'
 import SharingSettings from '@renderer/components/settings/SharingSettings.vue'
 import StartupSettings from '@renderer/components/settings/StartupSettings.vue'
+import StopSettings from '@renderer/components/settings/StopSettings.vue'
 import type { Component } from 'vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -17,6 +18,7 @@ import { useRoute } from 'vue-router'
 const SECTIONS: { key: string; label: string; description: string; icon: string; component: Component }[] = [
   { key: 'appearance', label: 'Appearance', description: 'Theme colors and tile size', icon: 'i-lucide-palette', component: AppearanceSettings },
   { key: 'sharing', label: 'Sharing & access', description: 'Share link and who can use it', icon: 'i-lucide-share-2', component: SharingSettings },
+  { key: 'stop', label: 'Stop everything', description: 'Hotkey and avatar parameter', icon: 'i-lucide-octagon-x', component: StopSettings },
   { key: 'account', label: 'Account & server', description: 'Discord sign-in and server', icon: 'i-lucide-globe', component: AccountSettings },
   { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings },
   { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings },

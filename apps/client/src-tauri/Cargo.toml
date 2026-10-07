@@ -32,6 +32,10 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 libloading = "0.9"
 sysinfo = { version = "0.36.1", default-features = false, features = ["system"] }
 
+# The Stop everything hotkey (see src/composables/useStopEverything.ts), registered from the UI.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"
+
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 # Creates the .lnk shortcut VRCX's own "Launch with VRChat" folder watches (see src/vrcx.rs).

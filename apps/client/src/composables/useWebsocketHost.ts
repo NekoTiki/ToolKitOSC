@@ -10,6 +10,7 @@ import { useCommandsDb } from '@renderer/composables/useCommandsDb'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { useShareSettings } from '@renderer/composables/useShareSettings'
+import { useStopEverything } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
@@ -151,6 +152,7 @@ export function useWebsocketHost(): {
   const { lastUpdate: intifacePatternLastUpdate, controlValue: intifacePatternValues } = useIntifacePatternControl()
   const { clientType } = useClientType()
   const { shareSettings } = useShareSettings()
+  const { paused } = useStopEverything()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
   const { status, data, send, open, close } = useWebSocket(() => `${serverWsUrl.value}/host`, {
@@ -190,6 +192,7 @@ export function useWebsocketHost(): {
         sendControls()
         sendTheme()
         sendMessage('share-settings', shareSettings.value)
+        sendMessage('pause-state', { paused: paused.value })
       } else if (data.type === 'auth-error') {
         console.error('Authentication failed:', data.message)
         setToken(undefined)
@@ -219,6 +222,9 @@ export function useWebsocketHost(): {
 
           void upsertViewers([describeViewer(client)])
         }
+      } else if (data.type === 'command' && paused.value) {
+        // Stop everything: viewer commands are dropped, not logged, until the host resumes. The
+        // relay drops them too, and the share page shows a paused card.
       } else if (data.type === 'command') {
         const client = clientsMap.value[data.from]
 
@@ -378,13 +384,16 @@ export function useWebsocketHost(): {
     })
   }
 
+  // These three are synchronous, so values set together (e.g. Stop everything zeroing every toy)
+  // each reach viewers instead of only the last one.
   watch(
     () => lastUpdate.value,
     (newUpdate) => {
       if (!newUpdate) return
 
       sendMessage('open-shock-value-update', newUpdate)
-    }
+    },
+    { flush: 'sync' }
   )
 
   watch(
@@ -393,7 +402,8 @@ export function useWebsocketHost(): {
       if (!newUpdate) return
 
       sendMessage('intiface-value-update', newUpdate)
-    }
+    },
+    { flush: 'sync' }
   )
 
   watch(
@@ -402,13 +412,18 @@ export function useWebsocketHost(): {
       if (!newUpdate) return
 
       sendMessage('intiface-pattern-value-update', newUpdate)
-    }
+    },
+    { flush: 'sync' }
   )
 
   watch([selectedPrimary, selectedSecondary], () => sendTheme())
 
   watch(shareSettings, (settings) => {
     if (status.value === 'OPEN') sendMessage('share-settings', settings)
+  })
+
+  watch(paused, (value) => {
+    if (status.value === 'OPEN') sendMessage('pause-state', { paused: value })
   })
 
   // When a profile turns on, or its limits change while it's on, bring running toys within the new
