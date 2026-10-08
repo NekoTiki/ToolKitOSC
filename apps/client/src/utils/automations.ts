@@ -98,8 +98,8 @@ export const defaultOutput = (type: OutputActionType): OutputAction => {
 
 export const parameterName = (address: string): string => address.replace(/^\/avatar\/parameters\//, '')
 
-export const formatMs = (ms: number): string =>
-  ms >= 1000 ? `${Number((ms / 1000).toFixed(1))} s` : `${ms} ms`
+// ESP32 timings are always shown in milliseconds, like the board itself counts them.
+export const formatMs = (ms: number): string => `${Math.round(ms)} ms`
 
 export const describeWhen = (when: AutomationTrigger): string => {
   const condition = CONDITIONS[when.condition.type]

@@ -79,6 +79,14 @@ pub fn save(app: &AppHandle, automation: Automation) -> Result<(), String> {
     if matches!(output, OutputAction::Follow { .. }) && !info.pwm {
         return Err(format!("{} can't dim, so it can't follow a value.", info.label));
     }
+    if let OutputAction::Pulse { on_ms, .. } = output {
+        if *on_ms > info.max_on_ms {
+            return Err(format!(
+                "The pulse is longer than {}'s max on-time ({} ms). Shorten it, or raise the max on-time.",
+                info.label, info.max_on_ms
+            ));
+        }
+    }
 
     let effects = {
         let mut state = automations(app).state.lock().unwrap();

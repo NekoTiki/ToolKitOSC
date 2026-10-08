@@ -21,14 +21,16 @@ const now = useNow({ interval: 1000 })
 const boardId = String(route.params.boardId)
 const board = computed(() => boards.value.find((b) => b.id === boardId))
 
-const DEFAULT_MAX_ON_SECONDS = 10
+const DEFAULT_MAX_ON_MS = 10000
+const MIN_MAX_ON_MS = 100
+const MAX_MAX_ON_MS = 3_600_000
 
 interface Row {
   key: number
   pin: number | undefined
   label: string
   activeLow: boolean
-  maxOnSeconds: number
+  maxOnMs: number
 }
 
 let nextKey = 0
@@ -37,13 +39,13 @@ const toRow = (output: BoardOutputConfig): Row => ({
   pin: output.pin,
   label: output.label,
   activeLow: output.activeLow,
-  maxOnSeconds: output.maxOnMs / 1000
+  maxOnMs: output.maxOnMs
 })
 const toOutput = (row: Row): BoardOutputConfig => ({
   pin: row.pin ?? -1,
   label: row.label.trim(),
   activeLow: row.activeLow,
-  maxOnMs: Math.round(row.maxOnSeconds * 1000)
+  maxOnMs: Math.round(row.maxOnMs)
 })
 
 const rows = ref<Row[]>([])
@@ -65,7 +67,7 @@ const dirty = computed(() => JSON.stringify(rows.value.map(toOutput)) !== savedJ
 const rowError = (row: Row): string | null => {
   if (!row.label.trim()) return 'Give it a name.'
   if (row.pin === undefined) return 'Pick a pin.'
-  if (!(row.maxOnSeconds >= 0.1 && row.maxOnSeconds <= 3600)) return 'Max on-time: 0.1 s to 1 hour.'
+  if (!(row.maxOnMs >= MIN_MAX_ON_MS && row.maxOnMs <= MAX_MAX_ON_MS)) return `Max on-time: ${MIN_MAX_ON_MS} to ${MAX_MAX_ON_MS} ms.`
   return null
 }
 const valid = computed(() => rows.value.every((row) => !rowError(row)))
@@ -96,7 +98,7 @@ const addRow = (): void => {
     pin: freePins.value[0]?.pin,
     label: '',
     activeLow: false,
-    maxOnSeconds: DEFAULT_MAX_ON_SECONDS
+    maxOnMs: DEFAULT_MAX_ON_MS
   })
 }
 
@@ -233,7 +235,7 @@ onBeforeRouteLeave(async () => {
 
       <FormSection
         title="Outputs"
-        :description="`What's wired to the board. ${board.outputs.length} pins available. Test switches an output on for half a second.`"
+        :description="`What's wired to the board. ${board.outputs.length} pins available. Test switches an output on for 500 ms.`"
       >
         <template #actions>
           <UButton
@@ -279,15 +281,15 @@ onBeforeRouteLeave(async () => {
           <div class="flex flex-wrap items-end gap-3">
             <UFormField
               label="Max on-time"
-              description="Seconds. The board never keeps it on longer in one go."
+              description="Milliseconds. The board never keeps it on longer in one go."
               class="min-w-56 flex-1"
             >
               <UInput
-                v-model.number="row.maxOnSeconds"
+                v-model.number="row.maxOnMs"
                 type="number"
-                min="0.1"
-                max="3600"
-                step="0.5"
+                :min="MIN_MAX_ON_MS"
+                :max="MAX_MAX_ON_MS"
+                step="100"
                 class="w-full"
               />
             </UFormField>

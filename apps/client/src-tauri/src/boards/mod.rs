@@ -343,7 +343,10 @@ pub fn save_outputs(app: &AppHandle, id: &str, outputs: Vec<OutputConfig>) -> Re
                 return Err(format!("GPIO {} is used by two outputs.", output.pin));
             }
             if !(MIN_MAX_ON_MS..=MAX_MAX_ON_MS).contains(&output.max_on_ms) {
-                return Err(format!("The max on-time of \"{}\" must be between 0.1 s and 1 hour.", output.label));
+                return Err(format!(
+                    "The max on-time of \"{}\" must be between {MIN_MAX_ON_MS} and {MAX_MAX_ON_MS} ms.",
+                    output.label
+                ));
             }
         }
 

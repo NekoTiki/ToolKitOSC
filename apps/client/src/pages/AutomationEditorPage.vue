@@ -17,6 +17,7 @@ import {
   defaultCondition,
   defaultOutput,
   describe,
+  formatMs,
   newAutomation,
   OUTPUT_ACTIONS,
   parameterName
@@ -142,8 +143,30 @@ const target = computed({
     draft.value.then.boardId = boardId!
     draft.value.then.pin = Number(pin)
     fitAction()
+    fitPulse()
   }
 })
+
+// The picked output as saved on its board, for its name and max on-time.
+const targetOutput = computed(() => {
+  const then = draft.value?.then
+  return then ? boards.value.find((b) => b.id === then.boardId)?.config?.find((o) => o.pin === then.pin) : undefined
+})
+
+// A pulse can't outlast the output's max on-time: the board would cut it short.
+const pulseTooLong = computed(
+  () =>
+    draft.value?.then.output.type === 'pulse' &&
+    !!targetOutput.value &&
+    draft.value.then.output.onMs > targetOutput.value.maxOnMs
+)
+
+const fitPulse = (): void => {
+  const output = draft.value?.then.output
+  if (output?.type === 'pulse' && targetOutput.value && output.onMs > targetOutput.value.maxOnMs) {
+    output.onMs = targetOutput.value.maxOnMs
+  }
+}
 
 const targetPwm = computed(() => {
   const then = draft.value?.then
@@ -153,7 +176,9 @@ const targetPwm = computed(() => {
 const actionType = computed({
   get: (): OutputActionType => draft.value?.then.output.type ?? 'pulse',
   set: (type: OutputActionType) => {
-    if (draft.value) draft.value.then.output = defaultOutput(type)
+    if (!draft.value) return
+    draft.value.then.output = defaultOutput(type)
+    fitPulse()
   }
 })
 
@@ -168,9 +193,8 @@ const fromSlider = (value: number | number[] | undefined, apply: (value: number)
   if (typeof value === 'number') apply(value)
 }
 
-// Seconds in the form, milliseconds in the data.
-const seconds = (ms: number): number => Math.round(ms) / 1000
-const toMs = (value: number | string): number => Math.max(0, Math.round(Number(value) * 1000))
+// Every ESP32 timing is entered in milliseconds.
+const toMs = (value: number | string): number => Math.max(0, Math.round(Number(value)))
 
 // ---- Saving
 
@@ -179,6 +203,8 @@ const problem = computed((): string | null => {
   if (!draft.value.name.trim()) return 'Give it a name.'
   if (!draft.value.when.parameter) return 'Pick the parameter that triggers it.'
   if (!target.value) return 'Pick the output it drives.'
+  if (draft.value.then.output.type === 'pulse' && draft.value.then.output.onMs <= 0) return 'Set how long the pulse lasts.'
+  if (pulseTooLong.value) return `The pulse is longer than ${targetOutput.value!.label}'s max on-time.`
   return null
 })
 
@@ -271,11 +297,12 @@ onBeforeRouteLeave(async () => {
       </FormSection>
     </div>
 
+    <!-- Wide windows: When and Do side by side, read left to right, with the name and limits across. -->
     <div
       v-else
-      class="grid max-w-3xl gap-3.5"
+      class="grid max-w-7xl items-start gap-3.5 xl:grid-cols-2"
     >
-      <FormSection>
+      <FormSection class="xl:col-span-2">
         <div class="flex flex-wrap items-end gap-3.5">
           <UFormField
             label="Name"
@@ -426,13 +453,15 @@ onBeforeRouteLeave(async () => {
           >
             <UFormField
               label="On for"
-              description="Seconds."
+              :description="targetOutput ? `Milliseconds. Up to ${formatMs(targetOutput.maxOnMs)}, ${targetOutput.label}'s max on-time.` : 'Milliseconds.'"
+              :error="pulseTooLong ? `Longer than ${formatMs(targetOutput!.maxOnMs)}. Shorten it, or raise the max on-time in Settings › ESP32 boards.` : false"
             >
               <UInput
-                :model-value="seconds(draft.then.output.onMs)"
+                :model-value="draft.then.output.onMs"
                 type="number"
-                min="0.05"
-                step="0.1"
+                min="1"
+                :max="targetOutput?.maxOnMs"
+                step="100"
                 class="w-full"
                 @update:model-value="draft.then.output.type === 'pulse' && (draft.then.output.onMs = toMs($event))"
               />
@@ -453,13 +482,13 @@ onBeforeRouteLeave(async () => {
             <UFormField
               v-if="draft.then.output.count > 1"
               label="Gap"
-              description="Seconds between pulses."
+              description="Milliseconds between pulses."
             >
               <UInput
-                :model-value="seconds(draft.then.output.offMs)"
+                :model-value="draft.then.output.offMs"
                 type="number"
                 min="0"
-                step="0.1"
+                step="100"
                 class="w-full"
                 @update:model-value="draft.then.output.type === 'pulse' && (draft.then.output.offMs = toMs($event))"
               />
@@ -495,28 +524,27 @@ onBeforeRouteLeave(async () => {
       <FormSection
         v-if="CONDITIONS[conditionType].moment"
         title="Limits"
+        class="xl:col-span-2"
       >
         <div class="flex flex-wrap items-start gap-3.5">
           <UFormField
             label="Cooldown"
-            description="Seconds before it can run again. 0 for none."
+            description="Milliseconds before it can run again. 0 for none."
             class="min-w-56 flex-1"
           >
             <UInput
-              :model-value="seconds(draft.cooldownMs)"
+              :model-value="draft.cooldownMs"
               type="number"
               min="0"
-              step="0.5"
+              step="100"
               class="w-full"
               @update:model-value="draft.cooldownMs = toMs($event)"
             />
           </UFormField>
-          <UFormField
-            label="If it happens again while running"
-            class="flex-1"
-          >
+          <UFormField label="If it happens again while running">
             <SegmentedControl
               v-model="draft.retrigger"
+              class="w-fit"
               :items="[
                 { value: 'restart', label: 'Start over' },
                 { value: 'ignore', label: 'Ignore it' }
