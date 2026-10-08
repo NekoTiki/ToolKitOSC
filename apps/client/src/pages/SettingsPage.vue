@@ -2,6 +2,7 @@
 import AboutSettings from '@renderer/components/settings/AboutSettings.vue'
 import AccountSettings from '@renderer/components/settings/AccountSettings.vue'
 import AppearanceSettings from '@renderer/components/settings/AppearanceSettings.vue'
+import ChatboxSettings from '@renderer/components/settings/ChatboxSettings.vue'
 import DataSettings from '@renderer/components/settings/DataSettings.vue'
 import IntifaceSettings from '@renderer/components/settings/IntifaceSettings.vue'
 import OpenShockSettings from '@renderer/components/settings/OpenShockSettings.vue'
@@ -18,6 +19,7 @@ import { useRoute } from 'vue-router'
 const SECTIONS: { key: string; label: string; description: string; icon: string; component: Component }[] = [
   { key: 'appearance', label: 'Appearance', description: 'Theme colors and tile size', icon: 'i-lucide-palette', component: AppearanceSettings },
   { key: 'sharing', label: 'Sharing & access', description: 'Share link and who can use it', icon: 'i-lucide-share-2', component: SharingSettings },
+  { key: 'chatbox', label: 'VRChat chatbox', description: 'Post viewer actions in-game', icon: 'i-lucide-message-square-text', component: ChatboxSettings },
   { key: 'stop', label: 'Stop everything', description: 'Hotkey and avatar parameter', icon: 'i-lucide-octagon-x', component: StopSettings },
   { key: 'account', label: 'Account & server', description: 'Discord sign-in and server', icon: 'i-lucide-globe', component: AccountSettings },
   { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings },
