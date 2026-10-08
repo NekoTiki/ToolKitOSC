@@ -24,6 +24,10 @@ export interface WsEnvelope<Type extends string, Message> {
 // Additive, no bump: controls may carry an optional `limits` (ControlLimits, from the host's active
 // profile). An older server forwards it untouched and an older viewer page ignores it; the host
 // enforces it either way, so mixed versions keep working.
+//
+// Additive, no bump: 'pause-state' (host -> server) and 'host-paused' (server -> viewer). An older
+// server drops the first and an older viewer page ignores the second; the host rejects commands
+// while paused either way.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
@@ -193,6 +197,12 @@ export interface ShareSettingsMessage {
   showViewers: boolean
 }
 
+// Stop everything: the host stopped every toy, pattern and shocker, and rejects viewer commands
+// until it resumes. Sent on every change and after each auth-success.
+export interface PauseStateMessage {
+  paused: boolean
+}
+
 // Sent by the host once it actually ran a viewer's command (past its ban, sign-in and rate-limit
 // checks), so the server can show it to everyone as the room's last action. Mirrors what the host
 // logs: `value` is the applied value, or the OpenShock result for a shocker.
@@ -252,6 +262,7 @@ export type HostToServerMessage =
   | WsEnvelope<'rate-limited', RateLimitedMessage>
   | WsEnvelope<'share-settings', ShareSettingsMessage>
   | WsEnvelope<'command-accepted', CommandAcceptedMessage>
+  | WsEnvelope<'pause-state', PauseStateMessage>
 
 // Server -> desktop client, over /host. `command`/`update-username` are relays of a viewer's
 // message with a `from` (session id) field appended directly onto the envelope, not nested.
@@ -284,6 +295,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'welcome', string>
   | WsEnvelope<'presence', PresenceMessage>
   | WsEnvelope<'viewer-action', ViewerActionMessage>
+  | WsEnvelope<'host-paused', boolean>
 
 // Browser viewer -> server, over /ws/[roomId].
 export type ViewerToServerMessage =

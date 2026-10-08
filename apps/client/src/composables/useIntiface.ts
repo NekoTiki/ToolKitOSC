@@ -432,6 +432,8 @@ export function useIntiface(): {
     actuators: { deviceIndex: number; actuatorIndex: number; actuatorType: string }[],
     value: number
   ) => void
+  // Stops every connected toy, not only the ones a control drives.
+  stopAllDevices: () => void
 } {
   const isCustomUrl = computed(() => !!url.value)
 
@@ -531,6 +533,10 @@ export function useIntiface(): {
     })
   }
 
+  const stopAllDevices = (): void => {
+    send([{ StopAllDevices: { Id: nextId() } }])
+  }
+
   return {
     url,
     defaultUrl: DEFAULT_INTIFACE_URL,
@@ -548,7 +554,8 @@ export function useIntiface(): {
     launchAttempts,
     maxLaunchAttempts: MAX_LAUNCH_ATTEMPTS,
     refusedReason,
-    setActuatorIntensity
+    setActuatorIntensity,
+    stopAllDevices
   }
 }
 

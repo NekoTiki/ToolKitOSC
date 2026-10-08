@@ -39,6 +39,9 @@ export const hostControls = new Map<RoomId, ControlGroup[]>()
 export const hostArgs = new Map<RoomId, Record<string, OSCArg[]>>()
 export const hostTheme = new Map<RoomId, { primary: string | null; secondary: string | null }>()
 export const hostShareSettings = new Map<RoomId, ShareSettingsMessage>()
+// Rooms whose host pressed Stop everything. Kept while the host is away, like share settings: the
+// host stays paused across restarts and says so again when it reconnects.
+export const hostPaused = new Set<RoomId>()
 // The room's most recent accepted command, with the viewer always filled in - hidden per send while
 // the host hides viewers. Replayed to anyone who joins, so the bar isn't empty until the next one.
 export const hostLastAction = new Map<RoomId, ViewerActionMessage>()
@@ -227,6 +230,15 @@ export default defineWebSocketHandler({
     } else if (data.type === 'share-settings') {
       hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false })
       broadcastPresence(roomId)
+    } else if (data.type === 'pause-state') {
+      const paused = data.message.paused === true
+
+      if (paused === hostPaused.has(roomId)) return
+
+      if (paused) hostPaused.add(roomId)
+      else hostPaused.delete(roomId)
+
+      sendToEveryoneInRoom(roomId, { type: 'host-paused', message: paused })
     } else if (data.type === 'command-accepted') {
       const client = clientList.get(roomId)?.get(data.message.peerId)
 

@@ -11,6 +11,7 @@ import {
   hostControls,
   hostLastAction,
   hostList,
+  hostPaused,
   hostShareSettings,
   hostTheme,
   sendClientListToHost,
@@ -173,6 +174,7 @@ export default defineWebSocketHandler({
     }
 
     peer.send({ type: 'host-status', message: hostList.has(roomId!) ? 'online' : 'offline' })
+    peer.send({ type: 'host-paused', message: hostPaused.has(roomId!) })
 
     peer.send({
       type: 'welcome',
@@ -218,6 +220,9 @@ export default defineWebSocketHandler({
       }
 
       if (data.type === 'command') {
+        // The host stopped everything: the page shows a paused card, and the host would reject it.
+        if (hostPaused.has(roomId!)) return
+
         // Check the command against the controls this room's viewers were sent (locks, the active
         // profile's limits, value types) so a hand-written message never reaches the host or the
         // stats. A control the cache doesn't know is passed on as-is: the host decides, and logs it.

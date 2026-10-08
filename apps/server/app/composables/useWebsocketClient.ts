@@ -32,6 +32,8 @@ export function useWebsocketClient(roomId: string) {
   const viewers = ref<PresenceEntry[] | null>(null)
   const you = ref<string | null>(null)
   const lastAction = ref<ViewerActionMessage | null>(null)
+  // The host pressed Stop everything. Commands are dropped until they resume.
+  const paused = ref(false)
 
   const { status, data, send, open, close } = useWebSocket(`/ws/${roomId}`, {
     heartbeat: {
@@ -82,6 +84,8 @@ export function useWebsocketClient(roomId: string) {
       } else if (data.type === 'theme-update') {
         if (data.message.primary) setTheme('primary', data.message.primary)
         if (data.message.secondary) setTheme('secondary', data.message.secondary)
+      } else if (data.type === 'host-paused') {
+        paused.value = data.message
       } else if (data.type === 'presence') {
         you.value = data.message.you
         viewers.value = data.message.viewers
@@ -102,6 +106,7 @@ export function useWebsocketClient(roomId: string) {
     viewers,
     you,
     lastAction,
+    paused,
     status,
     hostStatus,
     data,

@@ -33,6 +33,8 @@ invite can drive your avatar, toys and shockers in real time.
 - Sign-in with Discord, or join anonymously with a random _Adjective Animal_ name.
 - See who's connected and what they did on the **Viewers** and **Activity** pages, and ban anyone who misbehaves.
 - **Lock profiles** decide which controls viewers are allowed to touch.
+- **Stop everything** from the top bar, a global hotkey or the `TKOSC/Panic` avatar parameter: every toy and
+  shocker stops, and viewers see a paused page until you resume.
 
 ### 🔌 Integrations
 

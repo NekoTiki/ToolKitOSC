@@ -23,6 +23,8 @@ import { computed, ref, toRaw, watch } from 'vue'
 
 const controlsList = ref<ControlGroup[]>([])
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
+// Shocks waiting for their reel animation to end before they're sent to OpenShock.
+const pendingShocks = new Set<ReturnType<typeof setTimeout>>()
 
 // One-off migration: 'intiface-vibrator' (with a `vibrators` field) was renamed to 'intiface-toy'
 // (with `actuators`) - a control saved locally under the old shape doesn't just look different,
@@ -41,6 +43,12 @@ const migrateControlGroups = (groups: ControlGroup[]): ControlGroup[] => {
       return { ...rest, type: 'intiface-toy', actuators: vibrators } as ControlType
     })
   }))
+}
+
+// Drops every shock that hasn't reached OpenShock yet (see useStopEverything.ts).
+export const cancelPendingShocks = (): void => {
+  pendingShocks.forEach((timer) => clearTimeout(timer))
+  pendingShocks.clear()
 }
 
 export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) => void): {
@@ -405,7 +413,9 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         animationDuration: control.animationDuration
       })
 
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        pendingShocks.delete(timer)
+
         const cmd = control.shockers.map((shocker) => ({
           id: shocker,
           type: control.mode,
@@ -415,6 +425,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
         void osCommand(cmd)
       }, control.animationDuration)
+
+      pendingShocks.add(timer)
 
       return {
         intensity: Number(intensity),

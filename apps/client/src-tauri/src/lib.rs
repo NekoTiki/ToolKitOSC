@@ -64,7 +64,13 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<tauri::tray::TrayIcon> {
 pub fn run() {
     logging::init();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    // The Stop everything hotkey. Its key is the user's choice, so the UI registers it.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // A second launch attempt focuses the existing window instead of opening a new one —
             // also guards against two instances fighting over VRChat's OSC UDP port 9001.

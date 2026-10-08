@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Avatar parameters
+
+- Every avatar parameter the app itself reads or writes (as opposed to the user's own parameters that controls point at) is named `TKOSC/<Name>`, e.g. `TKOSC/Panic`. `TKOSC` stands for ToolKitOSC. Its OSC address is `/avatar/parameters/TKOSC/<Name>`.
+
 ## Releases
 
 ### Cutting a release

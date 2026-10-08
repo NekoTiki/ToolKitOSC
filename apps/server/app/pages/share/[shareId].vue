@@ -60,7 +60,7 @@ useSeoMeta({
 // groups in a sidebar - or a row of chips on a phone - and the selected group's tiles filling the
 // page, in the host's theme. Sign-in, banned, offline and disconnected are full-page states
 // rather than modals.
-const { controlGroups, authRequired, banned, viewers, you, lastAction, status, hostStatus, open, close, sendMessage } =
+const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, status, hostStatus, open, close, sendMessage } =
   useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
@@ -147,12 +147,13 @@ const submitUsername = (): void => {
 }
 
 // Which full-page state replaces the tiles, if any. Offline with controls still shows them, dimmed
-// under a banner, so viewers see what will come back.
-const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' | 'offline-empty' | 'empty' | null>(() => {
+// under a banner, so viewers see what will come back. Paused hides them: nothing would work.
+const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' | 'paused' | 'offline-empty' | 'empty' | null>(() => {
   if (banned.value) return 'banned'
   if (authRequired.value) return 'signin'
   if (!connectedOnce.value) return 'connecting'
   if (wsOffline.value) return 'disconnected'
+  if (paused.value) return 'paused'
   if (!controlGroups.value.length) return hostOffline.value ? 'offline-empty' : 'empty'
 
   return null
@@ -420,6 +421,12 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
             <b class="font-semibold">Reason:</b> {{ banned.reason }}
           </p>
         </ShareStateCard>
+        <ShareStateCard
+          v-else-if="pageState === 'paused'"
+          icon="i-lucide-octagon-pause"
+          title="Paused by host"
+          :description="`${hostName} stopped everything for now. The controls come back here by themselves when they resume.`"
+        />
         <ShareStateCard
           v-else-if="pageState === 'offline-empty'"
           icon="i-lucide-wifi-off"

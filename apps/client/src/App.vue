@@ -4,6 +4,7 @@ import TopBar from '@renderer/components/layout/TopBar.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
 import { useAppUpdater } from '@renderer/composables/useAppUpdater'
 import { useLogRetention } from '@renderer/composables/useLogRetention'
+import { useStopEverythingTriggers } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
 import { api } from '@renderer/lib/tauri-bridge'
 import { onMounted } from 'vue'
@@ -16,6 +17,7 @@ onMounted(() => api.ready())
 onMounted(() => loadTheme())
 useLogRetention()
 useAppUpdater()
+useStopEverythingTriggers()
 </script>
 
 <template>

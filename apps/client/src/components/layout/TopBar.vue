@@ -4,6 +4,7 @@ import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
+import { formatHotkey, useStopEverything } from '@renderer/composables/useStopEverything'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
@@ -19,8 +20,15 @@ const { controls } = useControls()
 const { user, loggedIn } = useAuth()
 const { authUrl } = useWebsocketAuth()
 const { lockedControlGroups, currentLockedControlsGroup, defaultLockedControlsGroup } = useLockedControls()
+const { paused, hotkey, toggle: toggleStop } = useStopEverything()
 const toast = useToast()
 const router = useRouter()
+
+const stopTitle = computed(() => {
+  const action = paused.value ? 'Let viewers use your controls again' : 'Stop every toy and shocker, and pause the share page'
+
+  return hotkey.value ? `${action} (${formatHotkey(hotkey.value)})` : action
+})
 
 const controlCount = computed(() => controls.value.reduce((n, group) => n + group.controls.length, 0))
 
@@ -120,6 +128,18 @@ const copyShareLink = async (): Promise<void> => {
         :tone="activeProfile ? 'warning' : 'muted'"
       />
     </UDropdownMenu>
+
+    <!-- Always shown, signed in or not: toys and shockers run without the server too. -->
+    <UButton
+      :icon="paused ? 'i-lucide-play' : 'i-lucide-octagon-x'"
+      :color="paused ? 'warning' : 'error'"
+      :variant="paused ? 'subtle' : 'solid'"
+      :title="stopTitle"
+      class="rounded-2xl"
+      @click="toggleStop"
+    >
+      {{ paused ? 'Paused · Resume' : 'Stop' }}
+    </UButton>
 
     <StatusBar v-if="loggedIn" />
 
