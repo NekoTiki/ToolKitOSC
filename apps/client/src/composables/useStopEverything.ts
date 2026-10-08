@@ -70,6 +70,8 @@ export function useStopEverything(): {
     })
     // Also catches toys no control of this avatar drives.
     stopAllDevices()
+    // Every output of every ESP32 board.
+    void api.boardsStopAll()
 
     // Every shocker on the account, not only the ones a control uses.
     if (openShockAvailable.value && shockerNames.value.size) {

@@ -105,7 +105,10 @@ pub fn run() {
             commands::board_add,
             commands::board_add_by_address,
             commands::board_pair_cancel,
-            commands::board_remove
+            commands::board_remove,
+            commands::board_save_outputs,
+            commands::board_test_output,
+            commands::boards_stop_all
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

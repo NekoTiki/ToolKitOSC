@@ -99,7 +99,10 @@ async fn run(app: AppHandle, id: String, mut commands: mpsc::UnboundedReceiver<L
             command = commands.recv() => match command {
                 Some(LinkCommand::Address) => backoff = MIN_BACKOFF,
                 // Offline: there's no board to tell. The user can unpair it on the board itself.
-                Some(LinkCommand::Unpair) | Some(LinkCommand::Shutdown) | None => return
+                Some(LinkCommand::Unpair) | Some(LinkCommand::Shutdown) | None => return,
+                // The config goes out after the next welcome anyway, and a test or a stop for a
+                // board that isn't there has nothing to do.
+                Some(LinkCommand::Config) | Some(LinkCommand::Test(_)) | Some(LinkCommand::Stop) => {}
             }
         }
         backoff = (backoff * 2).min(MAX_BACKOFF);
@@ -172,6 +175,14 @@ async fn session(
     }
 
     super::apply_welcome(app, id, &welcome);
+
+    // The app is the source of truth for the outputs once they've been saved here.
+    if let Some(config) = super::config_message(app, id) {
+        if send(&mut socket, &config).await.is_err() {
+            return End::Lost(false);
+        }
+    }
+
     super::set_status(app, id, LinkStatus::Online);
     tracing::info!("ESP32 board {} ({id}) online at {host}:{port}", welcome.name);
 
@@ -196,6 +207,7 @@ async fn session(
                     Some(Incoming::Pong) => missed = 0,
                     Some(Incoming::Err { code, reference, pin }) => {
                         tracing::warn!("ESP32 board {id} error: {code} (ref {reference:?}, pin {pin:?})");
+                        super::emit_error(app, id, code, pin);
                     }
                     _ => {}
                 },
@@ -206,6 +218,25 @@ async fn session(
             command = commands.recv() => match command {
                 // Still connected: nothing to do.
                 Some(LinkCommand::Address) => {}
+                Some(LinkCommand::Config) => {
+                    if let Some(config) = super::config_message(app, id) {
+                        if send(&mut socket, &config).await.is_err() {
+                            return End::Lost(true);
+                        }
+                        tracing::info!("Sent the output config to ESP32 board {id}");
+                    }
+                }
+                Some(LinkCommand::Test(pin)) => {
+                    let set = Outgoing::Set { pin, on: true, ms: super::TEST_PULSE_MS };
+                    if send(&mut socket, &set).await.is_err() {
+                        return End::Lost(true);
+                    }
+                }
+                Some(LinkCommand::Stop) => {
+                    if send(&mut socket, &Outgoing::Stop).await.is_err() {
+                        return End::Lost(true);
+                    }
+                }
                 Some(LinkCommand::Unpair) => {
                     let _ = send(&mut socket, &Outgoing::Unpair).await;
                     // The board answers by closing with 1000. Wait briefly for it.

@@ -25,7 +25,7 @@ const toast = useToast()
 const router = useRouter()
 
 const stopTitle = computed(() => {
-  const action = paused.value ? 'Let viewers use your controls again' : 'Stop every toy and shocker, and pause the share page'
+  const action = paused.value ? 'Let viewers use your controls again' : 'Stop every toy, shocker and board output, and pause the share page'
 
   return hotkey.value ? `${action} (${formatHotkey(hotkey.value)})` : action
 })

@@ -22,6 +22,22 @@ export interface BoardOutputPin {
   label?: string
 }
 
+// One output set up in the app ("Fan on GPIO 4"). The label stays in the app.
+export interface BoardOutputConfig {
+  pin: number
+  label: string
+  // For relay modules that switch on when the pin is LOW.
+  activeLow: boolean
+  maxOnMs: number
+}
+
+// A board refused something (see the firmware's PROTOCOL.md for the codes).
+export interface BoardError {
+  id: string
+  code: string
+  pin: number | null
+}
+
 export interface Board {
   id: string
   name: string
@@ -30,7 +46,10 @@ export interface Board {
   fw: string | null
   chip: string | null
   board: string | null
+  // Pins the board offers as outputs.
   outputs: BoardOutputPin[]
+  // The outputs set up in the app, null until first saved.
+  config: BoardOutputConfig[] | null
   status: BoardStatus
   // Unix ms, while offline.
   offlineSince: number | null
@@ -114,6 +133,13 @@ export const api = {
   boardAddByAddress: (address: string): Promise<Board> => invoke('board_add_by_address', { address }),
   boardPairCancel: (): Promise<void> => invoke('board_pair_cancel'),
   boardRemove: (id: string): Promise<void> => invoke('board_remove', { id }),
+  boardSaveOutputs: (id: string, outputs: BoardOutputConfig[]): Promise<void> =>
+    invoke('board_save_outputs', { id, outputs }),
+  boardTestOutput: (id: string, pin: number): Promise<void> => invoke('board_test_output', { id, pin }),
+  boardsStopAll: (): Promise<void> => invoke('boards_stop_all'),
+  onBoardError: (callback: (error: BoardError) => void): void => {
+    void listen<BoardError>('board-error', (event) => callback(event.payload))
+  },
   onBoardsChanged: (callback: (snapshot: BoardsSnapshot) => void): void => {
     void listen<BoardsSnapshot>('boards-changed', (event) => callback(event.payload))
   },

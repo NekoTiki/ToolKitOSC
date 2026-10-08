@@ -19,7 +19,18 @@ pub enum Outgoing<'a> {
     Pair,
     Hello { proto: u32, token: &'a str },
     Ping,
-    Unpair
+    Unpair,
+    Config { outputs: Vec<ConfigOutput> },
+    Set { pin: u8, on: bool, ms: u32 },
+    Stop
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigOutput {
+    pub pin: u8,
+    pub active_low: bool,
+    pub max_on_ms: u32
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -91,6 +102,15 @@ mod tests {
             encode(&Outgoing::Hello { proto: 1, token: "abc" }),
             r#"{"t":"hello","proto":1,"token":"abc"}"#
         );
+        assert_eq!(
+            encode(&Outgoing::Config { outputs: vec![ConfigOutput { pin: 4, active_low: false, max_on_ms: 10000 }] }),
+            r#"{"t":"config","outputs":[{"pin":4,"activeLow":false,"maxOnMs":10000}]}"#
+        );
+        assert_eq!(
+            encode(&Outgoing::Set { pin: 4, on: true, ms: 2000 }),
+            r#"{"t":"set","pin":4,"on":true,"ms":2000}"#
+        );
+        assert_eq!(encode(&Outgoing::Stop), r#"{"t":"stop"}"#);
     }
 
     #[test]

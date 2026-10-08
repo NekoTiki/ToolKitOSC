@@ -27,7 +27,21 @@ pub struct BoardRecord {
     #[serde(default)]
     pub board: Option<String>,
     #[serde(default)]
-    pub outputs: Vec<OutputPin>
+    pub outputs: Vec<OutputPin>,
+    /// The outputs set up in this app. None until they're first saved: until then nothing is sent,
+    /// and the board keeps whatever it already has.
+    #[serde(default)]
+    pub config: Option<Vec<OutputConfig>>
+}
+
+/// One output ("Fan on GPIO 4"). The label only lives in the app; the board gets the rest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputConfig {
+    pub pin: u8,
+    pub label: String,
+    pub active_low: bool,
+    pub max_on_ms: u32
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

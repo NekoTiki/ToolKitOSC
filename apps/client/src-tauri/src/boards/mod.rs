@@ -19,6 +19,7 @@ use tokio::sync::{mpsc, oneshot};
 
 pub use pairing::{pair, Target};
 use protocol::OutputPin;
+pub use store::OutputConfig;
 use store::BoardRecord;
 
 use crate::state::AppState;
@@ -46,7 +47,10 @@ pub struct BoardView {
     pub fw: Option<String>,
     pub chip: Option<String>,
     pub board: Option<String>,
+    /// Pins the board offers as outputs.
     pub outputs: Vec<OutputPin>,
+    /// The outputs set up in this app, None until first saved.
+    pub config: Option<Vec<OutputConfig>>,
     pub status: LinkStatus,
     /// Unix ms, while offline.
     pub offline_since: Option<i64>
@@ -81,8 +85,19 @@ pub enum LinkCommand {
     Address,
     /// Tell the board to forget its token, then stop.
     Unpair,
-    Shutdown
+    Shutdown,
+    /// Send the saved output config.
+    Config,
+    /// Pulse this pin briefly.
+    Test(u8),
+    /// Every output off.
+    Stop
 }
+
+/// How long a Test switches an output on.
+const TEST_PULSE_MS: u32 = 500;
+const MIN_MAX_ON_MS: u32 = 100;
+const MAX_MAX_ON_MS: u32 = 3_600_000;
 
 #[derive(Default)]
 struct Inner {
@@ -138,6 +153,7 @@ pub fn snapshot(app: &AppHandle) -> BoardsSnapshot {
                 chip: r.chip.clone(),
                 board: r.board.clone(),
                 outputs: r.outputs.clone(),
+                config: r.config.clone(),
                 status,
                 offline_since
             }
@@ -208,10 +224,14 @@ fn apply_welcome(app: &AppHandle, id: &str, welcome: &protocol::Welcome) {
 }
 
 /// Adds the board (or replaces it, when pairing an already added board again) and connects to it.
-fn add_record(app: &AppHandle, record: BoardRecord) {
+fn add_record(app: &AppHandle, mut record: BoardRecord) {
     let id = record.id.clone();
     let records = {
         let mut inner = boards(app).inner.lock().unwrap();
+        // Pairing an added board again keeps its outputs.
+        if let Some(old) = inner.records.iter().find(|r| r.id == id) {
+            record.config = old.config.clone();
+        }
         inner.records.retain(|r| r.id != id);
         inner.records.push(record);
         inner.status.remove(&id);
@@ -285,4 +305,102 @@ pub fn cancel_pairing(app: &AppHandle) {
     if let Some(cancel) = boards(app).inner.lock().unwrap().pairing.take() {
         let _ = cancel.send(());
     }
+}
+
+fn link(app: &AppHandle, id: &str) -> Option<mpsc::UnboundedSender<LinkCommand>> {
+    boards(app).inner.lock().unwrap().links.get(id).cloned()
+}
+
+fn is_online(app: &AppHandle, id: &str) -> bool {
+    boards(app).inner.lock().unwrap().status.get(id).map(|(s, _)| *s) == Some(LinkStatus::Online)
+}
+
+/// Saves the board's outputs and sends them to it (now if online, otherwise when it connects).
+pub fn save_outputs(app: &AppHandle, id: &str, outputs: Vec<OutputConfig>) -> Result<(), String> {
+    let outputs: Vec<OutputConfig> = outputs
+        .into_iter()
+        .map(|o| OutputConfig { label: o.label.trim().to_string(), ..o })
+        .collect();
+
+    let records = {
+        let mut inner = boards(app).inner.lock().unwrap();
+        let record = inner
+            .records
+            .iter_mut()
+            .find(|r| r.id == id)
+            .ok_or("That board isn't added any more.")?;
+
+        for (i, output) in outputs.iter().enumerate() {
+            if output.label.is_empty() {
+                return Err("Every output needs a name.".into());
+            }
+            if !record.outputs.iter().any(|p| p.pin == output.pin) {
+                return Err(format!("GPIO {} isn't one of the pins this board offers.", output.pin));
+            }
+            if outputs[..i].iter().any(|o| o.pin == output.pin) {
+                return Err(format!("GPIO {} is used by two outputs.", output.pin));
+            }
+            if !(MIN_MAX_ON_MS..=MAX_MAX_ON_MS).contains(&output.max_on_ms) {
+                return Err(format!("The max on-time of \"{}\" must be between 0.1 s and 1 hour.", output.label));
+            }
+        }
+
+        record.config = Some(outputs);
+        inner.records.clone()
+    };
+
+    store::save(app, &records);
+    if let Some(link) = link(app, id) {
+        let _ = link.send(LinkCommand::Config);
+    }
+    emit(app);
+    Ok(())
+}
+
+/// Pulses a saved output briefly, to check the wiring.
+pub fn test_output(app: &AppHandle, id: &str, pin: u8) -> Result<(), String> {
+    let saved = record(app, id)
+        .and_then(|r| r.config)
+        .is_some_and(|config| config.iter().any(|o| o.pin == pin));
+    if !saved {
+        return Err("Save this output before testing it.".into());
+    }
+    if !is_online(app, id) {
+        return Err("The board is offline.".into());
+    }
+
+    link(app, id)
+        .ok_or_else(|| "The board is offline.".to_string())?
+        .send(LinkCommand::Test(pin))
+        .map_err(|_| "The board is offline.".to_string())
+}
+
+/// Every output of every board off (Stop everything).
+pub fn stop_all(app: &AppHandle) {
+    let links: Vec<_> = boards(app).inner.lock().unwrap().links.values().cloned().collect();
+    for link in links {
+        let _ = link.send(LinkCommand::Stop);
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct BoardError {
+    id: String,
+    code: String,
+    pin: Option<u8>
+}
+
+/// An `err` from a board, for the UI to explain why something did nothing.
+fn emit_error(app: &AppHandle, id: &str, code: String, pin: Option<u8>) {
+    let _ = app.emit("board-error", BoardError { id: id.to_string(), code, pin });
+}
+
+fn config_message(app: &AppHandle, id: &str) -> Option<protocol::Outgoing<'static>> {
+    let config = record(app, id)?.config?;
+    Some(protocol::Outgoing::Config {
+        outputs: config
+            .iter()
+            .map(|o| protocol::ConfigOutput { pin: o.pin, active_low: o.active_low, max_on_ms: o.max_on_ms })
+            .collect()
+    })
 }

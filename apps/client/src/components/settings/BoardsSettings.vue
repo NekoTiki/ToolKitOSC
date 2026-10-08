@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import AddBoardDialog from '@renderer/components/AddBoardDialog.vue'
-import type { StatusInfo } from '@renderer/components/settings/StatusLine.vue'
 import StatusLine from '@renderer/components/settings/StatusLine.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
-import { useBoards } from '@renderer/composables/useBoards'
-import type { Board, BoardOutputPin } from '@renderer/lib/tauri-bridge'
-import { timeAgo } from '@renderer/utils/time'
+import { boardStatusInfo, useBoards } from '@renderer/composables/useBoards'
+import type { Board } from '@renderer/lib/tauri-bridge'
 import { useNow } from '@vueuse/core'
 import { computed, ref } from 'vue'
 
@@ -33,42 +31,18 @@ const secondsLeft = computed(() =>
     : null
 )
 
-const statusInfo = (board: Board): StatusInfo => {
-  switch (board.status) {
-    case 'online':
-      return { icon: 'i-lucide-circle-check', class: 'text-success', label: 'Online' }
-    case 'offline':
-      return {
-        icon: 'i-lucide-circle-x',
-        class: 'text-error',
-        label: board.offlineSince
-          ? `Offline since ${timeAgo(board.offlineSince, now.value)}`
-          : 'Offline'
-      }
-    case 'needs-pairing':
-      return { icon: 'i-lucide-link-2-off', class: 'text-warning', label: 'Needs pairing again' }
-    case 'update-firmware':
-      return {
-        icon: 'i-lucide-triangle-alert',
-        class: 'text-warning',
-        label: 'Update the firmware'
-      }
-    default:
-      return {
-        icon: 'i-lucide-circle-dashed',
-        class: 'text-muted animate-pulse',
-        label: 'Connecting…'
-      }
-  }
-}
-
 const details = (board: Board): string =>
   [`${board.host}`, board.fw && `firmware ${board.fw}`, board.chip, board.board]
     .filter(Boolean)
     .join(' · ')
 
-const pinLabel = (output: BoardOutputPin): string =>
-  output.label ? `GPIO ${output.pin} · ${output.label}` : `GPIO ${output.pin}`
+// What the board's chips show: its outputs once set up, otherwise how many pins it offers.
+const outputChips = (board: Board): string[] =>
+  board.config?.length
+    ? board.config.map((o) => `${o.label} · GPIO ${o.pin} · max ${formatSeconds(o.maxOnMs)}`)
+    : [`No outputs yet · ${board.outputs.length} pins available`]
+
+const formatSeconds = (ms: number): string => `${Number((ms / 1000).toFixed(1))} s`
 
 const removeBoard = async (board: Board): Promise<void> => {
   const ok = await confirm({
@@ -155,7 +129,7 @@ const repair = (board: Board): Promise<void> =>
           <div class="grid min-w-0 flex-1 gap-0.5">
             <b class="truncate font-medium text-highlighted">{{ board.name }}</b>
             <small class="truncate text-xs text-muted">{{ details(board) }}</small>
-            <StatusLine :status="statusInfo(board)" />
+            <StatusLine :status="boardStatusInfo(board, now)" />
           </div>
           <UButton
             v-if="board.status === 'needs-pairing'"
@@ -167,6 +141,14 @@ const repair = (board: Board): Promise<void> =>
             Pair again
           </UButton>
           <UButton
+            icon="i-lucide-pencil"
+            color="neutral"
+            variant="subtle"
+            :to="`/settings/esp32/${board.id}`"
+          >
+            Edit
+          </UButton>
+          <UButton
             icon="i-lucide-trash-2"
             color="neutral"
             variant="subtle"
@@ -175,15 +157,12 @@ const repair = (board: Board): Promise<void> =>
             Remove
           </UButton>
         </div>
-        <div
-          v-if="board.outputs.length"
-          class="flex flex-wrap gap-1.5 pl-13"
-        >
+        <div class="flex flex-wrap gap-1.5 pl-13">
           <span
-            v-for="output in board.outputs"
-            :key="output.pin"
-            class="rounded-full bg-(--aurora-well) px-2.5 py-0.5 font-mono text-xs text-muted"
-          >{{ pinLabel(output) }}</span>
+            v-for="chip in outputChips(board)"
+            :key="chip"
+            class="rounded-full bg-(--aurora-well) px-2.5 py-0.5 text-xs text-muted"
+          >{{ chip }}</span>
         </div>
       </div>
     </div>

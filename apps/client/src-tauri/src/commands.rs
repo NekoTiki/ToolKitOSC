@@ -7,7 +7,7 @@ use std::sync::atomic::Ordering;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::boards::{self, BoardView, BoardsSnapshot, Target};
+use crate::boards::{self, BoardView, BoardsSnapshot, OutputConfig, Target};
 use crate::osc::{codec, oscquery};
 use crate::presets::{self, PresetStore};
 use crate::state::AppState;
@@ -300,4 +300,22 @@ pub fn board_pair_cancel(app: AppHandle) {
 #[tauri::command]
 pub fn board_remove(app: AppHandle, id: String) {
     boards::remove(&app, &id);
+}
+
+/// Saves a board's outputs and sends them to it, now or when it next connects.
+#[tauri::command]
+pub fn board_save_outputs(app: AppHandle, id: String, outputs: Vec<OutputConfig>) -> Result<(), String> {
+    boards::save_outputs(&app, &id, outputs)
+}
+
+/// Switches a saved output on for half a second.
+#[tauri::command]
+pub fn board_test_output(app: AppHandle, id: String, pin: u8) -> Result<(), String> {
+    boards::test_output(&app, &id, pin)
+}
+
+/// Every output of every board off (Stop everything).
+#[tauri::command]
+pub fn boards_stop_all(app: AppHandle) {
+    boards::stop_all(&app);
 }

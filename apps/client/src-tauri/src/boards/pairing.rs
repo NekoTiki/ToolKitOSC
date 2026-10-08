@@ -159,7 +159,8 @@ async fn run(app: &AppHandle, target: &Target) -> Result<BoardView, String> {
         fw: Some(welcome.fw.clone()),
         chip: Some(welcome.chip.clone()),
         board: Some(welcome.board.clone()),
-        outputs: welcome.outputs.clone()
+        outputs: welcome.outputs.clone(),
+        config: None
     };
     tracing::info!("Added ESP32 board {} ({})", record.name, record.id);
     super::add_record(app, record);
