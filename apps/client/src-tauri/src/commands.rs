@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::boards::{self, BoardView, BoardsSnapshot, Target};
 use crate::osc::{codec, oscquery};
 use crate::presets::{self, PresetStore};
 use crate::state::AppState;
@@ -270,4 +271,33 @@ pub fn ready(app: AppHandle, state: State<AppState>) {
     for msg in messages {
         let _ = app.emit("vrc-osc-message", &msg);
     }
+}
+
+#[tauri::command]
+pub fn boards_list(app: AppHandle) -> BoardsSnapshot {
+    boards::snapshot(&app)
+}
+
+/// Pairs with a board found over mDNS. Resolves once someone pressed its BOOT button (progress
+/// arrives as `board-pairing` events), or fails with a message to show.
+#[tauri::command]
+pub async fn board_add(app: AppHandle, id: String) -> Result<BoardView, String> {
+    boards::pair(app, Target::Found(id)).await
+}
+
+/// Same, for a board mDNS can't see: `192.168.1.40`, `tkosc-a1b2c3.local`, optionally `:port`.
+#[tauri::command]
+pub async fn board_add_by_address(app: AppHandle, address: String) -> Result<BoardView, String> {
+    boards::pair(app, Target::Address(address)).await
+}
+
+#[tauri::command]
+pub fn board_pair_cancel(app: AppHandle) {
+    boards::cancel_pairing(&app);
+}
+
+/// Unpairs the board if it's online, and forgets it.
+#[tauri::command]
+pub fn board_remove(app: AppHandle, id: String) {
+    boards::remove(&app, &id);
 }

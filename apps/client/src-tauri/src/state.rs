@@ -7,6 +7,7 @@ use tauri::tray::TrayIcon;
 use tokio::net::UdpSocket;
 use vrchat_osc::VRChatOSC;
 
+use crate::boards::Boards;
 use crate::osc::cache::CacheThrottle;
 use crate::types::{AvatarDetails, OscMessage};
 
@@ -44,7 +45,9 @@ pub struct AppState {
     /// The tray icon built once in `lib.rs::setup_tray`. Kept here so `commands::set_minimize_to_tray`
     /// can show/hide it in step with the setting - the icon only earns its keep as a way back into
     /// a window that's hidden rather than closed, so it has no reason to exist while the setting is off.
-    pub tray_icon: Mutex<Option<TrayIcon>>
+    pub tray_icon: Mutex<Option<TrayIcon>>,
+    /// Added and found ESP32 boards (see `boards`).
+    pub boards: Boards
 }
 
 impl Default for AppState {
@@ -60,7 +63,8 @@ impl Default for AppState {
             oscquery: Mutex::new(None),
             avatar_poll_task: Mutex::new(None),
             minimize_to_tray: AtomicBool::new(false),
-            tray_icon: Mutex::new(None)
+            tray_icon: Mutex::new(None),
+            boards: Boards::default()
         }
     }
 }

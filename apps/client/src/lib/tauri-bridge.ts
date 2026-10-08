@@ -11,6 +11,56 @@ import type { AvatarDetails, OscCommand, OSCMessage, PresetStore } from '@toolki
 // that it could but the app it hooks into wasn't found.
 export type IntegrationAvailability = 'available' | 'not-installed' | 'unsupported'
 
+// ESP32 boards - mirrors src-tauri/src/boards/mod.rs. 'needs-pairing': the board refused its token
+// (reset, or paired to another PC since). 'update-firmware': it speaks another protocol version.
+export type BoardStatus = 'connecting' | 'online' | 'offline' | 'needs-pairing' | 'update-firmware'
+
+export interface BoardOutputPin {
+  pin: number
+  pwm: boolean
+  // Silkscreen name, when the board's profile knows it.
+  label?: string
+}
+
+export interface Board {
+  id: string
+  name: string
+  host: string
+  port: number
+  fw: string | null
+  chip: string | null
+  board: string | null
+  outputs: BoardOutputPin[]
+  status: BoardStatus
+  // Unix ms, while offline.
+  offlineSince: number | null
+}
+
+export interface FoundBoard {
+  id: string
+  name: string
+  host: string
+  port: number
+  fw: string | null
+  proto: number | null
+  // Some app holds a token for it.
+  paired: boolean
+  // Already in this app's list.
+  added: boolean
+}
+
+export interface BoardsSnapshot {
+  boards: Board[]
+  found: FoundBoard[]
+}
+
+export type BoardPairingEvent =
+  | { state: 'connecting'; name: string }
+  | { state: 'waiting'; name: string; timeoutMs: number }
+  | { state: 'paired'; id: string; name: string }
+  | { state: 'failed'; reason: string }
+  | { state: 'cancelled' }
+
 export const api = {
   ready: (): void => {
     void invoke('ready')
@@ -57,7 +107,19 @@ export const api = {
   savePresets: (avatarId: string, store: PresetStore): Promise<void> =>
     invoke('save_presets', { avatarId, store }),
   forcePullParameters: (missingOnly: boolean): Promise<number> =>
-    invoke('force_pull_parameters', { missingOnly })
+    invoke('force_pull_parameters', { missingOnly }),
+  boardsList: (): Promise<BoardsSnapshot> => invoke('boards_list'),
+  // Both resolve once someone pressed the board's BOOT button, and reject with a message to show.
+  boardAdd: (id: string): Promise<Board> => invoke('board_add', { id }),
+  boardAddByAddress: (address: string): Promise<Board> => invoke('board_add_by_address', { address }),
+  boardPairCancel: (): Promise<void> => invoke('board_pair_cancel'),
+  boardRemove: (id: string): Promise<void> => invoke('board_remove', { id }),
+  onBoardsChanged: (callback: (snapshot: BoardsSnapshot) => void): void => {
+    void listen<BoardsSnapshot>('boards-changed', (event) => callback(event.payload))
+  },
+  onBoardPairing: (callback: (event: BoardPairingEvent) => void): void => {
+    void listen<BoardPairingEvent>('board-pairing', (event) => callback(event.payload))
+  }
 }
 
 export type TauriApiType = typeof api

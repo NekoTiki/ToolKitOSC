@@ -2,6 +2,7 @@
 import AboutSettings from '@renderer/components/settings/AboutSettings.vue'
 import AccountSettings from '@renderer/components/settings/AccountSettings.vue'
 import AppearanceSettings from '@renderer/components/settings/AppearanceSettings.vue'
+import BoardsSettings from '@renderer/components/settings/BoardsSettings.vue'
 import ChatboxSettings from '@renderer/components/settings/ChatboxSettings.vue'
 import DataSettings from '@renderer/components/settings/DataSettings.vue'
 import IntifaceSettings from '@renderer/components/settings/IntifaceSettings.vue'
@@ -24,6 +25,7 @@ const SECTIONS: { key: string; label: string; description: string; icon: string;
   { key: 'account', label: 'Account & server', description: 'Discord sign-in and server', icon: 'i-lucide-globe', component: AccountSettings },
   { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings },
   { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings },
+  { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings },
   { key: 'startup', label: 'Startup', description: 'Tray, SteamVR and VRChat', icon: 'i-lucide-power', component: StartupSettings },
   { key: 'data', label: 'Data & logs', description: 'Activity log and bans', icon: 'i-lucide-database', component: DataSettings },
   { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings }
