@@ -1,4 +1,5 @@
 mod avatar;
+mod boards;
 mod commands;
 mod logging;
 mod osc;
@@ -99,7 +100,15 @@ pub fn run() {
             commands::set_minimize_to_tray,
             commands::load_presets,
             commands::save_presets,
-            commands::force_pull_parameters
+            commands::force_pull_parameters,
+            commands::boards_list,
+            commands::board_add,
+            commands::board_add_by_address,
+            commands::board_pair_cancel,
+            commands::board_remove,
+            commands::board_save_outputs,
+            commands::board_test_output,
+            commands::boards_stop_all
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
@@ -144,6 +153,9 @@ pub fn run() {
                     tracing::error!("OSCQuery setup failed, no OSC will be received: {err:?}");
                 }
             });
+
+            // ESP32 boards: reconnects the added ones and browses for new ones over mDNS.
+            boards::start(app.handle().clone());
 
             Ok(())
         })

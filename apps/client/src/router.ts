@@ -34,6 +34,7 @@ export const router = createRouter({
     { path: '/activity', name: 'activity', component: () => import('@renderer/pages/ActivityPage.vue') },
     { path: '/ai', name: 'ai', component: () => import('@renderer/pages/AiPage.vue') },
     { path: '/settings/:section?', name: 'settings', component: () => import('@renderer/pages/SettingsPage.vue') },
+    { path: '/settings/esp32/:boardId', name: 'board', component: () => import('@renderer/pages/BoardEditorPage.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/controls' }
   ]
 })
