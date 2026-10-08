@@ -5,6 +5,7 @@ import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { boardStatusInfo, useBoards } from '@renderer/composables/useBoards'
 import type { Board } from '@renderer/lib/tauri-bridge'
+import { formatMs } from '@renderer/utils/automations'
 import { useNow } from '@vueuse/core'
 import { computed, ref } from 'vue'
 
@@ -39,10 +40,9 @@ const details = (board: Board): string =>
 // What the board's chips show: its outputs once set up, otherwise how many pins it offers.
 const outputChips = (board: Board): string[] =>
   board.config?.length
-    ? board.config.map((o) => `${o.label} · GPIO ${o.pin} · max ${formatSeconds(o.maxOnMs)}`)
+    ? board.config.map((o) => `${o.label} · GPIO ${o.pin} · max ${formatMs(o.maxOnMs)}`)
     : [`No outputs yet · ${board.outputs.length} pins available`]
 
-const formatSeconds = (ms: number): string => `${Number((ms / 1000).toFixed(1))} s`
 
 const removeBoard = async (board: Board): Promise<void> => {
   const ok = await confirm({

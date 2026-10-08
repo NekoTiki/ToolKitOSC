@@ -24,6 +24,7 @@ const { generating: aiGenerating, unseen: aiUnseen } = useAiSession()
 const items = computed<RailItem[]>(() => [
   { key: 'controls', label: 'Controls', icon: 'i-lucide-layout-grid', to: '/controls' },
   { key: 'presets', label: 'Presets', icon: 'i-lucide-layers', to: '/presets' },
+  { key: 'automations', label: 'Automations', icon: 'i-lucide-workflow', to: '/automations' },
   { key: 'profiles', label: 'Profiles', icon: 'i-lucide-lock', to: '/profiles' },
   { key: 'viewers', label: 'Viewers', icon: 'i-lucide-users', to: '/viewers', badge: uniqueClientCount.value },
   { key: 'activity', label: 'Activity', icon: 'i-lucide-history', to: '/activity' },

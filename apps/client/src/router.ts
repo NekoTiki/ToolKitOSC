@@ -25,6 +25,13 @@ export const router = createRouter({
     { path: '/presets', name: 'presets', component: () => import('@renderer/pages/PresetsPage.vue') },
     { path: '/presets/new', name: 'preset-new', component: () => import('@renderer/pages/PresetsPage.vue') },
     { path: '/presets/:presetId', name: 'preset', component: () => import('@renderer/pages/PresetsPage.vue') },
+    { path: '/automations', name: 'automations', component: () => import('@renderer/pages/AutomationsPage.vue') },
+    { path: '/automations/new', name: 'automation-new', component: () => import('@renderer/pages/AutomationEditorPage.vue') },
+    {
+      path: '/automations/:automationId',
+      name: 'automation',
+      component: () => import('@renderer/pages/AutomationEditorPage.vue')
+    },
     { path: '/parameters', name: 'parameters', component: () => import('@renderer/pages/ParametersPage.vue') },
     { path: '/parameters/log', name: 'parameter-log', component: () => import('@renderer/pages/ParameterLogPage.vue') },
     { path: '/profiles', name: 'profiles', component: () => import('@renderer/pages/ProfilesPage.vue') },

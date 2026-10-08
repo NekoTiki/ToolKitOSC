@@ -147,6 +147,9 @@ export function useStopEverythingTriggers(): void {
 
   void registerHotkey()
 
+  // Automations run in the backend, so it needs to know too. Immediate: paused survives restarts.
+  watch(paused, (value) => void api.automationsSetPaused(value), { immediate: true })
+
   // So people in the instance know why nothing reacts.
   watch(paused, (value) => announceNotice(value ? 'Viewer controls paused' : 'Viewer controls are back on'))
 

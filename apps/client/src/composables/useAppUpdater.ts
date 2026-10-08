@@ -9,6 +9,11 @@ import { onMounted, ref } from 'vue'
 // flashing/closing instantly.
 let hasCheckedOnLaunch = false
 
+// True for `tauri dev` (Vite serving the app), false for every `vite build`, including releases.
+// Fixed at build time, so a release can't lose its update checks. A dev build never installs an
+// update: the installer would replace the released app, not this build.
+const DEV_BUILD = import.meta.env.DEV
+
 // Called both unconditionally from App.vue (silent - see useLogRetention.ts for the same
 // call-once-on-mount pattern) and on demand from Settings → About's "Check for updates" button
 // (not silent - that click deserves feedback even when there's nothing to install).
@@ -21,6 +26,17 @@ export function useAppUpdater(): {
 
   const showUpdateToast = (update: NonNullable<Awaited<ReturnType<typeof check>>>): void => {
     const availableToastId = `app-update-${update.version}`
+
+    if (DEV_BUILD) {
+      toast.add({
+        id: availableToastId,
+        title: `Update available: v${update.version}`,
+        description: "Development builds don't install updates. Install it from a release build.",
+        icon: 'i-lucide-download',
+        color: 'info'
+      })
+      return
+    }
 
     toast.add({
       id: availableToastId,
@@ -121,7 +137,8 @@ export function useAppUpdater(): {
   }
 
   onMounted(() => {
-    if (hasCheckedOnLaunch) return
+    // No silent check at launch in development builds; Settings › About can still check by hand.
+    if (DEV_BUILD || hasCheckedOnLaunch) return
     hasCheckedOnLaunch = true
     void checkForUpdates({ silent: true })
   })

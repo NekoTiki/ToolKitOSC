@@ -1,3 +1,4 @@
+mod automations;
 mod avatar;
 mod boards;
 mod commands;
@@ -108,7 +109,13 @@ pub fn run() {
             commands::board_remove,
             commands::board_save_outputs,
             commands::board_test_output,
-            commands::boards_stop_all
+            commands::boards_stop_all,
+            commands::automations_list,
+            commands::automation_save,
+            commands::automation_delete,
+            commands::automation_set_enabled,
+            commands::automation_test,
+            commands::automations_set_paused
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
@@ -156,6 +163,7 @@ pub fn run() {
 
             // ESP32 boards: reconnects the added ones and browses for new ones over mDNS.
             boards::start(app.handle().clone());
+            automations::start(app.handle().clone());
 
             Ok(())
         })

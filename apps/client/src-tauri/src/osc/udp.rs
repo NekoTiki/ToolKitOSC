@@ -54,15 +54,22 @@ pub(super) fn flatten_packet(packet: rosc::OscPacket) -> Vec<rosc::OscMessage> {
 
 /// `pub(super)`: the actual receive path lives in `osc::oscquery`, which calls this per decoded
 /// message - see this file's module doc comment for why there's no receive loop here anymore.
-pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage) {
+/// Where a message came from. Only `Live` changes run automations: a value read on request
+/// (Parameters page's pull) didn't just happen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Origin {
+    Live,
+    Pull
+}
+
+pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Origin) {
     let osc_msg = codec::decode_message(&raw);
     let state = app.state::<AppState>();
 
-    let is_duplicate = {
+    let (is_duplicate, previous) = {
         let mut messages = state.messages.lock().unwrap();
-        let is_duplicate = messages.get(&osc_msg.address) == Some(&osc_msg);
-        messages.insert(osc_msg.address.clone(), osc_msg.clone());
-        is_duplicate
+        let previous = messages.insert(osc_msg.address.clone(), osc_msg.clone());
+        (previous.as_ref() == Some(&osc_msg), previous)
     };
 
     // Load-bearing, not just an optimization: osc::oscquery's avatar-change polling calls this
@@ -89,6 +96,10 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage) {
 
     let _ = app.emit("vrc-osc-message", &osc_msg);
 
+    if origin == Origin::Live && osc_msg.address.starts_with("/avatar/parameters/") {
+        crate::automations::on_parameter(app, &osc_msg, previous.as_ref());
+    }
+
     let avatar_id = state.avatar_details.lock().unwrap().as_ref().map(|d| d.id.clone());
     if let Some(avatar_id) = avatar_id {
         let cache_snapshot = state.messages.lock().unwrap().clone();
@@ -114,6 +125,7 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
     };
 
     tracing::info!("Avatar changed: {avatar_id}");
+    crate::automations::avatar_changed(app);
     *state.unresolved_avatar.lock().unwrap() = None;
 
     *state.avatar_details.lock().unwrap() = Some(details.clone());

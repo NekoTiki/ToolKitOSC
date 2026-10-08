@@ -102,7 +102,10 @@ async fn run(app: AppHandle, id: String, mut commands: mpsc::UnboundedReceiver<L
                 Some(LinkCommand::Unpair) | Some(LinkCommand::Shutdown) | None => return,
                 // The config goes out after the next welcome anyway, and a test or a stop for a
                 // board that isn't there has nothing to do.
-                Some(LinkCommand::Config) | Some(LinkCommand::Test(_)) | Some(LinkCommand::Stop) => {}
+                Some(LinkCommand::Config)
+                | Some(LinkCommand::Test(_))
+                | Some(LinkCommand::Stop)
+                | Some(LinkCommand::Output(_)) => {}
             }
         }
         backoff = (backoff * 2).min(MAX_BACKOFF);
@@ -234,6 +237,12 @@ async fn session(
                 }
                 Some(LinkCommand::Stop) => {
                     if send(&mut socket, &Outgoing::Stop).await.is_err() {
+                        return End::Lost(true);
+                    }
+                }
+                Some(LinkCommand::Output(message)) => {
+                    let text = serde_json::to_string(&message).unwrap_or_default();
+                    if socket.send(Message::text(text)).await.is_err() {
                         return End::Lost(true);
                     }
                 }
