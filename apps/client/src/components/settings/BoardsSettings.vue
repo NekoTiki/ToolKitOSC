@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AddBoardDialog from '@renderer/components/AddBoardDialog.vue'
 import type { StatusInfo } from '@renderer/components/settings/StatusLine.vue'
 import StatusLine from '@renderer/components/settings/StatusLine.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -24,7 +25,7 @@ const {
 const { openModal: confirm } = useAreYouSureModal()
 
 const now = useNow({ interval: 1000 })
-const address = ref('')
+const addOpen = ref(false)
 
 const secondsLeft = computed(() =>
   pairingDeadline.value
@@ -88,11 +89,6 @@ const repair = (board: Board): Promise<void> =>
     ? add(board.id)
     : addByAddress(`${board.host}:${board.port}`)
 
-const submitAddress = async (): Promise<void> => {
-  if (!address.value.trim()) return
-  await addByAddress(address.value)
-  if (pairing.value?.state === 'paired') address.value = ''
-}
 </script>
 
 <template>
@@ -201,6 +197,17 @@ const submitAddress = async (): Promise<void> => {
         : 'Looking for boards… Make sure the board is on the same Wi-Fi as this PC.'
     "
   >
+    <template #actions>
+      <UButton
+        icon="i-lucide-network"
+        color="neutral"
+        variant="subtle"
+        :disabled="pairingActive"
+        @click="addOpen = true"
+      >
+        Add by address
+      </UButton>
+    </template>
     <div
       v-if="found.length"
       class="grid divide-y divide-(--ui-border)"
@@ -235,26 +242,8 @@ const submitAddress = async (): Promise<void> => {
     </div>
   </FormSection>
 
-  <FormSection
-    title="Add by address"
-    description="For networks where boards don't show up on their own, like VPNs. The board's serial monitor prints its address."
-  >
-    <div class="flex gap-2">
-      <UInput
-        v-model="address"
-        placeholder="192.168.1.40 or tkosc-a1b2c3.local"
-        class="w-full"
-        autocomplete="off"
-        :ui="{ base: 'font-mono' }"
-        @keyup.enter="submitAddress"
-      />
-      <UButton
-        icon="i-lucide-plus"
-        :disabled="pairingActive || !address.trim()"
-        @click="submitAddress"
-      >
-        Add
-      </UButton>
-    </div>
-  </FormSection>
+  <AddBoardDialog
+    v-model:open="addOpen"
+    @add="addByAddress"
+  />
 </template>
