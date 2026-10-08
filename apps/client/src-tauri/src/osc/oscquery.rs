@@ -35,7 +35,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use vrchat_osc::{models::OscNode, models::OscRootNode, models::OscValue, ServiceType, VRChatOSC};
 
-use super::udp::{flatten_packet, handle_message};
+use super::udp::{flatten_packet, handle_message, Origin};
 use super::{cache, codec};
 use crate::state::AppState;
 use crate::types::OscMessage;
@@ -72,7 +72,8 @@ async fn poll_avatar_changes(app: AppHandle, vrchat_osc: Arc<VRChatOSC>, addr: S
                     rosc::OscMessage {
                         addr: "/avatar/change".to_string(),
                         args: vec![rosc::OscType::String(avatar_id)]
-                    }
+                    },
+                    Origin::Live
                 );
             }
         }
@@ -119,7 +120,7 @@ pub async fn run(app: AppHandle) -> anyhow::Result<()> {
     vrchat_osc
         .register(SERVICE_NAME, root_node, move |packet| {
             for message in flatten_packet(packet) {
-                handle_message(&handler_app, message);
+                handle_message(&handler_app, message, Origin::Live);
             }
         })
         .await?;
@@ -183,7 +184,7 @@ pub async fn force_pull_parameters(app: &AppHandle, missing_only: bool) -> Resul
             continue;
         }
 
-        handle_message(app, message);
+        handle_message(app, message, Origin::Pull);
         pulled += 1;
     }
 

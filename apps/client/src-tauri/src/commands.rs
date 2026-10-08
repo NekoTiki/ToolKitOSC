@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::automations::{self, model::Automation};
 use crate::boards::{self, BoardView, BoardsSnapshot, OutputConfig, Target};
 use crate::osc::{codec, oscquery};
 use crate::presets::{self, PresetStore};
@@ -318,4 +319,37 @@ pub fn board_test_output(app: AppHandle, id: String, pin: u8) -> Result<(), Stri
 #[tauri::command]
 pub fn boards_stop_all(app: AppHandle) {
     boards::stop_all(&app);
+}
+
+#[tauri::command]
+pub fn automations_list(app: AppHandle) -> Vec<Automation> {
+    automations::list(&app)
+}
+
+/// Creates or replaces an automation, or fails with a message to show.
+#[tauri::command]
+pub fn automation_save(app: AppHandle, automation: Automation) -> Result<(), String> {
+    automations::save(&app, automation)
+}
+
+#[tauri::command]
+pub fn automation_delete(app: AppHandle, id: String) {
+    automations::delete(&app, &id);
+}
+
+#[tauri::command]
+pub fn automation_set_enabled(app: AppHandle, id: String, enabled: bool) {
+    automations::set_enabled(&app, &id, enabled);
+}
+
+/// Runs the automation's action once, without its trigger.
+#[tauri::command]
+pub fn automation_test(app: AppHandle, id: String) -> Result<(), String> {
+    automations::test(&app, &id)
+}
+
+/// Mirrors Stop everything's paused state.
+#[tauri::command]
+pub fn automations_set_paused(app: AppHandle, paused: bool) {
+    automations::set_paused(&app, paused);
 }

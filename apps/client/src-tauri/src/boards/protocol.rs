@@ -25,6 +25,16 @@ pub enum Outgoing<'a> {
     Stop
 }
 
+/// What automations send to an output. Owned, so it can travel through a link's channel.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "t", rename_all = "camelCase")]
+pub enum OutputMessage {
+    Set { pin: u8, on: bool, ms: u32 },
+    #[serde(rename_all = "camelCase")]
+    Pulse { pin: u8, on_ms: u32, off_ms: u32, count: u32 },
+    Pwm { pin: u8, duty: f32, ms: u32 }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigOutput {
@@ -111,6 +121,14 @@ mod tests {
             r#"{"t":"set","pin":4,"on":true,"ms":2000}"#
         );
         assert_eq!(encode(&Outgoing::Stop), r#"{"t":"stop"}"#);
+        assert_eq!(
+            serde_json::to_string(&OutputMessage::Pulse { pin: 4, on_ms: 200, off_ms: 300, count: 3 }).unwrap(),
+            r#"{"t":"pulse","pin":4,"onMs":200,"offMs":300,"count":3}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&OutputMessage::Pwm { pin: 25, duty: 0.5, ms: 1500 }).unwrap(),
+            r#"{"t":"pwm","pin":25,"duty":0.5,"ms":1500}"#
+        );
     }
 
     #[test]

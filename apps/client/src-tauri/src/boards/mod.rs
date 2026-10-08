@@ -91,7 +91,9 @@ pub enum LinkCommand {
     /// Pulse this pin briefly.
     Test(u8),
     /// Every output off.
-    Stop
+    Stop,
+    /// From an automation.
+    Output(protocol::OutputMessage)
 }
 
 /// How long a Test switches an output on.
@@ -403,4 +405,31 @@ fn config_message(app: &AppHandle, id: &str) -> Option<protocol::Outgoing<'stati
             .map(|o| protocol::ConfigOutput { pin: o.pin, active_low: o.active_low, max_on_ms: o.max_on_ms })
             .collect()
     })
+}
+
+/// What automations need to know about an output.
+pub struct OutputInfo {
+    pub label: String,
+    pub pwm: bool,
+    pub max_on_ms: u32
+}
+
+/// A saved output of an added board, or None if it doesn't exist (any more).
+pub fn output_info(app: &AppHandle, board_id: &str, pin: u8) -> Option<OutputInfo> {
+    let record = record(app, board_id)?;
+    let output = record.config?.into_iter().find(|o| o.pin == pin)?;
+    Some(OutputInfo {
+        label: output.label,
+        pwm: record.outputs.iter().any(|p| p.pin == pin && p.pwm),
+        max_on_ms: output.max_on_ms
+    })
+}
+
+/// Sends an automation's command to a board. False when the board is offline: the command is
+/// dropped, never queued, since a fan starting late is worse than not at all.
+pub fn send_output(app: &AppHandle, board_id: &str, message: protocol::OutputMessage) -> bool {
+    if !is_online(app, board_id) {
+        return false;
+    }
+    link(app, board_id).is_some_and(|link| link.send(LinkCommand::Output(message)).is_ok())
 }
