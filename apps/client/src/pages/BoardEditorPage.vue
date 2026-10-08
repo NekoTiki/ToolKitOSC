@@ -76,6 +76,18 @@ const pinItems = (row: Row): { label: string; value: number }[] =>
     .filter((p) => p.pin === row.pin || !rows.value.some((r) => r.pin === p.pin))
     .map((p) => ({ label: pinName(p.pin, p.label), value: p.pin }))
 
+// The Board card's label/value list.
+const details = computed((): { label: string; value: string; mono?: boolean }[] =>
+  board.value
+    ? [
+        { label: 'Address', value: `${board.value.host}:${board.value.port}`, mono: true },
+        { label: 'Firmware', value: board.value.fw ?? 'Unknown' },
+        { label: 'Chip', value: board.value.chip ?? 'Unknown' },
+        { label: 'Board profile', value: board.value.board ?? 'Unknown' }
+      ]
+    : []
+)
+
 const freePins = computed(() => (board.value?.outputs ?? []).filter((p) => !rows.value.some((r) => r.pin === p.pin)))
 
 const addRow = (): void => {
@@ -188,31 +200,34 @@ onBeforeRouteLeave(async () => {
       </FormSection>
     </div>
 
+    <!-- Side by side once there's room: the board's details in a narrow column, its outputs in the rest. -->
     <div
       v-else
-      class="grid max-w-3xl gap-3.5"
+      class="grid max-w-6xl items-start gap-3.5 lg:grid-cols-[18rem_minmax(0,1fr)]"
     >
-      <FormSection title="Board">
+      <FormSection
+        title="Board"
+        class="lg:sticky lg:top-0"
+      >
         <StatusLine :status="boardStatusInfo(board, now)" />
-        <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-1.5 text-sm">
-          <dt class="text-muted">
-            Address
-          </dt>
-          <dd class="truncate font-mono">
-            {{ board.host }}:{{ board.port }}
-          </dd>
-          <dt class="text-muted">
-            Firmware
-          </dt>
-          <dd>{{ board.fw ?? 'Unknown' }}</dd>
-          <dt class="text-muted">
-            Chip
-          </dt>
-          <dd>{{ board.chip ?? 'Unknown' }}</dd>
-          <dt class="text-muted">
-            Board profile
-          </dt>
-          <dd>{{ board.board ?? 'Unknown' }}</dd>
+        <!-- Label above value, so it fits the narrow column. -->
+        <dl class="grid gap-2.5 text-sm">
+          <div
+            v-for="item in details"
+            :key="item.label"
+            class="grid min-w-0 gap-0.5"
+          >
+            <dt class="text-xs text-muted">
+              {{ item.label }}
+            </dt>
+            <dd
+              class="truncate"
+              :class="{ 'font-mono': item.mono }"
+              :title="item.value"
+            >
+              {{ item.value }}
+            </dd>
+          </div>
         </dl>
       </FormSection>
 
