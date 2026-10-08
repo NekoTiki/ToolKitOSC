@@ -80,6 +80,59 @@ export type BoardPairingEvent =
   | { state: 'failed'; reason: string }
   | { state: 'cancelled' }
 
+// Automations - mirrors src-tauri/src/automations/model.rs. "When" and "do" are tagged on `kind`
+// so other kinds (app events, chatbox...) can be added next to these.
+export type ParameterValueType = 'Bool' | 'Int' | 'Float'
+
+export type ParameterCondition =
+  | { type: 'turns-on' }
+  | { type: 'turns-off' }
+  | { type: 'is-on' }
+  | { type: 'becomes'; value: number }
+  | { type: 'is'; value: number }
+  | { type: 'rises-above'; value: number }
+  | { type: 'is-above'; value: number }
+  | { type: 'any' }
+
+export type AutomationTrigger = {
+  kind: 'avatar-parameter'
+  avatarId: string
+  avatarName: string
+  // Full OSC address, e.g. /avatar/parameters/Boop.
+  parameter: string
+  valueType: ParameterValueType
+  condition: ParameterCondition
+}
+
+export type OutputAction =
+  | { type: 'pulse'; onMs: number; offMs: number; count: number }
+  | { type: 'hold' }
+  | { type: 'toggle' }
+  | { type: 'off' }
+  // Duty 0-1.
+  | { type: 'follow'; min: number; max: number }
+
+export type AutomationAction = { kind: 'board-output'; boardId: string; pin: number; output: OutputAction }
+
+export interface Automation {
+  id: string
+  name: string
+  enabled: boolean
+  when: AutomationTrigger
+  then: AutomationAction
+  // Minimum gap between two runs, 0 = none.
+  cooldownMs: number
+  // What a moment does while the previous run is still going.
+  retrigger: 'restart' | 'ignore'
+}
+
+export interface AutomationActivity {
+  id: string
+  running: boolean
+  // When it ends on its own (pulses, toggles).
+  forMs: number | null
+}
+
 export const api = {
   ready: (): void => {
     void invoke('ready')
@@ -137,6 +190,20 @@ export const api = {
     invoke('board_save_outputs', { id, outputs }),
   boardTestOutput: (id: string, pin: number): Promise<void> => invoke('board_test_output', { id, pin }),
   boardsStopAll: (): Promise<void> => invoke('boards_stop_all'),
+  automationsList: (): Promise<Automation[]> => invoke('automations_list'),
+  // Rejects with a message to show.
+  automationSave: (automation: Automation): Promise<void> => invoke('automation_save', { automation }),
+  automationDelete: (id: string): Promise<void> => invoke('automation_delete', { id }),
+  automationSetEnabled: (id: string, enabled: boolean): Promise<void> =>
+    invoke('automation_set_enabled', { id, enabled }),
+  automationTest: (id: string): Promise<void> => invoke('automation_test', { id }),
+  automationsSetPaused: (paused: boolean): Promise<void> => invoke('automations_set_paused', { paused }),
+  onAutomationsChanged: (callback: (automations: Automation[]) => void): void => {
+    void listen<Automation[]>('automations-changed', (event) => callback(event.payload))
+  },
+  onAutomationActivity: (callback: (activity: AutomationActivity) => void): void => {
+    void listen<AutomationActivity>('automation-activity', (event) => callback(event.payload))
+  },
   onBoardError: (callback: (error: BoardError) => void): void => {
     void listen<BoardError>('board-error', (event) => callback(event.payload))
   },
