@@ -6,30 +6,16 @@ import { ref } from 'vue'
 // Automations run in the backend, which sends the whole list on every change; this mirrors it.
 const automations = ref<Automation[]>([])
 // Ids of the automations currently driving something, for the "Running" chips.
+// The backend says when each one starts and stops, pulses and delayed steps included.
 const running = ref<Set<string>>(new Set())
-const timers = new Map<string, ReturnType<typeof setTimeout>>()
-
-const setRunning = (id: string, value: boolean): void => {
-  const next = new Set(running.value)
-  if (value) next.add(id)
-  else next.delete(id)
-  running.value = next
-}
 
 // Module scope, like useBoards.ts, so nothing is missed while a page mounts.
 api.onAutomationsChanged((value) => (automations.value = value))
-api.onAutomationActivity(({ id, running: isRunning, forMs }) => {
-  clearTimeout(timers.get(id))
-  timers.delete(id)
-  setRunning(id, isRunning)
-
-  // Pulses and toggles end on the board without another event.
-  if (isRunning && forMs) {
-    timers.set(
-      id,
-      setTimeout(() => setRunning(id, false), forMs)
-    )
-  }
+api.onAutomationActivity(({ id, running: isRunning }) => {
+  const next = new Set(running.value)
+  if (isRunning) next.add(id)
+  else next.delete(id)
+  running.value = next
 })
 void api.automationsList().then((value) => (automations.value = value))
 

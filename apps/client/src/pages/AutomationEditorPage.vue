@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AutomationStepCard from '@renderer/components/automations/AutomationStepCard.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
@@ -7,27 +8,27 @@ import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
-import type { Automation, ParameterValueType } from '@renderer/lib/tauri-bridge'
+import type { Automation, AutomationStep, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
-import type { ConditionType, OutputActionType } from '@renderer/utils/automations'
+import type { ConditionType } from '@renderer/utils/automations'
 import {
-  actionsFor,
   CONDITIONS,
   conditionsFor,
   defaultCondition,
-  defaultOutput,
   describe,
-  formatMs,
+  fitStep,
+  MAX_STEPS,
   newAutomation,
-  OUTPUT_ACTIONS,
+  newBoardStep,
+  newParameterStep,
   parameterName
 } from '@renderer/utils/automations'
 import { computed, ref, toRaw, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
-// Create or edit one automation: when (an avatar parameter changes), do (something on a board
-// output). Both sides are typed by `kind`, so other kinds of "when" and "do" get their own cards
-// here later.
+// Create or edit one automation: when (an avatar parameter changes), do one or more things (on a
+// board output or another avatar parameter), each after its own delay. Both sides are typed by
+// `kind`, so other kinds of "when" and "do" get their own cards here later.
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
@@ -78,13 +79,11 @@ const parameterItems = computed(() =>
     .sort((a, b) => a.label.localeCompare(b.label))
 )
 
-// Keeps the action valid when the condition changes: a hold can't follow a moment, and so on.
-const fitAction = (): void => {
+// Keeps every step valid when the condition changes: a hold can't follow a moment, and so on.
+const fitSteps = (): void => {
   if (!draft.value) return
   const condition = draft.value.when.condition.type
-  if (!OUTPUT_ACTIONS[draft.value.then.output.type].fits(condition)) {
-    draft.value.then.output = defaultOutput(actionsFor(condition)[0]!)
-  }
+  draft.value.then = draft.value.then.map((step) => fitStep(step, condition))
 }
 
 const parameter = computed({
@@ -100,7 +99,7 @@ const parameter = computed({
       draft.value.when.condition = defaultCondition(conditionsFor(valueType)[0]!)
     }
     if (!draft.value.name) draft.value.name = parameterName(address)
-    fitAction()
+    fitSteps()
   }
 })
 
@@ -109,7 +108,7 @@ const conditionType = computed({
   set: (type: ConditionType) => {
     if (!draft.value) return
     draft.value.when.condition = defaultCondition(type)
-    fitAction()
+    fitSteps()
   }
 })
 
@@ -126,75 +125,36 @@ const conditionValue = computed({
 
 // ---- Do
 
-const targetItems = computed(() =>
-  boards.value.flatMap((board) =>
-    (board.config ?? []).map((output) => ({
-      label: `${output.label} · ${board.name}${board.status === 'online' ? '' : ' (offline)'}`,
-      value: `${board.id}:${output.pin}`
-    }))
-  )
-)
-
-const target = computed({
-  get: () => (draft.value && draft.value.then.pin >= 0 ? `${draft.value.then.boardId}:${draft.value.then.pin}` : undefined),
-  set: (value: string | undefined) => {
-    if (!draft.value || !value) return
-    const [boardId, pin] = value.split(':')
-    draft.value.then.boardId = boardId!
-    draft.value.then.pin = Number(pin)
-    fitAction()
-    fitPulse()
-  }
-})
-
-// The picked output as saved on its board, for its name and max on-time.
-const targetOutput = computed(() => {
-  const then = draft.value?.then
-  return then ? boards.value.find((b) => b.id === then.boardId)?.config?.find((o) => o.pin === then.pin) : undefined
-})
-
-// A pulse can't outlast the output's max on-time: the board would cut it short.
-const pulseTooLong = computed(
-  () =>
-    draft.value?.then.output.type === 'pulse' &&
-    !!targetOutput.value &&
-    draft.value.then.output.onMs > targetOutput.value.maxOnMs
-)
-
-const fitPulse = (): void => {
-  const output = draft.value?.then.output
-  if (output?.type === 'pulse' && targetOutput.value && output.onMs > targetOutput.value.maxOnMs) {
-    output.onMs = targetOutput.value.maxOnMs
-  }
+const addStep = (kind: AutomationStep['kind']): void => {
+  if (!draft.value || draft.value.then.length >= MAX_STEPS) return
+  const condition = draft.value.when.condition.type
+  draft.value.then.push(kind === 'board-output' ? newBoardStep(condition) : newParameterStep(condition))
 }
 
-const targetPwm = computed(() => {
-  const then = draft.value?.then
-  return !!then && !!boards.value.find((b) => b.id === then.boardId)?.outputs.some((p) => p.pin === then.pin && p.pwm)
-})
+const removeStep = (index: number): void => {
+  draft.value?.then.splice(index, 1)
+}
 
-const actionType = computed({
-  get: (): OutputActionType => draft.value?.then.output.type ?? 'pulse',
-  set: (type: OutputActionType) => {
-    if (!draft.value) return
-    draft.value.then.output = defaultOutput(type)
-    fitPulse()
+// What's missing from one step, or null.
+const stepProblem = (step: AutomationStep): string | null => {
+  if (step.kind === 'avatar-parameter') {
+    if (!step.parameter) return 'Pick the parameter each step sets.'
+    return step.parameter === draft.value?.when.parameter ? "A step can't set the parameter that triggers it." : null
   }
-})
+  if (step.pin < 0) return 'Pick the output each step drives.'
+  if (step.output.type !== 'pulse') return null
+  if (step.output.onMs <= 0) return 'Set how long the pulse lasts.'
+  const output = boards.value.find((b) => b.id === step.boardId)?.config?.find((o) => o.pin === step.pin)
+  return output && step.output.onMs > output.maxOnMs ? `The pulse is longer than ${output.label}'s max on-time.` : null
+}
 
-const actionItems = computed(() =>
-  actionsFor(conditionType.value)
-    .filter((type) => !OUTPUT_ACTIONS[type].needsPwm || targetPwm.value || !target.value)
-    .map((type) => ({ value: type, label: OUTPUT_ACTIONS[type].label }))
-)
+// Every ESP32 timing is entered in milliseconds.
+const toMs = (value: number | string): number => Math.max(0, Math.round(Number(value)))
 
 // USlider can hand back an array; only plain numbers are taken (see OpenShockFields.vue).
 const fromSlider = (value: number | number[] | undefined, apply: (value: number) => void): void => {
   if (typeof value === 'number') apply(value)
 }
-
-// Every ESP32 timing is entered in milliseconds.
-const toMs = (value: number | string): number => Math.max(0, Math.round(Number(value)))
 
 // ---- Saving
 
@@ -202,9 +162,11 @@ const problem = computed((): string | null => {
   if (!draft.value) return null
   if (!draft.value.name.trim()) return 'Give it a name.'
   if (!draft.value.when.parameter) return 'Pick the parameter that triggers it.'
-  if (!target.value) return 'Pick the output it drives.'
-  if (draft.value.then.output.type === 'pulse' && draft.value.then.output.onMs <= 0) return 'Set how long the pulse lasts.'
-  if (pulseTooLong.value) return `The pulse is longer than ${targetOutput.value!.label}'s max on-time.`
+  if (!draft.value.then.length) return 'Add something for it to do.'
+  for (const step of draft.value.then) {
+    const missing = stepProblem(step)
+    if (missing) return missing
+  }
   return null
 })
 
@@ -412,113 +374,40 @@ onBeforeRouteLeave(async () => {
         title="Do"
         description="What happens."
       >
-        <div class="grid gap-2.5 sm:grid-cols-2">
-          <ChoiceCard
-            title="ESP32 output"
-            description="Switch something wired to one of your boards."
-            icon="i-lucide-cpu"
-            :selected="draft.then.kind === 'board-output'"
+        <div class="grid gap-3">
+          <AutomationStepCard
+            v-for="(step, index) in draft.then"
+            :key="index"
+            v-model="draft.then[index]!"
+            :index="index"
+            :condition="conditionType"
+            :trigger="draft.when.parameter"
+            :other-avatar="otherAvatar"
+            :can-remove="draft.then.length > 1"
+            @remove="removeStep(index)"
           />
         </div>
-
-        <template v-if="draft.then.kind === 'board-output'">
-          <UFormField
-            label="Output"
-            :description="targetItems.length ? undefined : 'No outputs yet. Add them in Settings › ESP32 boards › Edit.'"
+        <div
+          v-if="draft.then.length < MAX_STEPS"
+          class="flex flex-wrap gap-2"
+        >
+          <UButton
+            icon="i-lucide-plus"
+            color="neutral"
+            variant="subtle"
+            @click="addStep('board-output')"
           >
-            <USelectMenu
-              v-model="target"
-              :items="targetItems"
-              value-key="value"
-              placeholder="Pick an output"
-              class="w-full"
-            />
-          </UFormField>
-
-          <UFormField
-            label="Action"
-            :description="OUTPUT_ACTIONS[actionType].description"
+            Add ESP32 output
+          </UButton>
+          <UButton
+            icon="i-lucide-plus"
+            color="neutral"
+            variant="subtle"
+            @click="addStep('avatar-parameter')"
           >
-            <SegmentedControl
-              v-model="actionType"
-              :items="actionItems"
-              aria-label="Action"
-              class="w-fit max-w-full flex-wrap"
-            />
-          </UFormField>
-
-          <div
-            v-if="draft.then.output.type === 'pulse'"
-            class="grid gap-3 sm:grid-cols-3"
-          >
-            <UFormField
-              label="On for"
-              :description="targetOutput ? `Milliseconds. Up to ${formatMs(targetOutput.maxOnMs)}, ${targetOutput.label}'s max on-time.` : 'Milliseconds.'"
-              :error="pulseTooLong ? `Longer than ${formatMs(targetOutput!.maxOnMs)}. Shorten it, or raise the max on-time in Settings › ESP32 boards.` : false"
-            >
-              <UInput
-                :model-value="draft.then.output.onMs"
-                type="number"
-                min="1"
-                :max="targetOutput?.maxOnMs"
-                step="100"
-                class="w-full"
-                @update:model-value="draft.then.output.type === 'pulse' && (draft.then.output.onMs = toMs($event))"
-              />
-            </UFormField>
-            <UFormField
-              label="Times"
-              description="1 to 100."
-            >
-              <UInput
-                v-model.number="draft.then.output.count"
-                type="number"
-                min="1"
-                max="100"
-                step="1"
-                class="w-full"
-              />
-            </UFormField>
-            <UFormField
-              v-if="draft.then.output.count > 1"
-              label="Gap"
-              description="Milliseconds between pulses."
-            >
-              <UInput
-                :model-value="draft.then.output.offMs"
-                type="number"
-                min="0"
-                step="100"
-                class="w-full"
-                @update:model-value="draft.then.output.type === 'pulse' && (draft.then.output.offMs = toMs($event))"
-              />
-            </UFormField>
-          </div>
-
-          <div
-            v-else-if="draft.then.output.type === 'follow'"
-            class="grid gap-3 sm:grid-cols-2"
-          >
-            <UFormField :label="`At 0: ${Math.round(draft.then.output.min * 100)} %`">
-              <USlider
-                :model-value="draft.then.output.min"
-                :min="0"
-                :max="1"
-                :step="0.01"
-                @update:model-value="fromSlider($event, (value) => draft?.then.output.type === 'follow' && (draft.then.output.min = value))"
-              />
-            </UFormField>
-            <UFormField :label="`At 1: ${Math.round(draft.then.output.max * 100)} %`">
-              <USlider
-                :model-value="draft.then.output.max"
-                :min="0"
-                :max="1"
-                :step="0.01"
-                @update:model-value="fromSlider($event, (value) => draft?.then.output.type === 'follow' && (draft.then.output.max = value))"
-              />
-            </UFormField>
-          </div>
-        </template>
+            Add avatar parameter
+          </UButton>
+        </div>
       </FormSection>
 
       <FormSection
@@ -565,7 +454,7 @@ onBeforeRouteLeave(async () => {
           name="i-lucide-info"
           class="size-4 shrink-0"
         />
-        {{ problem ?? testBlocked ?? 'Test runs the action once, without waiting for the parameter.' }}
+        {{ problem ?? testBlocked ?? 'Test runs every step once, with its delay, without waiting for the parameter.' }}
       </p>
       <UButton
         v-if="!isNew"

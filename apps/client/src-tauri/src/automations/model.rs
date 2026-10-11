@@ -1,7 +1,12 @@
 //! What an automation is: *when* something happens, *do* something. Both sides are tagged unions
 //! (`kind`) so new trigger and action kinds slot in without reshaping saved data. Mirrored by hand
 //! in the frontend's `lib/tauri-bridge.ts` and `utils/automations.ts`.
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Most steps one automation can run.
+pub const MAX_STEPS: usize = 8;
+/// Longest "after" delay on a step.
+pub const MAX_DELAY_MS: u32 = 10_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,7 +15,9 @@ pub struct Automation {
     pub name: String,
     pub enabled: bool,
     pub when: Trigger,
-    pub then: Action,
+    /// Run together, each after its own delay. Older files have a single action here.
+    #[serde(deserialize_with = "one_or_many")]
+    pub then: Vec<Step>,
     /// Minimum gap between two runs, 0 = none.
     #[serde(default)]
     pub cooldown_ms: u32,
@@ -62,11 +69,55 @@ pub enum Condition {
     Any
 }
 
+/// One thing an automation does: an action, plus how long after the trigger it starts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Step {
+    #[serde(flatten)]
+    pub action: Action,
+    #[serde(default)]
+    pub delay_ms: u32
+}
+
+fn one_or_many<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Step>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        Many(Vec<Step>),
+        One(Step)
+    }
+    Ok(match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::Many(steps) => steps,
+        OneOrMany::One(step) => vec![step]
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Action {
     #[serde(rename_all = "camelCase")]
-    BoardOutput { board_id: String, pin: u8, output: OutputAction }
+    BoardOutput { board_id: String, pin: u8, output: OutputAction },
+    /// Sets one of the worn avatar's own parameters.
+    #[serde(rename_all = "camelCase")]
+    AvatarParameter {
+        /// Full OSC address, e.g. `/avatar/parameters/Ears`.
+        parameter: String,
+        value_type: ValueType,
+        set: ParameterAction
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum ParameterAction {
+    /// Sets it to a value (Bools are 0/1).
+    Set { value: f64 },
+    /// Flips a Bool.
+    Toggle,
+    /// The value while the state condition holds, then back to what it was.
+    Hold { value: f64 },
+    /// A Float follows the trigger, mapped onto min..max (-1–1).
+    Follow { min: f64, max: f64 }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -171,6 +222,7 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
     }
 
     let Trigger::AvatarParameter { parameter, value_type, condition, avatar_id, .. } = &automation.when;
+    let parameter = parameter.as_str();
     if avatar_id.is_empty() || parameter.is_empty() {
         return Err("Pick the avatar parameter that triggers it.".into());
     }
@@ -178,36 +230,106 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
         return Err("That condition doesn't fit this parameter's type.".into());
     }
 
-    let Action::BoardOutput { output, .. } = &automation.then;
-    match output {
-        OutputAction::Pulse { on_ms, count, .. } => {
-            if !condition.is_moment() {
-                return Err("A pulse needs a moment, like \"turns on\".".into());
+    if automation.then.is_empty() {
+        return Err("Add something for it to do.".into());
+    }
+    if automation.then.len() > MAX_STEPS {
+        return Err(format!("An automation can do up to {MAX_STEPS} things."));
+    }
+    for step in &automation.then {
+        validate_step(step, condition, parameter)?;
+    }
+
+    Ok(())
+}
+
+/// What kind of trigger edge an action runs on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Runs {
+    Moment,
+    State,
+    Follow
+}
+
+impl Action {
+    pub fn runs(&self) -> Runs {
+        match self {
+            Action::BoardOutput { output: OutputAction::Hold, .. } | Action::AvatarParameter { set: ParameterAction::Hold { .. }, .. } => {
+                Runs::State
             }
-            if *on_ms == 0 || *count == 0 || *count > 100 {
-                return Err("A pulse needs a length, and 1 to 100 repeats.".into());
-            }
+            Action::BoardOutput { output: OutputAction::Follow { .. }, .. }
+            | Action::AvatarParameter { set: ParameterAction::Follow { .. }, .. } => Runs::Follow,
+            _ => Runs::Moment
         }
-        OutputAction::Toggle | OutputAction::Off => {
-            if !condition.is_moment() {
-                return Err("This action needs a moment, like \"turns on\".".into());
+    }
+}
+
+fn fits_type(value: f64, value_type: ValueType) -> bool {
+    match value_type {
+        ValueType::Bool => value == 0.0 || value == 1.0,
+        ValueType::Int => value.fract() == 0.0 && (0.0..=255.0).contains(&value),
+        ValueType::Float => (-1.0..=1.0).contains(&value)
+    }
+}
+
+fn validate_step(step: &Step, condition: &Condition, trigger: &str) -> Result<(), String> {
+    match (step.action.runs(), condition) {
+        (Runs::Moment, c) if !c.is_moment() => return Err("This action needs a moment, like \"turns on\".".into()),
+        (Runs::State, c) if c.is_moment() || *c == Condition::Any => return Err("Hold needs a state, like \"is on\".".into()),
+        (Runs::Follow, c) if *c != Condition::Any => return Err("Follow needs \"any change\" of a Float.".into()),
+        _ => {}
+    }
+    if step.delay_ms > MAX_DELAY_MS {
+        return Err(format!("A step can wait up to {} s.", MAX_DELAY_MS / 1000));
+    }
+    if step.delay_ms > 0 && step.action.runs() == Runs::Follow {
+        return Err("Follow can't wait: it follows the value as it changes.".into());
+    }
+
+    match &step.action {
+        Action::BoardOutput { output, .. } => match output {
+            OutputAction::Pulse { on_ms, count, .. } => {
+                if *on_ms == 0 || *count == 0 || *count > 100 {
+                    return Err("A pulse needs a length, and 1 to 100 repeats.".into());
+                }
             }
-        }
-        OutputAction::Hold => {
-            if condition.is_moment() || *condition == Condition::Any {
-                return Err("Hold needs a state, like \"is on\".".into());
+            OutputAction::Follow { min, max } => {
+                if !(0.0..=1.0).contains(min) || !(0.0..=1.0).contains(max) || min > max {
+                    return Err("Follow's range must be within 0–100 %, low to high.".into());
+                }
             }
-        }
-        OutputAction::Follow { min, max } => {
-            if *condition != Condition::Any {
-                return Err("Follow needs \"any change\" of a Float.".into());
+            OutputAction::Hold | OutputAction::Toggle | OutputAction::Off => {}
+        },
+        Action::AvatarParameter { parameter, value_type, set } => {
+            if parameter.is_empty() {
+                return Err("Pick the parameter it sets.".into());
             }
-            if !(0.0..=1.0).contains(min) || !(0.0..=1.0).contains(max) || min > max {
-                return Err("Follow's range must be within 0–100 %, low to high.".into());
+            // It would set off its own trigger.
+            if parameter == trigger {
+                return Err("It can't set the parameter that triggers it.".into());
+            }
+            match set {
+                ParameterAction::Set { value } | ParameterAction::Hold { value } => {
+                    if !fits_type(*value, *value_type) {
+                        return Err("That value doesn't fit the parameter's type.".into());
+                    }
+                }
+                ParameterAction::Toggle => {
+                    if *value_type != ValueType::Bool {
+                        return Err("Only a Bool can be toggled.".into());
+                    }
+                }
+                ParameterAction::Follow { min, max } => {
+                    if *value_type != ValueType::Float {
+                        return Err("Only a Float can follow a value.".into());
+                    }
+                    if !fits_type(*min, ValueType::Float) || !fits_type(*max, ValueType::Float) {
+                        return Err("Follow's range must be within -1 and 1.".into());
+                    }
+                }
             }
         }
     }
-
     Ok(())
 }
 
@@ -227,7 +349,7 @@ mod tests {
                 value_type,
                 condition
             },
-            then: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output },
+            then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output }, delay_ms: 0 }],
             cooldown_ms: 0,
             retrigger: Retrigger::Restart
         }
@@ -289,10 +411,75 @@ mod tests {
         assert_eq!(json["when"]["kind"], "avatar-parameter");
         assert_eq!(json["when"]["valueType"], "Bool");
         assert_eq!(json["when"]["condition"]["type"], "turns-on");
-        assert_eq!(json["then"]["kind"], "board-output");
-        assert_eq!(json["then"]["boardId"], "a1b2c3");
-        assert_eq!(json["then"]["output"]["type"], "pulse");
-        assert_eq!(json["then"]["output"]["onMs"], 2000);
+        assert_eq!(json["then"][0]["kind"], "board-output");
+        assert_eq!(json["then"][0]["boardId"], "a1b2c3");
+        assert_eq!(json["then"][0]["output"]["type"], "pulse");
+        assert_eq!(json["then"][0]["output"]["onMs"], 2000);
+        assert_eq!(json["then"][0]["delayMs"], 0);
         assert_eq!(json["retrigger"], "restart");
+    }
+
+    #[test]
+    fn loads_a_single_action() {
+        let json = serde_json::json!({
+            "id": "a",
+            "name": "Boop fan",
+            "enabled": true,
+            "when": {
+                "kind": "avatar-parameter",
+                "avatarId": "avtr_1",
+                "avatarName": "Avatar",
+                "parameter": "/avatar/parameters/Boop",
+                "valueType": "Bool",
+                "condition": { "type": "turns-on" }
+            },
+            "then": { "kind": "board-output", "boardId": "a1b2c3", "pin": 4, "output": { "type": "toggle" } }
+        });
+        let automation: Automation = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            automation.then,
+            vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output: OutputAction::Toggle }, delay_ms: 0 }]
+        );
+    }
+
+    fn parameter_step(parameter: &str, value_type: ValueType, set: ParameterAction) -> Step {
+        Step { action: Action::AvatarParameter { parameter: parameter.into(), value_type, set }, delay_ms: 0 }
+    }
+
+    #[test]
+    fn parameter_steps() {
+        let mut a = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.then.push(parameter_step("/avatar/parameters/Ears", ValueType::Bool, ParameterAction::Toggle));
+        assert!(validate(&a).is_ok());
+
+        a.then[1] = parameter_step("/avatar/parameters/Boop", ValueType::Bool, ParameterAction::Toggle);
+        assert!(validate(&a).is_err(), "sets its own trigger");
+
+        a.then[1] = parameter_step("/avatar/parameters/Outfit", ValueType::Int, ParameterAction::Toggle);
+        assert!(validate(&a).is_err(), "toggles an Int");
+
+        a.then[1] = parameter_step("/avatar/parameters/Outfit", ValueType::Int, ParameterAction::Set { value: 3.0 });
+        assert!(validate(&a).is_ok());
+
+        a.then[1] = parameter_step("/avatar/parameters/Outfit", ValueType::Int, ParameterAction::Hold { value: 3.0 });
+        assert!(validate(&a).is_err(), "hold on a moment");
+
+        let mut follow = sample(Condition::Any, ValueType::Float, OutputAction::Follow { min: 0.0, max: 1.0 });
+        follow.then.push(parameter_step("/avatar/parameters/Glow", ValueType::Float, ParameterAction::Follow { min: -1.0, max: 1.0 }));
+        assert!(validate(&follow).is_ok());
+        follow.then[1].delay_ms = 500;
+        assert!(validate(&follow).is_err(), "a follow can't wait");
+    }
+
+    #[test]
+    fn step_count_and_delay() {
+        let mut a = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.then[0].delay_ms = MAX_DELAY_MS + 1;
+        assert!(validate(&a).is_err());
+        a.then[0].delay_ms = 0;
+        a.then = vec![a.then[0].clone(); MAX_STEPS + 1];
+        assert!(validate(&a).is_err());
+        a.then.clear();
+        assert!(validate(&a).is_err());
     }
 }

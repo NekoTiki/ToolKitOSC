@@ -112,14 +112,34 @@ export type OutputAction =
   // Duty 0-1.
   | { type: 'follow'; min: number; max: number }
 
-export type AutomationAction = { kind: 'board-output'; boardId: string; pin: number; output: OutputAction }
+export type ParameterAction =
+  // Bools are 0/1.
+  | { type: 'set'; value: number }
+  | { type: 'toggle' }
+  // The value while the condition holds, then back to what it was.
+  | { type: 'hold'; value: number }
+  // A Float follows the trigger, -1 to 1.
+  | { type: 'follow'; min: number; max: number }
+
+export type BoardOutputAction = { kind: 'board-output'; boardId: string; pin: number; output: OutputAction }
+export type AvatarParameterAction = {
+  kind: 'avatar-parameter'
+  // Full OSC address, e.g. /avatar/parameters/Ears.
+  parameter: string
+  valueType: ParameterValueType
+  set: ParameterAction
+}
+export type AutomationAction = BoardOutputAction | AvatarParameterAction
+
+// One thing an automation does, starting `delayMs` after the trigger.
+export type AutomationStep = AutomationAction & { delayMs: number }
 
 export interface Automation {
   id: string
   name: string
   enabled: boolean
   when: AutomationTrigger
-  then: AutomationAction
+  then: AutomationStep[]
   // Minimum gap between two runs, 0 = none.
   cooldownMs: number
   // What a moment does while the previous run is still going.
@@ -129,8 +149,6 @@ export interface Automation {
 export interface AutomationActivity {
   id: string
   running: boolean
-  // When it ends on its own (pulses, toggles).
-  forMs: number | null
 }
 
 export const api = {
