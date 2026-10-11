@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AutomationGuardRow from '@renderer/components/automations/AutomationGuardRow.vue'
 import AutomationStepCard from '@renderer/components/automations/AutomationStepCard.vue'
-import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
@@ -145,6 +144,27 @@ const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
         : newAutomation(id, name).when
   fitSteps()
 }
+
+const TRIGGER_KINDS: Record<AutomationTrigger['kind'], { label: string; description: string; icon: string }> = {
+  'avatar-parameter': { label: 'Avatar parameter', description: "One of your avatar's parameters changes.", icon: 'i-lucide-person-standing' },
+  'avatar-changed': { label: 'Avatar changed', description: 'You put on an avatar.', icon: 'i-lucide-repeat' },
+  'app-event': {
+    label: 'Share page',
+    description: 'A viewer uses a control, joins or leaves, or controls resume.',
+    icon: 'i-lucide-users'
+  }
+}
+
+const triggerKindItems = (Object.keys(TRIGGER_KINDS) as AutomationTrigger['kind'][]).map((kind) => ({
+  value: kind,
+  label: TRIGGER_KINDS[kind].label,
+  icon: TRIGGER_KINDS[kind].icon
+}))
+
+const triggerKind = computed({
+  get: (): AutomationTrigger['kind'] => draft.value?.when.kind ?? 'avatar-parameter',
+  set: setTriggerKind
+})
 
 // Avatar changed: the worn avatar (or the one it was made for), or any avatar.
 const changedTarget = computed({
@@ -421,267 +441,325 @@ onBeforeRouteLeave(async () => {
       </FormSection>
     </div>
 
-    <!-- Wide windows: When and Do side by side, read left to right, with the name and limits across. -->
+    <!-- Wide windows: everything about when it runs in a column on the left (name, when, only if,
+         limits), and what it does across the rest of the width, its steps side by side as room
+         allows. Narrow ones stack it all in reading order: name, when, do, only if, limits. -->
     <div
       v-else
-      class="grid max-w-7xl items-start gap-3.5 xl:grid-cols-2"
+      class="flex flex-col gap-3.5 lg:grid lg:grid-cols-[minmax(21rem,27rem)_minmax(0,1fr)] lg:items-start 2xl:grid-cols-[30rem_minmax(0,1fr)]"
     >
-      <FormSection class="xl:col-span-2">
-        <div class="flex flex-wrap items-end gap-3.5">
-          <UFormField
-            label="Name"
-            class="min-w-60 flex-1"
-          >
-            <UInput
-              v-model="draft.name"
-              placeholder="Boop fan"
-              class="w-full"
-              autocomplete="off"
+      <div class="flex min-w-0 flex-col gap-3.5 max-lg:contents">
+        <FormSection class="max-lg:order-1">
+          <div class="flex flex-wrap items-end gap-3.5">
+            <UFormField
+              label="Name"
+              class="min-w-60 flex-1"
+            >
+              <UInput
+                v-model="draft.name"
+                placeholder="Boop fan"
+                class="w-full"
+                autocomplete="off"
+              />
+            </UFormField>
+            <USwitch
+              v-model="draft.enabled"
+              label="Enabled"
             />
-          </UFormField>
-          <USwitch
-            v-model="draft.enabled"
-            label="Enabled"
-          />
-        </div>
-      </FormSection>
+          </div>
+        </FormSection>
 
-      <FormSection
-        title="When"
-        description="What starts it."
-      >
-        <div class="grid gap-2.5 sm:grid-cols-2">
-          <ChoiceCard
-            title="Avatar parameter"
-            description="One of your avatar's parameters changes."
-            icon="i-lucide-person-standing"
-            :selected="draft.when.kind === 'avatar-parameter'"
-            :disabled="!avatarDetails"
-            @click="setTriggerKind('avatar-parameter')"
+        <FormSection
+          title="When"
+          :description="TRIGGER_KINDS[draft.when.kind].description"
+          class="max-lg:order-2"
+        >
+          <SegmentedControl
+            v-model="triggerKind"
+            :items="triggerKindItems"
+            aria-label="When"
+            class="w-fit max-w-full flex-wrap"
           />
-          <ChoiceCard
-            title="Avatar changed"
-            description="You put on an avatar."
-            icon="i-lucide-repeat"
-            :selected="draft.when.kind === 'avatar-changed'"
-            :disabled="!avatarDetails"
-            @click="setTriggerKind('avatar-changed')"
-          />
-          <ChoiceCard
-            title="Share page"
-            description="A viewer uses a control, joins or leaves, or controls resume."
-            icon="i-lucide-users"
-            :selected="draft.when.kind === 'app-event'"
-            :disabled="!avatarDetails"
-            @click="setTriggerKind('app-event')"
-          />
-        </div>
 
-        <template v-if="eventWhen">
+          <template v-if="eventWhen">
+            <UFormField
+              label="Event"
+              :description="APP_EVENTS[eventType].description"
+            >
+              <SegmentedControl
+                v-model="eventType"
+                :items="eventItems"
+                aria-label="Event"
+                class="w-fit max-w-full flex-wrap"
+              />
+            </UFormField>
+            <UFormField
+              v-if="eventWhen.event.type === 'viewer-command'"
+              label="Control"
+              description="Only when it goes through: locks, limits and cooldowns still apply to viewers."
+            >
+              <USelectMenu
+                v-model="eventControl"
+                :items="eventControlItems"
+                value-key="value"
+                class="w-full"
+              />
+            </UFormField>
+          </template>
+
           <UFormField
-            label="Event"
-            :description="APP_EVENTS[eventType].description"
+            v-if="changedWhen"
+            label="Avatar"
+            description="Also runs when the app starts while you already wear it."
           >
             <SegmentedControl
-              v-model="eventType"
-              :items="eventItems"
-              aria-label="Event"
+              v-model="changedTarget"
+              :items="changedItems"
+              aria-label="Avatar"
               class="w-fit max-w-full flex-wrap"
             />
           </UFormField>
-          <UFormField
-            v-if="eventWhen.event.type === 'viewer-command'"
-            label="Control"
-            description="Only when it goes through: locks, limits and cooldowns still apply to viewers."
-          >
-            <USelectMenu
-              v-model="eventControl"
-              :items="eventControlItems"
-              value-key="value"
-              class="w-full"
-            />
-          </UFormField>
-        </template>
 
-        <UFormField
-          v-if="changedWhen"
-          label="Avatar"
-          description="Also runs when the app starts while you already wear it."
-        >
-          <SegmentedControl
-            v-model="changedTarget"
-            :items="changedItems"
-            aria-label="Avatar"
-            class="w-fit max-w-full flex-wrap"
-          />
-        </UFormField>
-
-        <template v-if="paramWhen">
-          <UFormField
-            v-if="otherAvatar"
-            label="Parameter"
-            :description="`For ${paramWhen.avatarName}. Wear that avatar to pick another parameter.`"
-          >
-            <UInput
-              :model-value="`${parameterName(paramWhen.parameter)} · ${paramWhen.valueType}`"
-              class="w-full"
-              disabled
-            />
-          </UFormField>
-          <UFormField
-            v-else
-            label="Parameter"
-            :description="paramWhen.anyAvatar ? 'On any avatar that has a parameter with this name.' : `On ${paramWhen.avatarName}. It only runs while you wear this avatar.`"
-          >
-            <div class="grid gap-2">
-              <USelectMenu
-                v-model="parameter"
-                :items="parameterItems"
-                value-key="value"
-                placeholder="Pick a parameter"
+          <template v-if="paramWhen">
+            <UFormField
+              v-if="otherAvatar"
+              label="Parameter"
+              :description="`For ${paramWhen.avatarName}. Wear that avatar to pick another parameter.`"
+            >
+              <UInput
+                :model-value="`${parameterName(paramWhen.parameter)} · ${paramWhen.valueType}`"
                 class="w-full"
-                virtualize
+                disabled
               />
-              <UCheckbox
-                v-model="showAllParameters"
-                label="Show built-in parameters too (Velocity, GestureLeft…)"
-              />
-            </div>
-          </UFormField>
-
-          <div
-            v-if="!otherAvatar"
-            class="grid gap-2"
-          >
-            <div class="flex flex-wrap items-center gap-2.5">
-              <UButton
-                :icon="listening ? 'i-lucide-square' : 'i-lucide-ear'"
-                color="neutral"
-                variant="subtle"
-                @click="listening ? stopListening() : startListening()"
-              >
-                {{ listening ? `Stop listening (${secondsLeft} s)` : 'Listen' }}
-              </UButton>
-              <span class="min-w-0 flex-1 text-sm text-muted">
-                {{
-                  listening
-                    ? 'Touch the contact or move the PhysBone in VRChat now.'
-                    : 'Not sure which parameter a contact uses? Press Listen, then touch it in VRChat.'
-                }}
-              </span>
-            </div>
-            <ul
-              v-if="heard.length"
-              class="grid max-h-96 gap-1.5 overflow-y-auto"
+            </UFormField>
+            <UFormField
+              v-else
+              label="Parameter"
+              :description="paramWhen.anyAvatar ? 'On any avatar that has a parameter with this name.' : `On ${paramWhen.avatarName}. It only runs while you wear this avatar.`"
             >
-              <li
-                v-for="item in heard"
-                :key="item.address"
-                class="flex items-center gap-2.5 rounded-field border border-default bg-(--aurora-glass) px-3 py-2"
-              >
-                <span class="min-w-0 flex-1">
-                  <b class="block truncate text-sm font-medium text-highlighted">{{ parameterName(item.address) }}</b>
-                  <small class="text-xs text-muted">
-                    {{ parameterFamily(item.address) ?? 'Changed' }} · {{ item.count }}× · now {{ item.value }}{{ item.control ? ` · your control ${item.control}` : '' }}
-                  </small>
-                </span>
-                <UButton
-                  size="sm"
-                  :disabled="!canTrigger(item.address)"
-                  @click="pickHeard(item.address)"
-                >
-                  Use
-                </UButton>
-              </li>
-            </ul>
-            <p
-              v-else-if="listening"
-              class="text-sm text-muted"
-            >
-              Nothing has changed yet.
-            </p>
-          </div>
-
-          <USwitch
-            v-if="paramWhen.parameter"
-            v-model="paramWhen.anyAvatar"
-            label="Any avatar with this parameter"
-            description="For names that are the same on all your avatars, like VRCFury Haptics (VFH/…), OSC Goes Brrr (OGB/…) or a PhysBone's _IsGrabbed."
-          />
-
-          <UFormField
-            v-if="paramWhen.parameter"
-            label="Condition"
-          >
-            <div class="grid gap-3">
-              <SegmentedControl
-                v-model="conditionType"
-                :items="conditionItems"
-                aria-label="Condition"
-                class="w-fit max-w-full flex-wrap"
-              />
-              <div
-                v-if="CONDITIONS[conditionType].needsValue && paramWhen.valueType === 'Int'"
-                class="max-w-40"
-              >
-                <UInput
-                  v-model.number="conditionValue"
-                  type="number"
-                  step="1"
+              <div class="grid gap-2">
+                <USelectMenu
+                  v-model="parameter"
+                  :items="parameterItems"
+                  value-key="value"
+                  placeholder="Pick a parameter"
                   class="w-full"
+                  virtualize
+                />
+                <UCheckbox
+                  v-model="showAllParameters"
+                  label="Show built-in parameters too (Velocity, GestureLeft…)"
                 />
               </div>
-              <div
-                v-else-if="CONDITIONS[conditionType].needsValue"
-                class="grid gap-1.5"
+            </UFormField>
+
+            <div
+              v-if="!otherAvatar"
+              class="grid gap-2"
+            >
+              <div class="flex flex-wrap items-center gap-2.5">
+                <UButton
+                  :icon="listening ? 'i-lucide-square' : 'i-lucide-ear'"
+                  color="neutral"
+                  variant="subtle"
+                  @click="listening ? stopListening() : startListening()"
+                >
+                  {{ listening ? `Stop listening (${secondsLeft} s)` : 'Listen' }}
+                </UButton>
+                <span class="min-w-0 flex-1 text-sm text-muted">
+                  {{
+                    listening
+                      ? 'Touch the contact or move the PhysBone in VRChat now.'
+                      : 'Not sure which parameter a contact uses? Press Listen, then touch it in VRChat.'
+                  }}
+                </span>
+              </div>
+              <ul
+                v-if="heard.length"
+                class="grid max-h-96 gap-1.5 overflow-y-auto"
               >
-                <span class="text-sm text-muted tabular-nums">{{ conditionValue.toFixed(2) }}</span>
-                <USlider
-                  :model-value="conditionValue"
-                  :min="0"
-                  :max="1"
-                  :step="0.01"
-                  @update:model-value="fromSlider($event, (value) => (conditionValue = value))"
-                />
-              </div>
+                <li
+                  v-for="item in heard"
+                  :key="item.address"
+                  class="flex items-center gap-2.5 rounded-field border border-default bg-(--aurora-glass) px-3 py-2"
+                >
+                  <span class="min-w-0 flex-1">
+                    <b class="block truncate text-sm font-medium text-highlighted">{{ parameterName(item.address) }}</b>
+                    <small class="text-xs text-muted">
+                      {{ parameterFamily(item.address) ?? 'Changed' }} · {{ item.count }}× · now {{ item.value }}{{ item.control ? ` · your control ${item.control}` : '' }}
+                    </small>
+                  </span>
+                  <UButton
+                    size="sm"
+                    :disabled="!canTrigger(item.address)"
+                    @click="pickHeard(item.address)"
+                  >
+                    Use
+                  </UButton>
+                </li>
+              </ul>
+              <p
+                v-else-if="listening"
+                class="text-sm text-muted"
+              >
+                Nothing has changed yet.
+              </p>
             </div>
-          </UFormField>
 
-          <p
-            v-if="liveText && !otherAvatar"
-            class="flex items-center gap-1.5 text-sm text-muted"
-          >
-            <UIcon
-              name="i-lucide-activity"
-              class="size-4 shrink-0"
+            <USwitch
+              v-if="paramWhen.parameter"
+              v-model="paramWhen.anyAvatar"
+              label="Any avatar with this parameter"
+              description="For names that are the same on all your avatars, like VRCFury Haptics (VFH/…), OSC Goes Brrr (OGB/…) or a PhysBone's _IsGrabbed."
             />
-            {{ liveText }}
-          </p>
 
-          <UFormField
-            v-if="paramWhen.parameter && canHold"
-            label="Held for"
-            :description="`Milliseconds it has to stay true first, so a quick brush doesn't count. 0 for at once, up to ${formatMs(MAX_HELD_MS)}.`"
-            class="max-w-72"
+            <UFormField
+              v-if="paramWhen.parameter"
+              label="Condition"
+            >
+              <div class="grid gap-3">
+                <SegmentedControl
+                  v-model="conditionType"
+                  :items="conditionItems"
+                  aria-label="Condition"
+                  class="w-fit max-w-full flex-wrap"
+                />
+                <div
+                  v-if="CONDITIONS[conditionType].needsValue && paramWhen.valueType === 'Int'"
+                  class="max-w-40"
+                >
+                  <UInput
+                    v-model.number="conditionValue"
+                    type="number"
+                    step="1"
+                    class="w-full"
+                  />
+                </div>
+                <div
+                  v-else-if="CONDITIONS[conditionType].needsValue"
+                  class="grid gap-1.5"
+                >
+                  <span class="text-sm text-muted tabular-nums">{{ conditionValue.toFixed(2) }}</span>
+                  <USlider
+                    :model-value="conditionValue"
+                    :min="0"
+                    :max="1"
+                    :step="0.01"
+                    @update:model-value="fromSlider($event, (value) => (conditionValue = value))"
+                  />
+                </div>
+              </div>
+            </UFormField>
+
+            <p
+              v-if="liveText && !otherAvatar"
+              class="flex items-center gap-1.5 text-sm text-muted"
+            >
+              <UIcon
+                name="i-lucide-activity"
+                class="size-4 shrink-0"
+              />
+              {{ liveText }}
+            </p>
+
+            <UFormField
+              v-if="paramWhen.parameter && canHold"
+              label="Held for"
+              :description="`Milliseconds it has to stay true first, so a quick brush doesn't count. 0 for at once, up to ${formatMs(MAX_HELD_MS)}.`"
+              class="max-w-72"
+            >
+              <UInput
+                :model-value="paramWhen.heldMs"
+                type="number"
+                min="0"
+                :max="MAX_HELD_MS"
+                step="100"
+                class="w-full"
+                @update:model-value="paramWhen && (paramWhen.heldMs = Math.min(MAX_HELD_MS, toMs($event)))"
+              />
+            </UFormField>
+          </template>
+        </FormSection>
+
+        <FormSection
+          title="Only if"
+          :description="draft.onlyIf.length ? 'All of these have to be true when it starts.' : 'Always runs. Add a condition to only run sometimes.'"
+          class="max-lg:order-4"
+        >
+          <template
+            v-if="draft.onlyIf.length < MAX_GUARDS"
+            #actions
           >
-            <UInput
-              :model-value="paramWhen.heldMs"
-              type="number"
-              min="0"
-              :max="MAX_HELD_MS"
-              step="100"
-              class="w-full"
-              @update:model-value="paramWhen && (paramWhen.heldMs = Math.min(MAX_HELD_MS, toMs($event)))"
-            />
-          </UFormField>
-        </template>
-      </FormSection>
+            <UButton
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="subtle"
+              @click="addGuard"
+            >
+              Add
+            </UButton>
+          </template>
+          <AutomationGuardRow
+            v-for="(guard, index) in draft.onlyIf"
+            :key="index"
+            v-model="draft.onlyIf[index]!"
+            :other-avatar="otherAvatar"
+            @remove="draft.onlyIf.splice(index, 1)"
+          />
+        </FormSection>
 
+        <FormSection
+          v-if="CONDITIONS[conditionType].moment"
+          title="Limits"
+          class="max-lg:order-5"
+        >
+          <div class="grid gap-3.5">
+            <UFormField
+              label="Cooldown"
+              description="Milliseconds before it can run again. 0 for none."
+            >
+              <UInput
+                :model-value="draft.cooldownMs"
+                type="number"
+                min="0"
+                step="100"
+                class="w-full"
+                @update:model-value="draft.cooldownMs = toMs($event)"
+              />
+            </UFormField>
+            <UFormField label="If it happens again while running">
+              <SegmentedControl
+                v-model="draft.retrigger"
+                class="w-fit"
+                :items="[
+                  { value: 'restart', label: 'Start over' },
+                  { value: 'ignore', label: 'Ignore it' }
+                ]"
+                aria-label="If it happens again while running"
+              />
+            </UFormField>
+          </div>
+        </FormSection>
+      </div>
+
+      <!-- A container, so the steps lay out by the room this column has, not the window's. -->
       <FormSection
         title="Do"
-        description="What happens."
+        :description="`Its steps run together, each after its own delay. ${draft.then.length} of ${MAX_STEPS}.`"
+        class="@container max-lg:order-3"
       >
-        <div class="grid gap-3">
+        <template
+          v-if="draft.then.length < MAX_STEPS"
+          #actions
+        >
+          <UButton
+            icon="i-lucide-plus"
+            @click="addStep"
+          >
+            Add a step
+          </UButton>
+        </template>
+        <div class="grid items-start gap-3 @4xl:grid-cols-2 @[96rem]:grid-cols-3">
           <AutomationStepCard
             v-for="(step, index) in draft.then"
             :key="index"
@@ -693,82 +771,6 @@ onBeforeRouteLeave(async () => {
             :can-remove="draft.then.length > 1"
             @remove="removeStep(index)"
           />
-        </div>
-        <div
-          v-if="draft.then.length < MAX_STEPS"
-          class="flex flex-wrap gap-2"
-        >
-          <UButton
-            icon="i-lucide-plus"
-            color="neutral"
-            variant="subtle"
-            @click="addStep"
-          >
-            Add a step
-          </UButton>
-        </div>
-      </FormSection>
-
-      <FormSection
-        title="Only if"
-        description="All of these have to be true when it starts. Leave it empty to always run."
-        class="xl:col-span-2"
-      >
-        <div
-          v-if="draft.onlyIf.length"
-          class="grid gap-3 lg:grid-cols-2"
-        >
-          <AutomationGuardRow
-            v-for="(guard, index) in draft.onlyIf"
-            :key="index"
-            v-model="draft.onlyIf[index]!"
-            :other-avatar="otherAvatar"
-            @remove="draft.onlyIf.splice(index, 1)"
-          />
-        </div>
-        <div v-if="draft.onlyIf.length < MAX_GUARDS">
-          <UButton
-            icon="i-lucide-plus"
-            color="neutral"
-            variant="subtle"
-            @click="addGuard"
-          >
-            Add a condition
-          </UButton>
-        </div>
-      </FormSection>
-
-      <FormSection
-        v-if="CONDITIONS[conditionType].moment"
-        title="Limits"
-        class="xl:col-span-2"
-      >
-        <div class="flex flex-wrap items-start gap-3.5">
-          <UFormField
-            label="Cooldown"
-            description="Milliseconds before it can run again. 0 for none."
-            class="min-w-56 flex-1"
-          >
-            <UInput
-              :model-value="draft.cooldownMs"
-              type="number"
-              min="0"
-              step="100"
-              class="w-full"
-              @update:model-value="draft.cooldownMs = toMs($event)"
-            />
-          </UFormField>
-          <UFormField label="If it happens again while running">
-            <SegmentedControl
-              v-model="draft.retrigger"
-              class="w-fit"
-              :items="[
-                { value: 'restart', label: 'Start over' },
-                { value: 'ignore', label: 'Ignore it' }
-              ]"
-              aria-label="If it happens again while running"
-            />
-          </UFormField>
         </div>
       </FormSection>
     </div>
