@@ -1,7 +1,7 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useIntiface } from '@renderer/composables/useIntiface'
-import { useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
+import { resolvePatternRefs, useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -126,6 +126,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       ...controlGroup,
       controls: controlGroup.controls.map((control) => ({
         ...control,
+        // Recorded patterns can be renamed or deleted after a control picked them.
+        ...(control.type === 'intiface-pattern' && { allowedPatterns: resolvePatternRefs(control.allowedPatterns) }),
         locked: lockedControls.value[control.id] ?? false,
         limits: controlLimits.value[control.id],
         groupRules: groupRulesByControl.value.get(control.id),
