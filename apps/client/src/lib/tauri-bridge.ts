@@ -111,7 +111,32 @@ export type AvatarParameterTrigger = {
 // You start wearing an avatar: this one, or any (null). Also when the app first sees it.
 export type AvatarChangedTrigger = { kind: 'avatar-changed'; avatarId: string | null; avatarName: string | null }
 
-export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger
+export type AppEvent =
+  // A viewer uses a control: this one, any of this type (e.g. a shocker), or any.
+  | { type: 'viewer-command'; controlId?: string | null; controlType?: string | null }
+  | { type: 'viewer-joined' }
+  // The share page goes from no viewers to some.
+  | { type: 'first-viewer' }
+  | { type: 'last-viewer-left' }
+  // Stop everything is turned off.
+  | { type: 'resumed' }
+
+export type AppEventTrigger = { kind: 'app-event'; event: AppEvent }
+
+export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger | AppEventTrigger
+
+// Has to be true for an automation to start; checked when it starts, not while it runs.
+export type AutomationGuard =
+  | { kind: 'parameter'; parameter: string; valueType: ParameterValueType; condition: ParameterCondition; not: boolean }
+  // profileId null: No profile.
+  | { kind: 'profile'; profileId: string | null }
+  | { kind: 'viewers'; online: boolean }
+
+// What "only if" needs from the app.
+export interface AutomationContext {
+  profileId: string | null
+  viewers: number
+}
 
 export type OutputAction =
   | { type: 'pulse'; onMs: number; offMs: number; count: number }
@@ -184,6 +209,8 @@ export interface Automation {
   cooldownMs: number
   // What a moment does while the previous run is still going.
   retrigger: 'restart' | 'ignore'
+  // All of these have to be true for it to start.
+  onlyIf: AutomationGuard[]
 }
 
 export interface AutomationActivity {
@@ -256,6 +283,8 @@ export const api = {
     invoke('automation_set_enabled', { id, enabled }),
   automationTest: (id: string): Promise<void> => invoke('automation_test', { id }),
   automationsSetPaused: (paused: boolean): Promise<void> => invoke('automations_set_paused', { paused }),
+  automationEvent: (event: AppEvent): Promise<void> => invoke('automation_event', { event }),
+  automationsSetContext: (context: AutomationContext): Promise<void> => invoke('automations_set_context', { context }),
   onAutomationsChanged: (callback: (automations: Automation[]) => void): void => {
     void listen<Automation[]>('automations-changed', (event) => callback(event.payload))
   },

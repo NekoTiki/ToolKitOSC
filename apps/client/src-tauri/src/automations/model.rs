@@ -23,7 +23,10 @@ pub struct Automation {
     pub cooldown_ms: u32,
     /// What a moment trigger does while the previous run is still going.
     #[serde(default)]
-    pub retrigger: Retrigger
+    pub retrigger: Retrigger,
+    /// All of these have to be true for it to start.
+    #[serde(default)]
+    pub only_if: Vec<Guard>
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -55,7 +58,88 @@ pub enum Trigger {
     },
     /// You start wearing an avatar: this one, or any (None). Also when the app first sees it.
     #[serde(rename_all = "camelCase")]
-    AvatarChanged { avatar_id: Option<String>, avatar_name: Option<String> }
+    AvatarChanged { avatar_id: Option<String>, avatar_name: Option<String> },
+    /// Something happens in the app: viewers, Stop everything. The frontend reports these
+    /// (`automation_event`).
+    AppEvent { event: AppEvent }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum AppEvent {
+    /// A viewer uses a control: this one, any of this type (e.g. a shocker), or any.
+    #[serde(rename_all = "camelCase")]
+    ViewerCommand {
+        #[serde(default)]
+        control_id: Option<String>,
+        #[serde(default)]
+        control_type: Option<String>
+    },
+    ViewerJoined,
+    /// The share page goes from no viewers to some.
+    FirstViewer,
+    LastViewerLeft,
+    /// Stop everything is turned off.
+    Resumed
+}
+
+impl AppEvent {
+    /// Whether `happened` (what the frontend reported) is this event.
+    pub fn matches(&self, happened: &AppEvent) -> bool {
+        match (self, happened) {
+            (
+                AppEvent::ViewerCommand { control_id, control_type },
+                AppEvent::ViewerCommand { control_id: id, control_type: kind }
+            ) => {
+                control_id.as_ref().map_or(true, |c| Some(c) == id.as_ref())
+                    && control_type.as_ref().map_or(true, |t| Some(t) == kind.as_ref())
+            }
+            (a, b) => a == b
+        }
+    }
+}
+
+/// Something that has to be true for an automation to start. Checked when it starts, not while
+/// it runs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum Guard {
+    /// Another parameter is in a state (`is-on`, `is`, `is-above`), or isn't (`not`).
+    #[serde(rename_all = "camelCase")]
+    Parameter {
+        parameter: String,
+        value_type: ValueType,
+        condition: Condition,
+        #[serde(default)]
+        not: bool
+    },
+    /// This profile is active (None: No profile).
+    #[serde(rename_all = "camelCase")]
+    Profile { profile_id: Option<String> },
+    /// Viewers are on the share page, or none are.
+    Viewers { online: bool }
+}
+
+/// Most "only if" conditions on one automation.
+pub const MAX_GUARDS: usize = 4;
+
+impl Guard {
+    /// `value` looks up a parameter's current value.
+    pub fn holds(&self, context: &Context, value: &dyn Fn(&str) -> Option<f64>) -> bool {
+        match self {
+            Guard::Parameter { parameter, condition, not, .. } => value(parameter).is_some_and(|v| condition.holds(v)) != *not,
+            Guard::Profile { profile_id } => context.profile_id == *profile_id,
+            Guard::Viewers { online } => (context.viewers > 0) == *online
+        }
+    }
+}
+
+/// What the frontend knows that guards need.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Context {
+    pub profile_id: Option<String>,
+    pub viewers: u32
 }
 
 /// Longest "held for" on a state.
@@ -66,7 +150,7 @@ impl Trigger {
     pub fn runs(&self) -> Runs {
         match self {
             Trigger::AvatarParameter { condition, .. } => condition.runs(),
-            Trigger::AvatarChanged { .. } => Runs::Moment
+            Trigger::AvatarChanged { .. } | Trigger::AppEvent { .. } => Runs::Moment
         }
     }
 }
@@ -333,6 +417,21 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                 return Err("Pick the avatar, or any avatar.".into());
             }
         }
+        Trigger::AppEvent { .. } => {}
+    }
+
+    if automation.only_if.len() > MAX_GUARDS {
+        return Err(format!("An automation can have up to {MAX_GUARDS} \"only if\" conditions."));
+    }
+    for guard in &automation.only_if {
+        if let Guard::Parameter { parameter, value_type, condition, .. } = guard {
+            if parameter.is_empty() {
+                return Err("Pick the parameter each \"only if\" checks.".into());
+            }
+            if condition.runs() != Runs::State || !condition.fits(*value_type) {
+                return Err("An \"only if\" checks a state, like \"is on\".".into());
+            }
+        }
     }
     let runs = automation.when.runs();
 
@@ -507,7 +606,7 @@ mod tests {
             },
             then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output }, delay_ms: 0 }],
             cooldown_ms: 0,
-            retrigger: Retrigger::Restart
+            retrigger: Retrigger::Restart,            only_if: Vec::new()
         }
     }
 

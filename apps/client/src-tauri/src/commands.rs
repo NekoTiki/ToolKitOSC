@@ -326,3 +326,15 @@ pub fn automation_test(app: AppHandle, id: String) -> Result<(), String> {
 pub fn automations_set_paused(app: AppHandle, paused: bool) {
     automations::set_paused(&app, paused);
 }
+
+/// Something happened in the app that automations can start from (a viewer used a control...).
+#[tauri::command]
+pub fn automation_event(app: AppHandle, event: automations::model::AppEvent) {
+    automations::event(&app, &event);
+}
+
+/// The active profile and how many viewers are on, for "only if".
+#[tauri::command]
+pub fn automations_set_context(app: AppHandle, context: automations::model::Context) {
+    automations::set_context(&app, context);
+}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AutomationGuardRow from '@renderer/components/automations/AutomationGuardRow.vue'
 import AutomationStepCard from '@renderer/components/automations/AutomationStepCard.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -11,14 +12,16 @@ import { useControls } from '@renderer/composables/useControls'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
 import type { Automation, AutomationStep, AutomationTrigger, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
-import type { ConditionType } from '@renderer/utils/automations'
+import type { AppEventType, ConditionType } from '@renderer/utils/automations'
 import {
+  APP_EVENTS,
   CONDITIONS,
   conditionsFor,
   defaultCondition,
   describe,
   fitStep,
   formatMs,
+  MAX_GUARDS,
   MAX_HELD_MS,
   MAX_STEPS,
   newAutomation,
@@ -38,7 +41,7 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const { automations, running, save, remove, test, describeContext } = useAutomations()
-const { getControl } = useControls()
+const { controls, getControl } = useControls()
 const { avatarDetails } = useAvatarDetails()
 const { boards } = useBoards()
 const { paused } = useStopEverything()
@@ -75,11 +78,54 @@ const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== sa
 
 const paramWhen = computed(() => (draft.value?.when.kind === 'avatar-parameter' ? draft.value.when : null))
 const changedWhen = computed(() => (draft.value?.when.kind === 'avatar-changed' ? draft.value.when : null))
+const eventWhen = computed(() => (draft.value?.when.kind === 'app-event' ? draft.value.when : null))
+
+const eventType = computed({
+  get: (): AppEventType => eventWhen.value?.event.type ?? 'viewer-command',
+  set: (type: AppEventType) => {
+    if (eventWhen.value) eventWhen.value.event = type === 'viewer-command' ? { type, controlId: null, controlType: null } : { type }
+  }
+})
+
+const eventItems = (Object.keys(APP_EVENTS) as AppEventType[]).map((type) => ({ value: type, label: APP_EVENTS[type].label }))
+
+// Which viewer commands count: any, any shock, or one control (by id; the worn avatar's controls).
+const SHOCK = 'open-shock-shocker'
+const eventControl = computed({
+  get: (): string => {
+    const event = eventWhen.value?.event
+    if (event?.type !== 'viewer-command') return 'any'
+    return event.controlId ?? (event.controlType === SHOCK ? 'shock' : 'any')
+  },
+  set: (value: string) => {
+    if (eventWhen.value?.event.type !== 'viewer-command') return
+    eventWhen.value.event =
+      value === 'any'
+        ? { type: 'viewer-command', controlId: null, controlType: null }
+        : value === 'shock'
+          ? { type: 'viewer-command', controlId: null, controlType: SHOCK }
+          : { type: 'viewer-command', controlId: value, controlType: null }
+  }
+})
+
+const eventControlItems = computed(() => [
+  { label: 'Any control', value: 'any' },
+  { label: 'Any shock', value: 'shock' },
+  ...controls.value.flatMap((group) => group.controls.map((control) => ({ label: `${control.name} · ${group.name}`, value: control.id })))
+])
+
+// ---- Only if
+
+const addGuard = (): void => {
+  if (!draft.value || draft.value.onlyIf.length >= MAX_GUARDS) return
+  draft.value.onlyIf.push({ kind: 'viewers', online: true })
+}
 
 // An automation for another avatar keeps its parameter, controls and profiles: this avatar's
 // lists don't have them. One for any avatar uses the worn avatar's.
 const otherAvatar = computed(() => {
-  const avatarId = draft.value?.when.avatarId
+  const when = draft.value?.when
+  const avatarId = when && 'avatarId' in when ? when.avatarId : null
   return !!avatarId && avatarId !== avatarDetails.value?.id
 })
 
@@ -89,7 +135,9 @@ const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
   draft.value.when =
     kind === 'avatar-changed'
       ? { kind, avatarId: id, avatarName: name }
-      : newAutomation(id, name).when
+      : kind === 'app-event'
+        ? { kind, event: { type: 'viewer-command', controlId: null, controlType: null } }
+        : newAutomation(id, name).when
   fitSteps()
 }
 
@@ -236,6 +284,7 @@ const problem = computed((): string | null => {
   if (!draft.value.name.trim()) return 'Give it a name.'
   if (paramWhen.value && !paramWhen.value.parameter) return 'Pick the parameter that triggers it.'
   if (!draft.value.then.length) return 'Add something for it to do.'
+  if (draft.value.onlyIf.some((g) => g.kind === 'parameter' && !g.parameter)) return 'Pick the parameter each "only if" checks.'
   for (const step of draft.value.then) {
     const missing = stepProblem(step)
     if (missing) return missing
@@ -378,7 +427,41 @@ onBeforeRouteLeave(async () => {
             :disabled="!avatarDetails"
             @click="setTriggerKind('avatar-changed')"
           />
+          <ChoiceCard
+            title="Share page"
+            description="A viewer uses a control, joins or leaves, or controls resume."
+            icon="i-lucide-users"
+            :selected="draft.when.kind === 'app-event'"
+            :disabled="!avatarDetails"
+            @click="setTriggerKind('app-event')"
+          />
         </div>
+
+        <template v-if="eventWhen">
+          <UFormField
+            label="Event"
+            :description="APP_EVENTS[eventType].description"
+          >
+            <SegmentedControl
+              v-model="eventType"
+              :items="eventItems"
+              aria-label="Event"
+              class="w-fit max-w-full flex-wrap"
+            />
+          </UFormField>
+          <UFormField
+            v-if="eventWhen.event.type === 'viewer-command'"
+            label="Control"
+            description="Only when it goes through: locks, limits and cooldowns still apply to viewers."
+          >
+            <USelectMenu
+              v-model="eventControl"
+              :items="eventControlItems"
+              value-key="value"
+              class="w-full"
+            />
+          </UFormField>
+        </template>
 
         <UFormField
           v-if="changedWhen"
@@ -518,6 +601,35 @@ onBeforeRouteLeave(async () => {
             @click="addStep"
           >
             Add a step
+          </UButton>
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Only if"
+        description="All of these have to be true when it starts. Leave it empty to always run."
+        class="xl:col-span-2"
+      >
+        <div
+          v-if="draft.onlyIf.length"
+          class="grid gap-3 lg:grid-cols-2"
+        >
+          <AutomationGuardRow
+            v-for="(guard, index) in draft.onlyIf"
+            :key="index"
+            v-model="draft.onlyIf[index]!"
+            :other-avatar="otherAvatar"
+            @remove="draft.onlyIf.splice(index, 1)"
+          />
+        </div>
+        <div v-if="draft.onlyIf.length < MAX_GUARDS">
+          <UButton
+            icon="i-lucide-plus"
+            color="neutral"
+            variant="subtle"
+            @click="addGuard"
+          >
+            Add a condition
           </UButton>
         </div>
       </FormSection>

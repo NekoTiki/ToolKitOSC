@@ -248,6 +248,15 @@ pub fn set_paused(app: &AppHandle, paused: bool) {
     apply(app, effects);
 }
 
+pub fn event(app: &AppHandle, event: &model::AppEvent) {
+    let effects = automations(app).state.lock().unwrap().on_event(event, &AppEnv(app));
+    apply(app, effects);
+}
+
+pub fn set_context(app: &AppHandle, context: model::Context) {
+    automations(app).state.lock().unwrap().context = context;
+}
+
 fn number(message: &OscMessage) -> Option<f64> {
     match message.args.first()? {
         OscArg::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),

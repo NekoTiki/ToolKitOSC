@@ -15,6 +15,7 @@ import { useStopEverything } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
+import { api } from '@renderer/lib/tauri-bridge'
 import { checkClient } from '@renderer/utils/checkClient'
 import { AUTHENTICATED_MAX_PER_WINDOW, isRateLimited } from '@renderer/utils/rateLimit'
 import type { ClientListEntry, ControlTypes, ViewerGroupsMessage } from '@toolkitosc/shared-ui'
@@ -321,6 +322,10 @@ export function useWebsocketHost(): {
                 viewerName: showViewers.value ? viewer.displayName : null,
                 control
               })
+              // Automations can start from it. A shock that didn't go out (cooldown) doesn't count.
+              if (control && (control.type !== 'open-shock-shocker' || openShockResult)) {
+                void api.automationEvent({ type: 'viewer-command', controlId: control.id, controlType: control.type })
+              }
             }
           }
         }

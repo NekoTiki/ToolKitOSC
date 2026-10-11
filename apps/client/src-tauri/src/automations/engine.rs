@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use super::model::{Action, Automation, ControlRun, Edge, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType};
+use super::model::{Action, AppEvent, Automation, Context, ControlRun, Edge, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType};
 use crate::boards::protocol::OutputMessage;
 
 /// How long each hold/follow message keeps the output on, and how often it's renewed.
@@ -129,7 +129,9 @@ pub struct State {
     /// The latest value of each parameter, as seen live or set here.
     values: HashMap<String, f64>,
     /// Ids last reported as running.
-    reported: HashSet<String>
+    reported: HashSet<String>,
+    /// What the frontend last said about the profile and viewers, for guards.
+    pub context: Context
 }
 
 fn app(automation: &Automation, step: usize, action: &Action, phase: Phase) -> Effect {
@@ -173,6 +175,7 @@ impl State {
             };
             match condition.evaluate(previous, current) {
                 Edge::Fire => self.fire(&automation, now, env, &mut effects),
+                Edge::Enter if !self.guards_hold(&automation, env) => {}
                 Edge::Enter if *held_ms > 0 => {
                     self.pending.push(Pending { due: after(now, *held_ms), automation_id: automation.id.clone(), step: None });
                 }
@@ -181,8 +184,8 @@ impl State {
                     self.pending.retain(|p| p.automation_id != automation.id);
                     self.unclaim(&automation.id, None, now, &mut effects);
                 }
-                Edge::Follow(value) => self.follow(&automation, value, now, &mut effects),
-                Edge::None => {}
+                Edge::Follow(value) if self.guards_hold(&automation, env) => self.follow(&automation, value, now, &mut effects),
+                Edge::Follow(_) | Edge::None => {}
             }
         }
 
@@ -190,7 +193,34 @@ impl State {
         effects
     }
 
+    /// Something the frontend reports, e.g. a viewer using a control.
+    pub fn on_event(&mut self, happened: &AppEvent, env: &dyn Env) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        if self.paused {
+            return effects;
+        }
+        let now = Instant::now();
+        let matching: Vec<Automation> = self
+            .automations
+            .iter()
+            .filter(|a| a.enabled && matches!(&a.when, Trigger::AppEvent { event } if event.matches(happened)))
+            .cloned()
+            .collect();
+        for automation in matching {
+            self.fire(&automation, now, env, &mut effects);
+        }
+        self.report(now, &mut effects);
+        effects
+    }
+
+    fn guards_hold(&self, automation: &Automation, env: &dyn Env) -> bool {
+        automation.only_if.iter().all(|guard| guard.holds(&self.context, &|address| self.value(address, env)))
+    }
+
     fn fire(&mut self, automation: &Automation, now: Instant, env: &dyn Env, effects: &mut Vec<Effect>) {
+        if !self.guards_hold(automation, env) {
+            return;
+        }
         if let Some(runtime) = self.runtime.get(&automation.id) {
             if automation.cooldown_ms > 0 && runtime.last_run.is_some_and(|at| now < after(at, automation.cooldown_ms)) {
                 return;
@@ -452,7 +482,8 @@ impl State {
             };
             match pending.step {
                 Some(step) => self.run_step(&automation, step, now, env, &mut effects),
-                None => self.start(&automation, Runs::State, now, env, &mut effects)
+                None if self.guards_hold(&automation, env) => self.start(&automation, Runs::State, now, env, &mut effects),
+                None => {}
             }
         }
 
@@ -588,7 +619,7 @@ impl ElapsedExt for Option<Instant> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::automations::model::{Condition, Step};
+    use crate::automations::model::{Condition, Guard, Step};
 
     struct TestEnv;
 
@@ -625,7 +656,8 @@ mod tests {
             },
             then,
             cooldown_ms: 0,
-            retrigger: Retrigger::Restart
+            retrigger: Retrigger::Restart,
+            only_if: Vec::new()
         }
     }
 
@@ -1027,6 +1059,49 @@ mod tests {
 
         assert_eq!(app_phases(&state.on_avatar_worn("avtr_1", &TestEnv)).len(), 2);
         assert_eq!(app_phases(&state.on_avatar_worn("avtr_2", &TestEnv)).len(), 1);
+    }
+
+    #[test]
+    fn viewer_events_fire_matching_automations() {
+        let mut state = State::default();
+        let mut a = automation("shock", Condition::TurnsOn, ValueType::Bool, OutputAction::Pulse { on_ms: 200, off_ms: 0, count: 1 });
+        a.when = Trigger::AppEvent { event: AppEvent::ViewerCommand { control_id: None, control_type: Some("open-shock-shocker".into()) } };
+        state.automations.push(a);
+
+        let toggle = AppEvent::ViewerCommand { control_id: Some("c".into()), control_type: Some("boolean".into()) };
+        assert!(sends(&state.on_event(&toggle, &TestEnv)).is_empty());
+        let shock = AppEvent::ViewerCommand { control_id: Some("s".into()), control_type: Some("open-shock-shocker".into()) };
+        assert_eq!(sends(&state.on_event(&shock, &TestEnv)).len(), 1);
+        assert!(sends(&state.on_event(&AppEvent::FirstViewer, &TestEnv)).is_empty());
+    }
+
+    #[test]
+    fn guards_block_starts() {
+        let mut state = State::default();
+        let mut a = automation("a", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.only_if = vec![
+            Guard::Viewers { online: true },
+            Guard::Parameter { parameter: "/avatar/parameters/Armed".into(), value_type: ValueType::Bool, condition: Condition::IsOn, not: false }
+        ];
+        state.automations.push(a);
+
+        assert!(change(&mut state, 0.0, 1.0).is_empty(), "no viewers");
+        state.context = Context { profile_id: None, viewers: 2 };
+        assert!(change(&mut state, 0.0, 1.0).is_empty(), "not armed");
+        state.on_parameter("avtr_1", "/avatar/parameters/Armed", Some(0.0), 1.0, &TestEnv);
+        assert_eq!(change(&mut state, 0.0, 1.0).len(), 1);
+    }
+
+    #[test]
+    fn profile_guard() {
+        let mut state = State::default();
+        let mut a = automation("a", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.only_if = vec![Guard::Profile { profile_id: Some("spicy".into()) }];
+        state.automations.push(a);
+
+        assert!(change(&mut state, 0.0, 1.0).is_empty());
+        state.context.profile_id = Some("spicy".into());
+        assert_eq!(change(&mut state, 0.0, 1.0).len(), 1);
     }
 
     #[test]

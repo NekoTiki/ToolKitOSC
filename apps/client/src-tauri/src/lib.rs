@@ -115,7 +115,9 @@ pub fn run() {
             commands::automation_delete,
             commands::automation_set_enabled,
             commands::automation_test,
-            commands::automations_set_paused
+            commands::automations_set_paused,
+            commands::automation_event,
+            commands::automations_set_context
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
