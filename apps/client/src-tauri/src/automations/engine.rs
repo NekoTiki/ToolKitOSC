@@ -73,7 +73,8 @@ struct PinState {
 struct Pending {
     due: Instant,
     automation_id: String,
-    step: usize
+    /// None: a state waiting to have held long enough (`held_ms`), which then starts its steps.
+    step: Option<usize>
 }
 
 /// What the UI shows as "Running".
@@ -158,16 +159,23 @@ impl State {
             .iter()
             .filter(|a| a.enabled)
             .filter(|a| {
-                let Trigger::AvatarParameter { avatar_id: id, parameter, .. } = &a.when;
-                id == avatar_id && parameter == address
+                let Trigger::AvatarParameter { avatar_id: id, parameter, any_avatar, .. } = &a.when else {
+                    return false;
+                };
+                (*any_avatar || id == avatar_id) && parameter == address
             })
             .cloned()
             .collect();
 
         for automation in matching {
-            let Trigger::AvatarParameter { condition, .. } = &automation.when;
+            let Trigger::AvatarParameter { condition, held_ms, .. } = &automation.when else {
+                continue;
+            };
             match condition.evaluate(previous, current) {
                 Edge::Fire => self.fire(&automation, now, env, &mut effects),
+                Edge::Enter if *held_ms > 0 => {
+                    self.pending.push(Pending { due: after(now, *held_ms), automation_id: automation.id.clone(), step: None });
+                }
                 Edge::Enter => self.start(&automation, Runs::State, now, env, &mut effects),
                 Edge::Exit => {
                     self.pending.retain(|p| p.automation_id != automation.id);
@@ -216,7 +224,7 @@ impl State {
             if step.delay_ms == 0 {
                 self.run_step(automation, index, now, env, effects);
             } else {
-                self.pending.push(Pending { due: after(now, step.delay_ms), automation_id: automation.id.clone(), step: index });
+                self.pending.push(Pending { due: after(now, step.delay_ms), automation_id: automation.id.clone(), step: Some(index) });
             }
         }
     }
@@ -442,7 +450,10 @@ impl State {
             let Some(automation) = self.automations.iter().find(|a| a.id == pending.automation_id && a.enabled).cloned() else {
                 continue;
             };
-            self.run_step(&automation, pending.step, now, env, &mut effects);
+            match pending.step {
+                Some(step) => self.run_step(&automation, step, now, env, &mut effects),
+                None => self.start(&automation, Runs::State, now, env, &mut effects)
+            }
         }
 
         for claim in &mut self.claims {
@@ -464,6 +475,26 @@ impl State {
 
     /// The avatar changed: every output lets go. Parameter and app holds are dropped without
     /// setting anything back, since what they changed belonged to the old avatar.
+    pub fn on_avatar_worn(&mut self, avatar_id: &str, env: &dyn Env) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        if self.paused {
+            return effects;
+        }
+        let now = Instant::now();
+        let matching: Vec<Automation> = self
+            .automations
+            .iter()
+            .filter(|a| a.enabled)
+            .filter(|a| matches!(&a.when, Trigger::AvatarChanged { avatar_id: id, .. } if id.as_deref().map_or(true, |id| id == avatar_id)))
+            .cloned()
+            .collect();
+        for automation in matching {
+            self.fire(&automation, now, env, &mut effects);
+        }
+        self.report(now, &mut effects);
+        effects
+    }
+
     pub fn release_all(&mut self) -> Vec<Effect> {
         let now = Instant::now();
         let mut effects = Vec::new();
@@ -524,7 +555,8 @@ impl State {
 
     fn is_running(&self, id: &str, now: Instant) -> bool {
         self.claims.iter().any(|c| c.automation_id == id)
-            || self.pending.iter().any(|p| p.automation_id == id)
+            // Waiting to be held long enough isn't running yet.
+            || self.pending.iter().any(|p| p.automation_id == id && p.step.is_some())
             || self.runtime.get(id).is_some_and(|r| is_future(r.busy_until, now))
             || self.pins.values().any(|p| p.toggled_by.as_deref() == Some(id) && is_future(p.toggled_until, now))
     }
@@ -587,7 +619,9 @@ mod tests {
                 avatar_name: "Avatar".into(),
                 parameter: "/avatar/parameters/P".into(),
                 value_type,
-                condition
+                condition,
+                any_avatar: false,
+                held_ms: 0
             },
             then,
             cooldown_ms: 0,
@@ -699,7 +733,9 @@ mod tests {
         let mut state = State::default();
         state.automations.push(automation("a", Condition::IsOn, ValueType::Bool, OutputAction::Hold));
         let mut b = automation("b", Condition::IsOn, ValueType::Bool, OutputAction::Hold);
-        let Trigger::AvatarParameter { parameter, .. } = &mut b.when;
+        let Trigger::AvatarParameter { parameter, .. } = &mut b.when else {
+            unreachable!()
+        };
         *parameter = "/avatar/parameters/Q".into();
         state.automations.push(b);
 
@@ -930,6 +966,67 @@ mod tests {
         ));
         change(&mut state, 0.0, 1.0);
         assert!(state.is_running("a", Instant::now()));
+    }
+
+    #[test]
+    fn any_avatar_matches_by_name() {
+        let mut state = State::default();
+        let mut a = automation("a", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        if let Trigger::AvatarParameter { any_avatar, .. } = &mut a.when {
+            *any_avatar = true;
+        }
+        state.automations.push(a);
+        assert_eq!(sends(&state.on_parameter("avtr_2", "/avatar/parameters/P", Some(0.0), 1.0, &TestEnv)).len(), 1);
+    }
+
+    #[test]
+    fn held_for_waits_then_starts() {
+        let mut state = State::default();
+        let mut a = automation("a", Condition::IsOn, ValueType::Bool, OutputAction::Hold);
+        if let Trigger::AvatarParameter { held_ms, .. } = &mut a.when {
+            *held_ms = 1;
+        }
+        state.automations.push(a);
+
+        let effects = change_effects(&mut state, 0.0, 1.0);
+        assert!(sends(&effects).is_empty());
+        assert!(activity(&effects).is_empty(), "not running while it waits");
+        std::thread::sleep(Duration::from_millis(5));
+        assert_eq!(sends(&state.tick(&TestEnv)), vec![OutputMessage::Set { pin: 4, on: true, ms: LEASE_MS }]);
+    }
+
+    #[test]
+    fn letting_go_early_cancels_held_for() {
+        let mut state = State::default();
+        let mut a = automation("a", Condition::IsOn, ValueType::Bool, OutputAction::Hold);
+        if let Trigger::AvatarParameter { held_ms, .. } = &mut a.when {
+            *held_ms = 1;
+        }
+        state.automations.push(a);
+
+        change(&mut state, 0.0, 1.0);
+        assert!(change(&mut state, 1.0, 0.0).is_empty());
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(sends(&state.tick(&TestEnv)).is_empty());
+    }
+
+    #[test]
+    fn avatar_worn_fires_its_automations() {
+        let mut state = State::default();
+        let mut a = automation_with(
+            "a",
+            Condition::TurnsOn,
+            ValueType::Bool,
+            vec![Step { action: Action::Profile { profile_id: Some("p".into()), while_held: false }, delay_ms: 0 }]
+        );
+        a.when = Trigger::AvatarChanged { avatar_id: Some("avtr_1".into()), avatar_name: None };
+        state.automations.push(a.clone());
+        a.id = "any".into();
+        a.when = Trigger::AvatarChanged { avatar_id: None, avatar_name: None };
+        state.automations.push(a);
+
+        assert_eq!(app_phases(&state.on_avatar_worn("avtr_1", &TestEnv)).len(), 2);
+        assert_eq!(app_phases(&state.on_avatar_worn("avtr_2", &TestEnv)).len(), 1);
     }
 
     #[test]

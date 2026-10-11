@@ -341,11 +341,23 @@ export const formatMs = (ms: number): string => `${Math.round(ms)} ms`
 const formatValue = (value: number, valueType: ParameterValueType): string =>
   valueType === 'Bool' ? (value ? 'on' : 'off') : String(value)
 
+// Seconds when it's a round number of them, like "held for 2 s".
+const formatSeconds = (ms: number): string => (ms % 1000 === 0 ? `${ms / 1000} s` : formatMs(ms))
+
 export const describeWhen = (when: AutomationTrigger): string => {
+  if (when.kind === 'avatar-changed') return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
   const value = 'value' in when.condition ? ` ${when.condition.value}` : ''
-  return `${parameterName(when.parameter)} ${condition.label.toLowerCase()}${value}`
+  const held = when.heldMs ? ` for ${formatSeconds(when.heldMs)}` : ''
+  return `${parameterName(when.parameter)} ${condition.label.toLowerCase()}${value}${held}`
 }
+
+// What the steps have to fit: an avatar change is a moment, like a parameter turning on.
+export const triggerCondition = (when: AutomationTrigger): ConditionType =>
+  when.kind === 'avatar-parameter' ? when.condition.type : 'turns-on'
+
+// Longest "held for" (model.rs MAX_HELD_MS).
+export const MAX_HELD_MS = 60_000
 
 export const describeOutputAction = (output: OutputAction): string => {
   switch (output.type) {
@@ -439,9 +451,11 @@ export const newAutomation = (avatarId: string, avatarName: string): Automation 
     avatarName,
     parameter: '',
     valueType: 'Bool',
-    condition: { type: 'turns-on' }
+    condition: { type: 'turns-on' },
+    anyAvatar: false,
+    heldMs: 0
   },
-  then: [newBoardStep('turns-on')],
+  then: [newStep('control', 'turns-on')],
   cooldownMs: 0,
   retrigger: 'restart'
 })

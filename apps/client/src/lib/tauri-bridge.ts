@@ -94,7 +94,7 @@ export type ParameterCondition =
   | { type: 'is-above'; value: number }
   | { type: 'any' }
 
-export type AutomationTrigger = {
+export type AvatarParameterTrigger = {
   kind: 'avatar-parameter'
   avatarId: string
   avatarName: string
@@ -102,7 +102,16 @@ export type AutomationTrigger = {
   parameter: string
   valueType: ParameterValueType
   condition: ParameterCondition
+  // Runs on any avatar with a parameter of this name.
+  anyAvatar: boolean
+  // A state only counts once it has held this long, 0 = at once.
+  heldMs: number
 }
+
+// You start wearing an avatar: this one, or any (null). Also when the app first sees it.
+export type AvatarChangedTrigger = { kind: 'avatar-changed'; avatarId: string | null; avatarName: string | null }
+
+export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger
 
 export type OutputAction =
   | { type: 'pulse'; onMs: number; offMs: number; count: number }

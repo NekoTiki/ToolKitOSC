@@ -275,6 +275,12 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage, previous: Option<&Osc
     apply(app, effects);
 }
 
+/// The new avatar is loaded (details and saved values): its "avatar changed" automations run.
+pub fn avatar_worn(app: &AppHandle, avatar_id: &str) {
+    let effects = automations(app).state.lock().unwrap().on_avatar_worn(avatar_id, &AppEnv(app));
+    apply(app, effects);
+}
+
 /// The avatar changed: everything the old one was holding lets go.
 pub fn avatar_changed(app: &AppHandle) {
     let effects = automations(app).state.lock().unwrap().release_all();
