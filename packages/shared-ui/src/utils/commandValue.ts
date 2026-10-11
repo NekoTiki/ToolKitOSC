@@ -1,5 +1,5 @@
 import type { ControlType, ControlTypes } from '../types/controls'
-import { INTIFACE_PATTERN_OFF_ID } from '../types/controls'
+import { INTIFACE_PATTERN_OFF_ID, VIEWER_PATTERN_ID } from '../types/controls'
 import type { OpenShockCommandResult } from '../types/openShock'
 import type { CommandValue } from '../types/protocol'
 
@@ -15,6 +15,8 @@ export const formatCommandValue = (value: CommandValue | undefined): string => {
   if (typeof value === 'boolean') return value ? 'On' : 'Off'
   if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2)
   if (value === undefined) return '-'
+  // A Toy Pattern viewer's own recording (see VIEWER_PATTERN_ID); no other command logs this string.
+  if (value === VIEWER_PATTERN_ID) return 'Their own pattern'
 
   return String(value)
 }
@@ -47,6 +49,7 @@ export const describeCommand = (control: ControlType | undefined, type: ControlT
 
     case 'intiface-pattern':
       if (value === INTIFACE_PATTERN_OFF_ID) return 'turned off'
+      if (value === VIEWER_PATTERN_ID) return 'played their own pattern'
       if (control?.type === 'intiface-pattern') {
         const pattern = control.allowedPatterns.find((p) => p.id === value)
 

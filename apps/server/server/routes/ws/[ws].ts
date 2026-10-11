@@ -4,6 +4,7 @@ import type { Peer } from 'crossws'
 
 import type { User } from '#auth-utils'
 import type { ControlGroup, ControlType, PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
+import { VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '#shared/types/protocol'
 import { resolveControlForViewer, sanitizeCommand } from '#shared/utils/controlLimits'
 import { guestName } from '#shared/utils/guestName'
 import {
@@ -265,10 +266,18 @@ export default defineWebSocketHandler({
 
           if (!command) return
 
+          // A viewer's own pattern can be kept to viewers signed in with Discord.
+          const viewerPattern = command.type === 'intiface-pattern' && (command.value === VIEWER_PATTERN_ID || command.value === VIEWER_LIVE_ID)
+
+          if (viewerPattern && control.type === 'intiface-pattern' && control.viewerPatterns?.signedInOnly && !user?.discord?.id) return
+
           data.message = { ...data.message, ...command }
         }
 
-        scheduleControlActivation(roomId!, data.message.groupId, data.message.controlId, data.message.type)
+        // Live values while a viewer records a pattern aren't activations of their own.
+        const live = data.message.type === 'intiface-pattern' && data.message.value === VIEWER_LIVE_ID
+
+        if (!live) scheduleControlActivation(roomId!, data.message.groupId, data.message.controlId, data.message.type)
       } else {
         // Mirror the host's copy (see useWebsocketHost.ts), so the new name shows in everyone's list.
         const client = clientList.get(roomId!)?.get(sessionId)

@@ -110,6 +110,15 @@ interface RunningPattern {
   actuators: IntifaceActuatorRef[]
   startedAt: number
   timer: ReturnType<typeof setInterval>
+  // Ends the pattern by itself (see PlayOptions.stopAfterMs).
+  stopTimer?: ReturnType<typeof setTimeout>
+}
+
+export interface PlayOptions {
+  // Stops the pattern (and zeroes its toys) after this long. A viewer's own pattern uses it.
+  stopAfterMs?: number | null
+  // Who started it, broadcast with the pattern value so the share page can say "Sam's pattern".
+  by?: string
 }
 
 // Module-scope singleton, same reasoning as useIntiface.ts's own connection state: every control
@@ -127,7 +136,7 @@ export function useIntifacePatterns(): {
   // replacing its own previous pattern.
   playPattern: (controlId: string, patternId: string, actuators: IntifaceActuatorRef[]) => void
   // Same, for a pattern that isn't in a registry (yet): the Patterns page tries out an unsaved take.
-  playDefinition: (controlId: string, pattern: IntifacePatternDefinition, actuators: IntifaceActuatorRef[]) => void
+  playDefinition: (controlId: string, pattern: IntifacePatternDefinition, actuators: IntifaceActuatorRef[], options?: PlayOptions) => void
   stopPattern: (controlId: string) => void
   // Stops any running pattern (other than `exceptControlId`) that owns any of `actuators` - call
   // this whenever something else is about to drive one of these actuators directly (a plain toy
@@ -146,6 +155,7 @@ export function useIntifacePatterns(): {
     if (!entry) return
 
     clearInterval(entry.timer)
+    clearTimeout(entry.stopTimer)
     runningPatterns.delete(controlId)
   }
 
@@ -184,7 +194,12 @@ export function useIntifacePatterns(): {
     if (pattern) playDefinition(controlId, pattern, actuators)
   }
 
-  const playDefinition = (controlId: string, pattern: IntifacePatternDefinition, actuators: IntifaceActuatorRef[]): void => {
+  const playDefinition = (
+    controlId: string,
+    pattern: IntifacePatternDefinition,
+    actuators: IntifaceActuatorRef[],
+    options: PlayOptions = {}
+  ): void => {
     stopPattern(controlId)
     releaseActuators(actuators, controlId)
 
@@ -197,9 +212,11 @@ export function useIntifacePatterns(): {
     tick()
 
     const timer = setInterval(tick, PLAYBACK_INTERVAL_MS)
+    const { stopAfterMs, by } = options
+    const stopTimer = stopAfterMs ? setTimeout(() => playPattern(controlId, INTIFACE_PATTERN_OFF_ID, actuators), stopAfterMs) : undefined
 
-    runningPatterns.set(controlId, { actuators, startedAt, timer })
-    setPatternValue(controlId, pattern.id)
+    runningPatterns.set(controlId, { actuators, startedAt, timer, stopTimer })
+    setPatternValue(controlId, pattern.id, by || stopTimer ? { by, endsAt: stopAfterMs ? startedAt + stopAfterMs : undefined } : undefined)
   }
 
   const stopAllPatterns = (): void => {

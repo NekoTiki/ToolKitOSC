@@ -1,5 +1,5 @@
 import type { CommandWithoutIds, ControlLimits, ControlType, ViewerGroupInfo } from '../types/controls'
-import { INTIFACE_PATTERN_OFF_ID } from '../types/controls'
+import { INTIFACE_PATTERN_OFF_ID, PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS, VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '../types/controls'
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
@@ -123,6 +123,27 @@ export function sanitizeCommand(control: ControlType, command: CommandWithoutIds
     case 'intiface-pattern': {
       if (control.type !== 'intiface-pattern' || typeof command.value !== 'string') return null
       if (command.value === INTIFACE_PATTERN_OFF_ID) return { type: command.type, value: command.value }
+
+      if (command.value === VIEWER_PATTERN_ID || command.value === VIEWER_LIVE_ID) {
+        const options = control.viewerPatterns
+
+        if (!options?.enabled) return null
+
+        // Nothing above the control's own cap or the profile's max is ever played.
+        const top = Math.min(clamp(options.maxIntensity, 0, 1), limitRange(limits).max)
+
+        if (command.value === VIEWER_LIVE_ID) {
+          return isFiniteNumber(command.level) ? { type: command.type, value: command.value, level: clamp(command.level, 0, top) } : null
+        }
+
+        const { samples } = command
+        const maxSamples = Math.floor(Math.min(options.maxMs, PATTERN_MAX_MS) / PATTERN_SAMPLE_MS)
+
+        if (!Array.isArray(samples) || samples.length * PATTERN_SAMPLE_MS < PATTERN_MIN_MS || samples.length > maxSamples) return null
+        if (!samples.every(isFiniteNumber)) return null
+
+        return { type: command.type, value: command.value, samples: samples.map((sample) => Math.round(clamp(sample, 0, top * 100))) }
+      }
 
       const allowed = control.allowedPatterns.some((pattern) => pattern.id === command.value)
 

@@ -28,7 +28,9 @@ import {
   sanitizeCommand,
   useIntifaceControl,
   useIntifacePatternControl,
-  useOpenShockControl
+  useOpenShockControl,
+  VIEWER_LIVE_ID,
+  VIEWER_PATTERN_ID
 } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import { useWebSocket } from '@vueuse/core'
@@ -255,8 +257,13 @@ export function useWebsocketHost(): {
           const control = getControl(data.message.groupId, data.message.controlId)
           const command = control ? sanitizeCommand(resolveControlForViewer(control, activeGroupIds(viewer.key)), data.message) : undefined
           const { ip } = viewer
+          // A viewer's own pattern, or the live value while they record it (see viewerPatterns on
+          // the control). The host can keep it to viewers signed in with Discord.
+          const viewerPattern = command?.type === 'intiface-pattern' && (command.value === VIEWER_PATTERN_ID || command.value === VIEWER_LIVE_ID)
+          const viewerPatternBlocked =
+            viewerPattern && control?.type === 'intiface-pattern' && !!control.viewerPatterns?.signedInOnly && !client.user?.discord?.id
 
-          if (command !== null && !isGroupHidden(data.message.groupId)) {
+          if (command !== null && !viewerPatternBlocked && !isGroupHidden(data.message.groupId)) {
             const banned = isBanned(ip, viewer.discordId)
             const clientValid = checkClient(clientType.value, client)
 
@@ -288,6 +295,9 @@ export function useWebsocketHost(): {
                 peerId: client.peerId,
                 reason: 'You are sending commands too quickly - slow down.'
               })
+            } else if (command?.type === 'intiface-pattern' && command.value === VIEWER_LIVE_ID) {
+              // Live values while recording only move the toy: nothing to log, announce or show.
+              if (control) handleCommand(control, command)
             } else {
               if (control) {
                 setControlLastUser(data.message.groupId, data.message.controlId, {
@@ -301,7 +311,8 @@ export function useWebsocketHost(): {
               // For an open-shock-shocker command, the intensity/duration/shockers actually applied
               // are randomized inside handleCommand and weren't known yet when this message arrived
               // - run it first and log its result instead of the (always absent) message value.
-              const openShockResult = control && command ? handleCommand(control, command) : undefined
+              const openShockResult =
+                control && command ? handleCommand(control, command, { viewerName: showViewers.value ? viewer.displayName : undefined }) : undefined
               const sent = command ?? data.message
               const accepted = {
                 groupId: data.message.groupId,
@@ -487,7 +498,8 @@ export function useWebsocketHost(): {
         } else if (control.type === 'intiface-pattern') {
           const current = intifacePatternValues.value.get(control.id)
 
-          if (current && current !== INTIFACE_PATTERN_OFF_ID && isOptionDisabled(limits, current)) {
+          // A viewer's own pattern was clamped to the old limits when it started, so it stops too.
+          if (current && current !== INTIFACE_PATTERN_OFF_ID && (current === VIEWER_PATTERN_ID || isOptionDisabled(limits, current))) {
             handleCommand(control, { type: 'intiface-pattern', value: INTIFACE_PATTERN_OFF_ID })
           }
         }

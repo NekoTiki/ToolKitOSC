@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { useIntifacePatternControl } from '../composables/useIntifacePatternControl'
 import type { IntifacePatternRef } from '../types/controls'
-import { INTIFACE_PATTERN_OFF_ID } from '../types/controls'
+import { INTIFACE_PATTERN_OFF_ID, VIEWER_PATTERN_ID } from '../types/controls'
 import ControlBase from './ControlBase.vue'
 import ControlOptions from './ControlOptions.vue'
 
@@ -19,11 +19,50 @@ const props = defineProps<{
   patterns: IntifacePatternRef[]
   // Pattern ids the active profile blocks for viewers. Never 'off'.
   disabledOptions?: (string | number)[]
+  // Share page, when the control lets viewers record their own pattern: 'allowed' shows a Make one
+  // chip, 'sign-in' shows it disabled (signed-in viewers only). Absent: no chip.
+  patternMaker?: 'allowed' | 'sign-in'
+  // The viewer pattern playing is this viewer's own.
+  mine?: boolean
 }>()
 
-const emit = defineEmits<{ (e: 'update:value', patternId: string): void }>()
+const emit = defineEmits<{
+  (e: 'update:value', patternId: string): void
+  (e: 'make'): void
+}>()
 
-const { controlValue } = useIntifacePatternControl()
+const { controlValue, viewerPatterns } = useIntifacePatternControl()
+
+const viewerPattern = computed(() => (controlValue.value.get(props.controlId) === VIEWER_PATTERN_ID ? (viewerPatterns.value.get(props.controlId) ?? {}) : null))
+
+// Ticks once a second while a viewer pattern with an end time plays, for its countdown.
+const now = ref(Date.now())
+let clock: ReturnType<typeof setInterval> | undefined
+
+watch(
+  () => viewerPattern.value?.endsAt,
+  (endsAt) => {
+    clearInterval(clock)
+    now.value = Date.now()
+    if (endsAt) clock = setInterval(() => (now.value = Date.now()), 1000)
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => clearInterval(clock))
+
+const viewerPatternLabel = computed(() => {
+  if (!viewerPattern.value) return ''
+
+  const { by, endsAt } = viewerPattern.value
+  const name = props.mine ? 'Your pattern' : by ? `${by}'s pattern` : "A viewer's pattern"
+
+  if (!endsAt) return name
+
+  const seconds = Math.max(0, Math.round((endsAt - now.value) / 1000))
+
+  return `${name} · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+})
 
 const currentPatternId = computed(() => controlValue.value.get(props.controlId) ?? INTIFACE_PATTERN_OFF_ID)
 
@@ -34,9 +73,38 @@ const chips = computed<IntifacePatternRef[]>(() => [
   ...props.patterns
 ])
 
-const options = computed(() =>
-  chips.value.map((chip) => ({ key: chip.id, name: chip.name, icon: chip.icon, disabled: chip.id !== INTIFACE_PATTERN_OFF_ID && !!props.disabledOptions?.includes(chip.id), selected: chip.id === currentPatternId.value }))
-)
+const MAKE_KEY = 'make'
+
+const options = computed(() => [
+  ...chips.value.map((chip) => ({
+    key: chip.id,
+    name: chip.name,
+    icon: chip.icon,
+    disabled: chip.id !== INTIFACE_PATTERN_OFF_ID && !!props.disabledOptions?.includes(chip.id),
+    selected: chip.id === currentPatternId.value
+  })),
+  ...(viewerPattern.value ? [{ key: VIEWER_PATTERN_ID, name: viewerPatternLabel.value, icon: 'i-lucide-audio-waveform', selected: true }] : []),
+  ...(props.patternMaker
+    ? [
+        {
+          key: MAKE_KEY,
+          name: 'Make one',
+          icon: 'i-lucide-plus',
+          selected: false,
+          action: true,
+          disabled: props.patternMaker === 'sign-in',
+          disabledReason: 'sign in with Discord to make one'
+        }
+      ]
+    : [])
+])
+
+const select = (index: number): void => {
+  const key = options.value[index]?.key
+
+  if (key === MAKE_KEY) emit('make')
+  else if (key !== undefined && key !== VIEWER_PATTERN_ID) emit('update:value', String(key))
+}
 </script>
 
 <template>
@@ -60,7 +128,7 @@ const options = computed(() =>
     <ControlOptions
       :options="options"
       pill
-      @select="emit('update:value', chips[$event]!.id)"
+      @select="select"
     />
   </control-base>
 </template>

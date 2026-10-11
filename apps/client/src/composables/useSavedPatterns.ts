@@ -14,10 +14,7 @@ export interface SavedPattern {
   updatedAt: number
 }
 
-export const PATTERN_SAMPLE_MS = 50
-export const PATTERN_MAX_MS = 30_000
-// Anything shorter is thrown away: it's almost always a slip, not a pattern.
-export const PATTERN_MIN_MS = 1000
+export { PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS } from '@toolkitosc/shared-ui'
 
 const STORAGE_KEY = 'savedPatterns'
 
