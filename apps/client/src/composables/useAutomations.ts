@@ -1,7 +1,11 @@
+import { useBoards } from '@renderer/composables/useBoards'
+import { useControls } from '@renderer/composables/useControls'
+import { useLockedControls } from '@renderer/composables/useLockedControls'
 import type { Automation } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
-import type { Ref } from 'vue'
-import { ref } from 'vue'
+import type { DescribeContext } from '@renderer/utils/automations'
+import type { ComputedRef, Ref } from 'vue'
+import { computed, ref } from 'vue'
 
 // Automations run in the backend, which sends the whole list on every change; this mirrors it.
 const automations = ref<Automation[]>([])
@@ -22,15 +26,29 @@ void api.automationsList().then((value) => (automations.value = value))
 export function useAutomations(): {
   automations: Ref<Automation[]>
   running: Ref<Set<string>>
+  // Board, control and profile names for describe(). Controls and profiles are the worn avatar's.
+  describeContext: ComputedRef<DescribeContext>
   // Rejects with a message to show.
   save: (automation: Automation) => Promise<void>
   remove: (id: string) => Promise<void>
   setEnabled: (id: string, enabled: boolean) => Promise<void>
   test: (id: string) => Promise<void>
 } {
+  const { boards } = useBoards()
+  const { getControl } = useControls()
+  const { getLockedControlGroup } = useLockedControls()
+  const describeContext = computed(
+    (): DescribeContext => ({
+      boards: boards.value,
+      controlName: (groupId, controlId) => getControl(groupId, controlId)?.name,
+      profileName: (id) => getLockedControlGroup(id)?.name
+    })
+  )
+
   return {
     automations,
     running,
+    describeContext,
     save: (automation) => api.automationSave(automation),
     remove: (id) => api.automationDelete(id),
     setEnabled: (id, enabled) => api.automationSetEnabled(id, enabled),

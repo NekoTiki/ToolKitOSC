@@ -1,7 +1,8 @@
 //! Automations: *when* something happens, *do* something (see `model`). For now the only trigger
-//! is an avatar parameter changing; an automation does one or more things, each on an ESP32
-//! board output or one of the avatar's own parameters. Both sides are tagged unions so
-//! app-specific kinds can be added later.
+//! is an avatar parameter changing; an automation does one or more things. ESP32 outputs and the
+//! avatar's own parameters are driven from here; controls, profiles, the chatbox and Stop
+//! everything live in the frontend, which gets an `automation-run` event for each (see
+//! `useAutomationRunner.ts`).
 //!
 //! The list is global. An avatar-parameter trigger carries its avatar, so it only runs while that
 //! avatar is worn. Only live changes count: values read when an avatar loads never reach here
@@ -15,7 +16,7 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager};
 
-use engine::{Effect, Env, State};
+use engine::{AppRun, Effect, Env, Phase, State};
 use model::{Action, Automation, OutputAction, ParameterAction, ValueType};
 
 use crate::boards::{self, protocol::OutputMessage};
@@ -79,6 +80,9 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 if let Err(err) = crate::osc::send(&app.state::<AppState>(), &parameter_command(&address, value_type, value)) {
                     tracing::debug!("Couldn't set {address}: {err}");
                 }
+            }
+            Effect::App(run) => {
+                let _ = app.emit("automation-run", run);
             }
             Effect::Activity(activity) => {
                 let _ = app.emit("automation-activity", activity);
@@ -163,8 +167,14 @@ pub fn set_enabled(app: &AppHandle, id: &str, enabled: bool) {
 
 /// What a Test of one step sends, and what it sends `TEST_MS` later to undo it (holds and
 /// follows of a parameter).
-fn test_step(app: &AppHandle, action: &Action) -> Result<(Effect, Option<Effect>), String> {
+fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result<(Effect, Option<Effect>), String> {
+    let run = |phase: Phase| Effect::App(AppRun { automation_id: id.to_string(), step: index, action: action.clone(), phase });
     match action {
+        action if action.in_app() => Ok(match action.runs() {
+            model::Runs::Moment => (run(Phase::Run), None),
+            model::Runs::State => (run(Phase::Start), Some(run(Phase::Stop))),
+            model::Runs::Follow => (run(Phase::Follow { value: 1.0 }), Some(run(Phase::Follow { value: 0.0 })))
+        }),
         Action::BoardOutput { board_id, pin, output } => {
             let info = boards::output_info(app, board_id, *pin).ok_or("Its output isn't saved on the board any more.")?;
             let short = engine::TEST_MS.min(info.max_on_ms);
@@ -189,6 +199,8 @@ fn test_step(app: &AppHandle, action: &Action) -> Result<(Effect, Option<Effect>
                 ParameterAction::Follow { max, .. } => (to(*max), Some(to(current)))
             })
         }
+        // App actions are handled above.
+        Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => Ok((run(Phase::Run), None))
     }
 }
 
@@ -204,8 +216,8 @@ pub fn test(app: &AppHandle, id: &str) -> Result<(), String> {
 
     // Everything is checked before anything is sent.
     let mut steps = Vec::new();
-    for step in &automation.then {
-        steps.push((step.delay_ms, test_step(app, &step.action)?));
+    for (index, step) in automation.then.iter().enumerate() {
+        steps.push((step.delay_ms, test_step(app, id, index, &step.action)?));
     }
 
     let app = app.clone();

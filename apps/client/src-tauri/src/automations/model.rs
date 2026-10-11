@@ -104,8 +104,66 @@ pub enum Action {
         parameter: String,
         value_type: ValueType,
         set: ParameterAction
+    },
+    /// Runs one of the avatar's controls, the way a viewer would. The frontend does it (see
+    /// `useAutomationRunner.ts`); the engine only says when.
+    #[serde(rename_all = "camelCase")]
+    Control {
+        group_id: String,
+        control_id: String,
+        /// The control's type when it was picked, e.g. `slider`, so this side can check `run`.
+        control_type: String,
+        run: ControlRun
+    },
+    /// Makes a profile active (None: No profile), or keeps it active while the condition holds.
+    #[serde(rename_all = "camelCase")]
+    Profile {
+        profile_id: Option<String>,
+        #[serde(default)]
+        while_held: bool
+    },
+    /// Posts to the VRChat chatbox, when the chatbox is turned on in Settings.
+    Chatbox { text: String },
+    StopEverything
+}
+
+/// How a step runs a control. Values are what the control's command takes (see shared-ui
+/// `CommandWithoutIds`): a bool for toggles, an option index for enums, 0–1 for sliders and toys,
+/// a pattern id for patterns.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum ControlRun {
+    Set { value: serde_json::Value },
+    /// Flips a toggle.
+    Toggle,
+    /// A toy at `value` for `ms`, then off.
+    Pulse { value: f64, ms: u32 },
+    /// Presses a preset or a shocker.
+    Press,
+    /// `value` while the condition holds, then back to what it was.
+    Hold { value: serde_json::Value },
+    /// A slider or toy follows the trigger, mapped onto min..max (0–1).
+    Follow { min: f64, max: f64 }
+}
+
+/// Which control types each way of running fits.
+fn run_fits(run: &ControlRun, control_type: &str) -> bool {
+    match run {
+        ControlRun::Set { .. } => !matches!(control_type, "preset" | "open-shock-shocker"),
+        ControlRun::Toggle => matches!(control_type, "boolean" | "boolean-group"),
+        ControlRun::Pulse { .. } => control_type == "intiface-toy",
+        ControlRun::Press => matches!(control_type, "preset" | "open-shock-shocker"),
+        ControlRun::Hold { .. } => {
+            matches!(control_type, "boolean" | "boolean-group" | "enum" | "step-enum" | "slider" | "intiface-toy" | "intiface-pattern")
+        }
+        ControlRun::Follow { .. } => matches!(control_type, "slider" | "intiface-toy")
     }
 }
+
+/// The chatbox takes up to 144 characters.
+pub const CHATBOX_MAX: usize = 144;
+/// Longest toy pulse.
+pub const MAX_TOY_PULSE_MS: u32 = 60_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -254,13 +312,29 @@ pub enum Runs {
 impl Action {
     pub fn runs(&self) -> Runs {
         match self {
-            Action::BoardOutput { output: OutputAction::Hold, .. } | Action::AvatarParameter { set: ParameterAction::Hold { .. }, .. } => {
-                Runs::State
-            }
+            Action::BoardOutput { output: OutputAction::Hold, .. }
+            | Action::AvatarParameter { set: ParameterAction::Hold { .. }, .. }
+            | Action::Control { run: ControlRun::Hold { .. }, .. }
+            | Action::Profile { while_held: true, .. } => Runs::State,
             Action::BoardOutput { output: OutputAction::Follow { .. }, .. }
-            | Action::AvatarParameter { set: ParameterAction::Follow { .. }, .. } => Runs::Follow,
+            | Action::AvatarParameter { set: ParameterAction::Follow { .. }, .. }
+            | Action::Control { run: ControlRun::Follow { .. }, .. } => Runs::Follow,
             _ => Runs::Moment
         }
+    }
+
+    /// How long a moment keeps running after it starts, for "Running" and `retrigger: ignore`.
+    pub fn busy_ms(&self) -> u32 {
+        match self {
+            Action::BoardOutput { output, .. } => output.busy_ms().unwrap_or(0),
+            Action::Control { run: ControlRun::Pulse { ms, .. }, .. } => *ms,
+            _ => 0
+        }
+    }
+
+    /// Run by the frontend rather than here.
+    pub fn in_app(&self) -> bool {
+        matches!(self, Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything)
     }
 }
 
@@ -327,6 +401,36 @@ fn validate_step(step: &Step, condition: &Condition, trigger: &str) -> Result<()
                         return Err("Follow's range must be within -1 and 1.".into());
                     }
                 }
+            }
+        }
+        Action::Control { group_id, control_id, control_type, run } => {
+            if group_id.is_empty() || control_id.is_empty() {
+                return Err("Pick the control it runs.".into());
+            }
+            if !run_fits(run, control_type) {
+                return Err("That doesn't fit this kind of control.".into());
+            }
+            match run {
+                ControlRun::Pulse { value, ms } => {
+                    if !(0.0..=1.0).contains(value) || *ms == 0 || *ms > MAX_TOY_PULSE_MS {
+                        return Err(format!("A toy pulse needs an intensity and up to {} s.", MAX_TOY_PULSE_MS / 1000));
+                    }
+                }
+                ControlRun::Follow { min, max } => {
+                    if !(0.0..=1.0).contains(min) || !(0.0..=1.0).contains(max) {
+                        return Err("Follow's range must be within 0–100 %.".into());
+                    }
+                }
+                _ => {}
+            }
+        }
+        Action::Profile { .. } | Action::StopEverything => {}
+        Action::Chatbox { text } => {
+            if text.trim().is_empty() {
+                return Err("Write the chatbox message.".into());
+            }
+            if text.chars().count() > CHATBOX_MAX {
+                return Err(format!("The chatbox takes up to {CHATBOX_MAX} characters."));
             }
         }
     }
@@ -469,6 +573,39 @@ mod tests {
         assert!(validate(&follow).is_ok());
         follow.then[1].delay_ms = 500;
         assert!(validate(&follow).is_err(), "a follow can't wait");
+    }
+
+    fn control_step(control_type: &str, run: ControlRun) -> Step {
+        Step {
+            action: Action::Control { group_id: "g".into(), control_id: "c".into(), control_type: control_type.into(), run },
+            delay_ms: 0
+        }
+    }
+
+    #[test]
+    fn app_steps() {
+        let mut a = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.then = vec![control_step("preset", ControlRun::Press)];
+        assert!(validate(&a).is_ok());
+        a.then = vec![control_step("slider", ControlRun::Press)];
+        assert!(validate(&a).is_err(), "press a slider");
+        a.then = vec![control_step("intiface-toy", ControlRun::Pulse { value: 0.5, ms: 0 })];
+        assert!(validate(&a).is_err(), "pulse without a length");
+        a.then = vec![control_step("boolean", ControlRun::Hold { value: serde_json::json!(true) })];
+        assert!(validate(&a).is_err(), "hold on a moment");
+        a.then = vec![Step { action: Action::Chatbox { text: "x".repeat(CHATBOX_MAX + 1) }, delay_ms: 0 }];
+        assert!(validate(&a).is_err(), "chatbox too long");
+        a.then = vec![Step { action: Action::Profile { profile_id: None, while_held: true }, delay_ms: 0 }];
+        assert!(validate(&a).is_err(), "profile hold on a moment");
+
+        let mut held = sample(Condition::IsOn, ValueType::Bool, OutputAction::Hold);
+        held.then = vec![
+            control_step("intiface-pattern", ControlRun::Hold { value: serde_json::json!("pulse") }),
+            Step { action: Action::Profile { profile_id: Some("p".into()), while_held: true }, delay_ms: 0 }
+        ];
+        assert!(validate(&held).is_ok());
+        held.then.push(Step { action: Action::StopEverything, delay_ms: 0 });
+        assert!(validate(&held).is_err(), "stop everything on a state");
     }
 
     #[test]

@@ -3,6 +3,7 @@ import AppRail from '@renderer/components/layout/AppRail.vue'
 import TopBar from '@renderer/components/layout/TopBar.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
 import { useAppUpdater } from '@renderer/composables/useAppUpdater'
+import { useAutomationRunner } from '@renderer/composables/useAutomationRunner'
 import { useLogRetention } from '@renderer/composables/useLogRetention'
 import { useStopEverythingTriggers } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
@@ -18,6 +19,7 @@ onMounted(() => loadTheme())
 useLogRetention()
 useAppUpdater()
 useStopEverythingTriggers()
+useAutomationRunner()
 </script>
 
 <template>

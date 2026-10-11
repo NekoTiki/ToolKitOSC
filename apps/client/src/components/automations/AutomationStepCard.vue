@@ -3,23 +3,33 @@ import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
+import { useChatbox } from '@renderer/composables/useChatbox'
+import { useControls } from '@renderer/composables/useControls'
+import { useLockedControls } from '@renderer/composables/useLockedControls'
 import type { AutomationStep, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
-import type { ConditionType, OutputActionType, ParameterActionType } from '@renderer/utils/automations'
+import type { ConditionType, ControlRunType, OutputActionType, ParameterActionType } from '@renderer/utils/automations'
 import {
   actionsFor,
+  CHATBOX_MAX,
+  CONTROL_RUNS,
+  controlRunsFor,
+  defaultControlRun,
   defaultOutput,
   defaultParameterAction,
   formatMs,
   MAX_DELAY_MS,
-  newBoardStep,
-  newParameterStep,
+  MAX_TOY_PULSE_MS,
+  newStep,
   OUTPUT_ACTIONS,
   PARAMETER_ACTIONS,
   parameterActionsFor,
   parameterName,
-  stepCanWait
+  STEP_KINDS,
+  stepCanWait,
+  stepKindsFor
 } from '@renderer/utils/automations'
+import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
 import { computed, ref } from 'vue'
 
 // One step of an automation's "Do": what it drives, how, and how long after the trigger.
@@ -39,9 +49,20 @@ const { avatarDetails } = useAvatarDetails()
 const { boards } = useBoards()
 const showAllParameters = ref(false)
 
+const { controls } = useControls()
+const { lockedControlGroups } = useLockedControls()
+const { enabled: chatboxEnabled } = useChatbox()
+
+// The kinds that can run on this condition, plus the current one so a step that no longer fits
+// still shows what it is.
+const kinds = computed(() => {
+  const fitting = stepKindsFor(props.condition)
+  return fitting.includes(step.value.kind) ? fitting : [...fitting, step.value.kind]
+})
+
 const setKind = (kind: AutomationStep['kind']): void => {
   if (step.value.kind === kind) return
-  const next = kind === 'board-output' ? newBoardStep(props.condition) : newParameterStep(props.condition)
+  const next = newStep(kind, props.condition)
   step.value = { ...next, delayMs: stepCanWait(next) ? step.value.delayMs : 0 }
 }
 
@@ -166,7 +187,137 @@ const boolValue = computed({
   set: (value: 'on' | 'off') => (parameterValue.value = value === 'on' ? 1 : 0)
 })
 
-const toInt =(value: number | string): number => Math.min(255, Math.max(0, Math.round(Number(value) || 0)))
+// ---- Control
+
+const controlStep = computed(() => (step.value.kind === 'control' ? step.value : null))
+
+const allControls = computed(() => controls.value.flatMap((group) => group.controls.map((control) => ({ group, control }))))
+
+const pickedControl = computed(() =>
+  controlStep.value
+    ? allControls.value.find((c) => c.group.id === controlStep.value!.groupId && c.control.id === controlStep.value!.controlId)?.control
+    : undefined
+)
+
+// Only controls with a way to run on this condition.
+const controlItems = computed(() =>
+  allControls.value
+    .filter(({ control }) => controlRunsFor(props.condition, control.type).length)
+    .map(({ group, control }) => ({
+      label: `${control.name} · ${CONTROL_TYPE_LABELS[control.type]} · ${group.name}`,
+      value: `${group.id}:${control.id}`
+    }))
+)
+
+const controlTarget = computed({
+  get: () => (controlStep.value?.controlId ? `${controlStep.value.groupId}:${controlStep.value.controlId}` : undefined),
+  set: (value: string | undefined) => {
+    if (!controlStep.value || !value) return
+    const [groupId, controlId] = value.split(':')
+    const control = allControls.value.find((c) => c.group.id === groupId && c.control.id === controlId)?.control
+    if (!control) return
+    controlStep.value.groupId = groupId!
+    controlStep.value.controlId = controlId!
+    controlStep.value.controlType = control.type
+    controlStep.value.run = defaultControlRun(controlRunsFor(props.condition, control.type)[0]!, control)
+  }
+})
+
+const controlRunType = computed({
+  get: (): ControlRunType => controlStep.value?.run.type ?? 'press',
+  set: (type: ControlRunType) => {
+    if (!controlStep.value) return
+    controlStep.value.run = defaultControlRun(type, pickedControl.value)
+    if (!stepCanWait(controlStep.value)) controlStep.value.delayMs = 0
+  }
+})
+
+const controlRunItems = computed(() =>
+  controlStep.value
+    ? controlRunsFor(props.condition, controlStep.value.controlType).map((type) => ({ value: type, label: CONTROL_RUNS[type].label }))
+    : []
+)
+
+const controlRunDescription = computed(() =>
+  controlStep.value?.controlType === 'open-shock-shocker'
+    ? "Uses the shocker's own intensity, duration and cooldown."
+    : CONTROL_RUNS[controlRunType.value].description
+)
+
+// What a Set or Hold value looks like for this control.
+const valueKind = computed((): 'bool' | 'choice' | 'level' => {
+  switch (controlStep.value?.controlType) {
+    case 'boolean':
+    case 'boolean-group':
+      return 'bool'
+    case 'slider':
+    case 'intiface-toy':
+      return 'level'
+    default:
+      return 'choice'
+  }
+})
+
+const controlValue = computed(() => {
+  const run = controlStep.value?.run
+  return run && (run.type === 'set' || run.type === 'hold') ? run.value : undefined
+})
+
+const setControlValue = (value: boolean | number | string): void => {
+  const run = controlStep.value?.run
+  if (run && (run.type === 'set' || run.type === 'hold')) run.value = value
+}
+
+const controlBool = computed({
+  get: (): 'on' | 'off' => (controlValue.value ? 'on' : 'off'),
+  set: (value: 'on' | 'off') => setControlValue(value === 'on')
+})
+
+// Enum options and Toggle Logic inputs go by index; patterns by id.
+const choiceItems = computed((): { label: string; value: string }[] => {
+  const control = pickedControl.value
+  switch (control?.type) {
+    case 'enum':
+    case 'step-enum':
+      return control.options.map((option, index) => ({ label: option.name, value: String(index) }))
+    case 'boolean-enum':
+      return control.inputs.map((input, index) => ({ label: input.name, value: String(index) }))
+    case 'intiface-pattern':
+      return [{ label: 'Off', value: 'off' }, ...control.allowedPatterns.map((pattern) => ({ label: pattern.name, value: pattern.id }))]
+    default:
+      return []
+  }
+})
+
+const controlChoice = computed({
+  get: () => String(controlValue.value ?? ''),
+  set: (value: string) => setControlValue(controlStep.value?.controlType === 'intiface-pattern' ? value : Number(value))
+})
+
+// ---- Profile
+
+const profileStep = computed(() => (step.value.kind === 'profile' ? step.value : null))
+
+// USelect can't hold null, so No profile goes by a stand-in.
+const NO_PROFILE = 'none'
+
+const profileItems = computed(() => [
+  { label: 'No profile', value: NO_PROFILE },
+  ...lockedControlGroups.value.map((profile) => ({ label: profile.name, value: profile.id }))
+])
+
+const profileTarget = computed({
+  get: () => profileStep.value?.profileId ?? NO_PROFILE,
+  set: (value: string) => {
+    if (profileStep.value) profileStep.value.profileId = value === NO_PROFILE ? null : value
+  }
+})
+
+// ---- Chatbox
+
+const chatboxStep = computed(() => (step.value.kind === 'chatbox' ? step.value : null))
+
+const toInt = (value: number | string): number => Math.min(255, Math.max(0, Math.round(Number(value) || 0)))
 </script>
 
 <template>
@@ -185,20 +336,15 @@ const toInt =(value: number | string): number => Math.min(255, Math.max(0, Math.
       />
     </div>
 
-    <div class="grid gap-2.5 sm:grid-cols-2">
+    <div class="grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3">
       <ChoiceCard
-        title="ESP32 output"
-        description="Switch something wired to one of your boards."
-        icon="i-lucide-cpu"
-        :selected="step.kind === 'board-output'"
-        @click="setKind('board-output')"
-      />
-      <ChoiceCard
-        title="Avatar parameter"
-        description="Set one of your avatar's own parameters."
-        icon="i-lucide-sliders-horizontal"
-        :selected="step.kind === 'avatar-parameter'"
-        @click="setKind('avatar-parameter')"
+        v-for="kind in kinds"
+        :key="kind"
+        :title="STEP_KINDS[kind].label"
+        :description="STEP_KINDS[kind].description"
+        :icon="STEP_KINDS[kind].icon"
+        :selected="step.kind === kind"
+        @click="setKind(kind)"
       />
     </div>
 
@@ -414,6 +560,179 @@ const toInt =(value: number | string): number => Math.min(255, Math.max(0, Math.
         </div>
       </template>
     </template>
+
+    <template v-else-if="controlStep">
+      <UFormField
+        v-if="otherAvatar"
+        label="Control"
+        description="Wear this automation's avatar to pick another control."
+      >
+        <UInput
+          :model-value="controlStep.controlId ? 'A control on that avatar' : 'None picked'"
+          class="w-full"
+          disabled
+        />
+      </UFormField>
+      <UFormField
+        v-else
+        label="Control"
+        :description="controlItems.length ? undefined : 'None of your controls can run on this condition.'"
+      >
+        <USelectMenu
+          v-model="controlTarget"
+          :items="controlItems"
+          value-key="value"
+          placeholder="Pick a control"
+          class="w-full"
+        />
+      </UFormField>
+
+      <template v-if="controlStep.controlId">
+        <UFormField
+          label="Action"
+          :description="controlRunDescription"
+        >
+          <SegmentedControl
+            v-model="controlRunType"
+            :items="controlRunItems"
+            aria-label="Action"
+            class="w-fit max-w-full flex-wrap"
+          />
+        </UFormField>
+
+        <UFormField
+          v-if="controlStep.run.type === 'set' || controlStep.run.type === 'hold'"
+          :label="controlStep.run.type === 'hold' ? 'While held' : 'Value'"
+        >
+          <SegmentedControl
+            v-if="valueKind === 'bool'"
+            v-model="controlBool"
+            class="w-fit"
+            :items="[
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' }
+            ]"
+            aria-label="Value"
+          />
+          <USelect
+            v-else-if="valueKind === 'choice'"
+            v-model="controlChoice"
+            :items="choiceItems"
+            class="w-full max-w-80"
+          />
+          <div
+            v-else
+            class="grid gap-1.5"
+          >
+            <span class="text-sm text-muted tabular-nums">{{ Math.round(Number(controlStep.run.value) * 100) }} %</span>
+            <USlider
+              :model-value="Number(controlStep.run.value)"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @update:model-value="fromSlider($event, (value) => setControlValue(value))"
+            />
+          </div>
+        </UFormField>
+
+        <div
+          v-else-if="controlStep.run.type === 'pulse'"
+          class="grid gap-3 sm:grid-cols-2"
+        >
+          <UFormField :label="`Intensity: ${Math.round(controlStep.run.value * 100)} %`">
+            <USlider
+              :model-value="controlStep.run.value"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @update:model-value="fromSlider($event, (value) => controlStep?.run.type === 'pulse' && (controlStep.run.value = value))"
+            />
+          </UFormField>
+          <UFormField
+            label="For"
+            :description="`Milliseconds. Up to ${formatMs(MAX_TOY_PULSE_MS)}.`"
+          >
+            <UInput
+              :model-value="controlStep.run.ms"
+              type="number"
+              min="1"
+              :max="MAX_TOY_PULSE_MS"
+              step="100"
+              class="w-full"
+              @update:model-value="controlStep.run.type === 'pulse' && (controlStep.run.ms = toMs($event, MAX_TOY_PULSE_MS))"
+            />
+          </UFormField>
+        </div>
+
+        <div
+          v-else-if="controlStep.run.type === 'follow'"
+          class="grid gap-3 sm:grid-cols-2"
+        >
+          <UFormField :label="`At 0: ${Math.round(controlStep.run.min * 100)} %`">
+            <USlider
+              :model-value="controlStep.run.min"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @update:model-value="fromSlider($event, (value) => controlStep?.run.type === 'follow' && (controlStep.run.min = value))"
+            />
+          </UFormField>
+          <UFormField :label="`At 1: ${Math.round(controlStep.run.max * 100)} %`">
+            <USlider
+              :model-value="controlStep.run.max"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @update:model-value="fromSlider($event, (value) => controlStep?.run.type === 'follow' && (controlStep.run.max = value))"
+            />
+          </UFormField>
+        </div>
+      </template>
+    </template>
+
+    <template v-else-if="profileStep">
+      <UFormField
+        label="Profile"
+        :description="profileStep.whileHeld ? 'Active while the condition is true, then back to the profile you had.' : undefined"
+      >
+        <UInput
+          v-if="otherAvatar"
+          model-value="A profile on that avatar"
+          class="w-full"
+          disabled
+        />
+        <USelect
+          v-else
+          v-model="profileTarget"
+          :items="profileItems"
+          class="w-full max-w-80"
+        />
+      </UFormField>
+    </template>
+
+    <template v-else-if="chatboxStep">
+      <UFormField
+        label="Message"
+        :hint="`${chatboxStep.text.length} / ${CHATBOX_MAX}`"
+        :description="chatboxEnabled ? 'Sent at most every 3 seconds.' : undefined"
+        :error="chatboxEnabled ? false : 'The chatbox is off, so this won\'t post anything. Turn it on in Settings › VRChat chatbox.'"
+      >
+        <UInput
+          v-model="chatboxStep.text"
+          :maxlength="CHATBOX_MAX"
+          placeholder="Boop!"
+          class="w-full"
+          autocomplete="off"
+        />
+      </UFormField>
+    </template>
+
+    <p
+      v-else-if="step.kind === 'stop-everything'"
+      class="text-sm text-muted"
+    >
+      Stops every toy, pattern, shock and board output and pauses your controls, like the button in the top bar.
+    </p>
 
     <UFormField
       v-if="stepCanWait(step)"
