@@ -45,7 +45,12 @@ export const CONDITIONS: Record<
 
 export const OUTPUT_ACTIONS: Record<
   OutputActionType,
-  { label: string; description: string; fits: (condition: ConditionType) => boolean; needsPwm: boolean }
+  {
+    label: string
+    description: string
+    fits: (condition: ConditionType) => boolean
+    needsPwm: boolean
+  }
 > = {
   pulse: {
     label: 'Pulse',
@@ -59,7 +64,12 @@ export const OUTPUT_ACTIONS: Record<
     fits: (c) => CONDITIONS[c].moment,
     needsPwm: false
   },
-  off: { label: 'Off', description: 'Switches it off.', fits: (c) => CONDITIONS[c].moment, needsPwm: false },
+  off: {
+    label: 'Off',
+    description: 'Switches it off.',
+    fits: (c) => CONDITIONS[c].moment,
+    needsPwm: false
+  },
   hold: {
     label: 'Hold',
     description: 'On for as long as the condition is true.',
@@ -92,14 +102,24 @@ export const PARAMETER_ACTIONS: Record<
     fits: (c) => CONDITIONS[c].moment,
     valueTypes: ['Bool', 'Int', 'Float']
   },
-  toggle: { label: 'Toggle', description: 'Flips it on or off.', fits: (c) => CONDITIONS[c].moment, valueTypes: ['Bool'] },
+  toggle: {
+    label: 'Toggle',
+    description: 'Flips it on or off.',
+    fits: (c) => CONDITIONS[c].moment,
+    valueTypes: ['Bool']
+  },
   hold: {
     label: 'Hold',
     description: 'This value while the condition is true, then back to what it was.',
     fits: (c) => !CONDITIONS[c].moment && c !== 'any',
     valueTypes: ['Bool', 'Int', 'Float']
   },
-  follow: { label: 'Follow', description: 'Follows the value, mapped onto a range.', fits: (c) => c === 'any', valueTypes: ['Float'] }
+  follow: {
+    label: 'Follow',
+    description: 'Follows the value, mapped onto a range.',
+    fits: (c) => c === 'any',
+    valueTypes: ['Float']
+  }
 }
 
 // Most steps one automation can run, and the longest "after" delay (model.rs MAX_STEPS, MAX_DELAY_MS).
@@ -109,15 +129,51 @@ export const MAX_DELAY_MS = 10_000
 export const CHATBOX_MAX = 144
 export const MAX_TOY_PULSE_MS = 60_000
 
+// model.rs format_duration: 0.5s, 2s, 1m 30s.
+const chatboxDuration = (ms: number): string => {
+  if (ms >= 60_000) {
+    const seconds = Math.round(ms / 1000)
+    return seconds % 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds / 60}m`
+  }
+  return `${Math.round(ms / 100) / 10}s`
+}
+
+// What an output step with "Send to chatbox" posts (model.rs chatbox_text): when it starts, then
+// when a toggle, hold or Off switches it off.
+export const outputChatboxMessages = (output: OutputAction, label: string): string[] => {
+  switch (output.type) {
+    case 'pulse':
+      return [
+        `${label} activated for ${chatboxDuration(output.onMs)}${output.count > 1 ? `, ${output.count} times` : ''}`
+      ]
+    case 'hold':
+    case 'toggle':
+      return [`${label} activated`, `${label} turned off`]
+    case 'off':
+      return [`${label} turned off`]
+    case 'follow':
+      return []
+  }
+}
+
 export const conditionsFor = (valueType: ParameterValueType): ConditionType[] =>
-  (Object.keys(CONDITIONS) as ConditionType[]).filter((type) => CONDITIONS[type].valueType === valueType)
+  (Object.keys(CONDITIONS) as ConditionType[]).filter(
+    (type) => CONDITIONS[type].valueType === valueType
+  )
 
 export const actionsFor = (condition: ConditionType): OutputActionType[] =>
-  (Object.keys(OUTPUT_ACTIONS) as OutputActionType[]).filter((type) => OUTPUT_ACTIONS[type].fits(condition))
+  (Object.keys(OUTPUT_ACTIONS) as OutputActionType[]).filter((type) =>
+    OUTPUT_ACTIONS[type].fits(condition)
+  )
 
-export const parameterActionsFor = (condition: ConditionType, valueType: ParameterValueType): ParameterActionType[] =>
+export const parameterActionsFor = (
+  condition: ConditionType,
+  valueType: ParameterValueType
+): ParameterActionType[] =>
   (Object.keys(PARAMETER_ACTIONS) as ParameterActionType[]).filter(
-    (type) => PARAMETER_ACTIONS[type].fits(condition) && PARAMETER_ACTIONS[type].valueTypes.includes(valueType)
+    (type) =>
+      PARAMETER_ACTIONS[type].fits(condition) &&
+      PARAMETER_ACTIONS[type].valueTypes.includes(valueType)
   )
 
 export type ControlRunType = ControlRun['type']
@@ -128,34 +184,80 @@ const runsFor = (condition: ConditionType): Runs =>
   CONDITIONS[condition].moment ? 'moment' : condition === 'any' ? 'follow' : 'state'
 
 // The ways to run a control, and the control types each fits (model.rs `run_fits`).
-export const CONTROL_RUNS: Record<ControlRunType, { label: string; description: string; runs: Runs; controlTypes: ControlTypes[] }> = {
+export const CONTROL_RUNS: Record<
+  ControlRunType,
+  { label: string; description: string; runs: Runs; controlTypes: ControlTypes[] }
+> = {
   set: {
     label: 'Set',
     description: 'Sets it, the way a viewer would.',
     runs: 'moment',
-    controlTypes: ['boolean', 'boolean-group', 'boolean-enum', 'enum', 'step-enum', 'slider', 'intiface-toy', 'intiface-pattern']
+    controlTypes: [
+      'boolean',
+      'boolean-group',
+      'boolean-enum',
+      'enum',
+      'step-enum',
+      'slider',
+      'intiface-toy',
+      'intiface-pattern'
+    ]
   },
-  toggle: { label: 'Toggle', description: 'Flips it on or off.', runs: 'moment', controlTypes: ['boolean', 'boolean-group'] },
-  pulse: { label: 'Pulse', description: 'The toy at this intensity for a moment, then off.', runs: 'moment', controlTypes: ['intiface-toy'] },
-  press: { label: 'Press', description: 'Presses it once.', runs: 'moment', controlTypes: ['preset', 'open-shock-shocker'] },
+  toggle: {
+    label: 'Toggle',
+    description: 'Flips it on or off.',
+    runs: 'moment',
+    controlTypes: ['boolean', 'boolean-group']
+  },
+  pulse: {
+    label: 'Pulse',
+    description: 'The toy at this intensity for a moment, then off.',
+    runs: 'moment',
+    controlTypes: ['intiface-toy']
+  },
+  press: {
+    label: 'Press',
+    description: 'Presses it once.',
+    runs: 'moment',
+    controlTypes: ['preset', 'open-shock-shocker']
+  },
   hold: {
     label: 'Hold',
     description: 'This while the condition is true, then back to what it was.',
     runs: 'state',
-    controlTypes: ['boolean', 'boolean-group', 'enum', 'step-enum', 'slider', 'intiface-toy', 'intiface-pattern']
+    controlTypes: [
+      'boolean',
+      'boolean-group',
+      'enum',
+      'step-enum',
+      'slider',
+      'intiface-toy',
+      'intiface-pattern'
+    ]
   },
-  follow: { label: 'Follow', description: 'Follows the value, mapped onto a range.', runs: 'follow', controlTypes: ['slider', 'intiface-toy'] }
+  follow: {
+    label: 'Follow',
+    description: 'Follows the value, mapped onto a range.',
+    runs: 'follow',
+    controlTypes: ['slider', 'intiface-toy']
+  }
 }
 
 export const controlRunsFor = (condition: ConditionType, controlType: string): ControlRunType[] =>
   (Object.keys(CONTROL_RUNS) as ControlRunType[]).filter(
-    (type) => CONTROL_RUNS[type].runs === runsFor(condition) && CONTROL_RUNS[type].controlTypes.includes(controlType as ControlTypes)
+    (type) =>
+      CONTROL_RUNS[type].runs === runsFor(condition) &&
+      CONTROL_RUNS[type].controlTypes.includes(controlType as ControlTypes)
   )
 
 export const stepRuns = (step: AutomationAction): Runs => {
   switch (step.kind) {
     case 'board-output':
-      return step.output.type === 'hold' ? 'state' : step.output.type === 'follow' ? 'follow' : 'moment'
+      return step.output.type === 'hold'
+        ? 'state'
+        : step.output.type === 'follow'
+          ? 'follow'
+          : 'moment'
     case 'avatar-parameter':
       return step.set.type === 'hold' ? 'state' : step.set.type === 'follow' ? 'follow' : 'moment'
     case 'control':
@@ -169,7 +271,11 @@ export const stepRuns = (step: AutomationAction): Runs => {
 
 // Whether a step can run on this condition: moments, states and follows each take their own.
 export const stepFits = (step: AutomationAction, condition: ConditionType): boolean => {
-  if (step.kind === 'avatar-parameter' && !PARAMETER_ACTIONS[step.set.type].valueTypes.includes(step.valueType)) return false
+  if (
+    step.kind === 'avatar-parameter' &&
+    !PARAMETER_ACTIONS[step.set.type].valueTypes.includes(step.valueType)
+  )
+    return false
   return stepRuns(step) === runsFor(condition)
 }
 
@@ -177,7 +283,10 @@ export const stepFits = (step: AutomationAction, condition: ConditionType): bool
 export const stepCanWait = (step: AutomationAction): boolean => stepRuns(step) !== 'follow'
 
 // The kinds of step that have something to do on this condition.
-export const STEP_KINDS: Record<AutomationStep['kind'], { label: string; description: string; icon: string; runs: Runs[] }> = {
+export const STEP_KINDS: Record<
+  AutomationStep['kind'],
+  { label: string; description: string; icon: string; runs: Runs[] }
+> = {
   'avatar-parameter': {
     label: 'Avatar parameter',
     description: "Set one of your avatar's own parameters.",
@@ -196,8 +305,18 @@ export const STEP_KINDS: Record<AutomationStep['kind'], { label: string; descrip
     icon: 'i-lucide-cpu',
     runs: ['moment', 'state', 'follow']
   },
-  profile: { label: 'Profile', description: 'Switch to another profile.', icon: 'i-lucide-shield', runs: ['moment', 'state'] },
-  chatbox: { label: 'Chatbox', description: 'Post a message to the VRChat chatbox.', icon: 'i-lucide-message-square', runs: ['moment'] },
+  profile: {
+    label: 'Profile',
+    description: 'Switch to another profile.',
+    icon: 'i-lucide-shield',
+    runs: ['moment', 'state']
+  },
+  chatbox: {
+    label: 'Chatbox',
+    description: 'Post a message to the VRChat chatbox.',
+    icon: 'i-lucide-message-square',
+    runs: ['moment']
+  },
   'stop-everything': {
     label: 'Stop everything',
     description: 'Same as the button in the top bar.',
@@ -207,7 +326,9 @@ export const STEP_KINDS: Record<AutomationStep['kind'], { label: string; descrip
 }
 
 export const stepKindsFor = (condition: ConditionType): AutomationStep['kind'][] =>
-  (Object.keys(STEP_KINDS) as AutomationStep['kind'][]).filter((kind) => STEP_KINDS[kind].runs.includes(runsFor(condition)))
+  (Object.keys(STEP_KINDS) as AutomationStep['kind'][]).filter((kind) =>
+    STEP_KINDS[kind].runs.includes(runsFor(condition))
+  )
 
 export const defaultCondition = (type: ConditionType): ParameterCondition => {
   switch (type) {
@@ -234,7 +355,10 @@ export const defaultOutput = (type: OutputActionType): OutputAction => {
 }
 
 // A value that fits the parameter's type: Bools are 0/1, Ints 0–255, Floats -1 to 1.
-export const defaultParameterAction = (type: ParameterActionType, valueType: ParameterValueType): ParameterAction => {
+export const defaultParameterAction = (
+  type: ParameterActionType,
+  valueType: ParameterValueType
+): ParameterAction => {
   switch (type) {
     case 'set':
     case 'hold':
@@ -263,7 +387,9 @@ export const newParameterStep = (condition: ConditionType): AutomationStep => ({
 })
 
 // A value that fits the control: on for toggles, the first option or pattern, half for sliders.
-export const defaultControlValue = (control: ControlType | undefined): boolean | number | string => {
+export const defaultControlValue = (
+  control: ControlType | undefined
+): boolean | number | string => {
   switch (control?.type) {
     case 'boolean':
     case 'boolean-group':
@@ -278,7 +404,10 @@ export const defaultControlValue = (control: ControlType | undefined): boolean |
   }
 }
 
-export const defaultControlRun = (type: ControlRunType, control: ControlType | undefined): ControlRun => {
+export const defaultControlRun = (
+  type: ControlRunType,
+  control: ControlType | undefined
+): ControlRun => {
   switch (type) {
     case 'set':
     case 'hold':
@@ -299,7 +428,14 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
     case 'avatar-parameter':
       return newParameterStep(condition)
     case 'control':
-      return { kind, groupId: '', controlId: '', controlType: '', run: { type: 'press' }, delayMs: 0 }
+      return {
+        kind,
+        groupId: '',
+        controlId: '',
+        controlType: '',
+        run: { type: 'press' },
+        delayMs: 0
+      }
     case 'profile':
       return { kind, profileId: null, whileHeld: runsFor(condition) === 'state', delayMs: 0 }
     case 'chatbox':
@@ -311,13 +447,20 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
 
 // The same kind of step, changed to fit a new condition. Steps that can't fit any more are
 // left as they are; the editor says what's wrong with them.
-export const fitStep = (step: AutomationStep, condition: ConditionType, control?: ControlType): AutomationStep => {
+export const fitStep = (
+  step: AutomationStep,
+  condition: ConditionType,
+  control?: ControlType
+): AutomationStep => {
   const delayMs = runsFor(condition) === 'follow' ? 0 : step.delayMs
   if (stepFits(step, condition)) return { ...step, delayMs }
 
   switch (step.kind) {
-    case 'board-output':
-      return { ...step, output: defaultOutput(actionsFor(condition)[0]!), delayMs }
+    case 'board-output': {
+      const output = defaultOutput(actionsFor(condition)[0]!)
+      // Follow can't post to the chatbox.
+      return { ...step, output, chatbox: output.type !== 'follow' && step.chatbox, delayMs }
+    }
     case 'avatar-parameter': {
       const types = parameterActionsFor(condition, step.valueType)
       // A follow needs a Float: anything else starts over.
@@ -329,13 +472,16 @@ export const fitStep = (step: AutomationStep, condition: ConditionType, control?
       return types.length ? { ...step, run: defaultControlRun(types[0]!, control), delayMs } : step
     }
     case 'profile':
-      return runsFor(condition) === 'follow' ? step : { ...step, whileHeld: runsFor(condition) === 'state', delayMs }
+      return runsFor(condition) === 'follow'
+        ? step
+        : { ...step, whileHeld: runsFor(condition) === 'state', delayMs }
     default:
       return step
   }
 }
 
-export const parameterName = (address: string): string => address.replace(/^\/avatar\/parameters\//, '')
+export const parameterName = (address: string): string =>
+  address.replace(/^\/avatar\/parameters\//, '')
 
 // What a parameter probably is, from the naming conventions of common avatar tools.
 const PHYSBONE_SUFFIXES: Record<string, string> = {
@@ -381,23 +527,34 @@ const formatSeconds = (ms: number): string => (ms % 1000 === 0 ? `${ms / 1000} s
 export type AppEventType = AppEvent['type']
 
 export const APP_EVENTS: Record<AppEventType, { label: string; description: string }> = {
-  'viewer-command': { label: 'A viewer uses a control', description: 'On the share page: a control you pick, any shock, or anything.' },
+  'viewer-command': {
+    label: 'A viewer uses a control',
+    description: 'On the share page: a control you pick, any shock, or anything.'
+  },
   'viewer-joined': { label: 'A viewer joins', description: 'Someone opens your share page.' },
-  'first-viewer': { label: 'First viewer joins', description: 'Your share page goes from nobody to someone.' },
-  'last-viewer-left': { label: 'Last viewer leaves', description: 'Nobody is on your share page any more.' },
+  'first-viewer': {
+    label: 'First viewer joins',
+    description: 'Your share page goes from nobody to someone.'
+  },
+  'last-viewer-left': {
+    label: 'Last viewer leaves',
+    description: 'Nobody is on your share page any more.'
+  },
   resumed: { label: 'Controls resume', description: 'You turn Stop everything off again.' }
 }
 
 const describeEvent = (event: AppEvent, context?: DescribeContext): string => {
   if (event.type !== 'viewer-command') return APP_EVENTS[event.type].label.toLowerCase()
-  if (event.controlType === 'open-shock-shocker' && !event.controlId) return 'a viewer sends a shock'
+  if (event.controlType === 'open-shock-shocker' && !event.controlId)
+    return 'a viewer sends a shock'
   if (!event.controlId) return 'a viewer uses a control'
   return `a viewer uses ${context?.controlName?.(event.controlId) ?? 'a control'}`
 }
 
 export const describeWhen = (when: AutomationTrigger, context?: DescribeContext): string => {
   if (when.kind === 'app-event') return describeEvent(when.event, context)
-  if (when.kind === 'avatar-changed') return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
+  if (when.kind === 'avatar-changed')
+    return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
   const value = 'value' in when.condition ? ` ${when.condition.value}` : ''
   const held = when.heldMs ? ` for ${formatSeconds(when.heldMs)}` : ''
@@ -478,7 +635,9 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
       what = `${context.controlName?.(step.controlId) ?? 'a control'}: ${describeControlRun(step.run)}`
       break
     case 'profile': {
-      const name = step.profileId ? (context.profileName?.(step.profileId) ?? 'a profile') : 'No profile'
+      const name = step.profileId
+        ? (context.profileName?.(step.profileId) ?? 'a profile')
+        : 'No profile'
       what = step.whileHeld ? `${name} while held` : `switch to ${name}`
       break
     }
@@ -500,18 +659,27 @@ export const describeGuard = (guard: AutomationGuard, context: DescribeContext):
   switch (guard.kind) {
     case 'parameter': {
       const value = 'value' in guard.condition ? ` ${guard.condition.value}` : ''
-      const verb = guard.condition.type === 'is-on' ? 'is on' : guard.condition.type === 'is' ? 'is' : 'is above'
+      const verb =
+        guard.condition.type === 'is-on'
+          ? 'is on'
+          : guard.condition.type === 'is'
+            ? 'is'
+            : 'is above'
       return `${parameterName(guard.parameter)} ${guard.not ? verb.replace(/^is/, "isn't") : verb}${value}`
     }
     case 'profile':
-      return guard.profileId ? `${context.profileName?.(guard.profileId) ?? 'a profile'} is active` : 'no profile is active'
+      return guard.profileId
+        ? `${context.profileName?.(guard.profileId) ?? 'a profile'} is active`
+        : 'no profile is active'
     default:
       return guard.online ? 'viewers are on' : 'nobody is watching'
   }
 }
 
 export const describe = (automation: Automation, context: DescribeContext): string => {
-  const onlyIf = automation.onlyIf.length ? `, only if ${automation.onlyIf.map((g) => describeGuard(g, context)).join(' and ')}` : ''
+  const onlyIf = automation.onlyIf.length
+    ? `, only if ${automation.onlyIf.map((g) => describeGuard(g, context)).join(' and ')}`
+    : ''
   return `When ${describeWhen(automation.when, context)}${onlyIf} → ${automation.then.map((step) => describeStep(step, context)).join(' · ')}`
 }
 

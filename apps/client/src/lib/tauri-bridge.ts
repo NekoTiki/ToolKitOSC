@@ -109,7 +109,11 @@ export type AvatarParameterTrigger = {
 }
 
 // You start wearing an avatar: this one, or any (null). Also when the app first sees it.
-export type AvatarChangedTrigger = { kind: 'avatar-changed'; avatarId: string | null; avatarName: string | null }
+export type AvatarChangedTrigger = {
+  kind: 'avatar-changed'
+  avatarId: string | null
+  avatarName: string | null
+}
 
 export type AppEvent =
   // A viewer uses a control: this one, any of this type (e.g. a shocker), or any.
@@ -127,7 +131,13 @@ export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger | 
 
 // Has to be true for an automation to start; checked when it starts, not while it runs.
 export type AutomationGuard =
-  | { kind: 'parameter'; parameter: string; valueType: ParameterValueType; condition: ParameterCondition; not: boolean }
+  | {
+      kind: 'parameter'
+      parameter: string
+      valueType: ParameterValueType
+      condition: ParameterCondition
+      not: boolean
+    }
   // profileId null: No profile.
   | { kind: 'profile'; profileId: string | null }
   | { kind: 'viewers'; online: boolean }
@@ -155,7 +165,14 @@ export type ParameterAction =
   // A Float follows the trigger, -1 to 1.
   | { type: 'follow'; min: number; max: number }
 
-export type BoardOutputAction = { kind: 'board-output'; boardId: string; pin: number; output: OutputAction }
+export type BoardOutputAction = {
+  kind: 'board-output'
+  boardId: string
+  pin: number
+  output: OutputAction
+  // Also says so in the chatbox (model.rs chatbox_text). Left out when off.
+  chatbox?: boolean
+}
 export type AvatarParameterAction = {
   kind: 'avatar-parameter'
   // Full OSC address, e.g. /avatar/parameters/Ears.
@@ -175,7 +192,13 @@ export type ControlRun =
   | { type: 'hold'; value: boolean | number | string }
   | { type: 'follow'; min: number; max: number }
 
-export type ControlAction = { kind: 'control'; groupId: string; controlId: string; controlType: string; run: ControlRun }
+export type ControlAction = {
+  kind: 'control'
+  groupId: string
+  controlId: string
+  controlType: string
+  run: ControlRun
+}
 // profileId null: No profile.
 export type ProfileAction = { kind: 'profile'; profileId: string | null; whileHeld: boolean }
 export type ChatboxStepAction = { kind: 'chatbox'; text: string }
@@ -192,8 +215,7 @@ export type AutomationAction =
 // The backend asking the app to carry out a step (see useAutomationRunner.ts). `start` and `stop`
 // bracket a hold; `follow` carries the trigger's value, 0-1.
 export type AutomationRun = { automationId: string; step: number; action: AutomationAction } & (
-  | { phase: 'run' | 'start' | 'stop' }
-  | { phase: 'follow'; value: number }
+  { phase: 'run' | 'start' | 'stop' } | { phase: 'follow'; value: number }
 )
 
 // One thing an automation does, starting `delayMs` after the trigger.
@@ -227,10 +249,12 @@ export const api = {
   },
   intifaceCentralAvailable: (): Promise<boolean> => invoke('intiface_central_available'),
   startIntifaceCentral: (): Promise<void> => invoke('start_intiface_central'),
-  intifacePortOpen: (host: string, port: number): Promise<boolean> => invoke('intiface_port_open', { host, port }),
+  intifacePortOpen: (host: string, port: number): Promise<boolean> =>
+    invoke('intiface_port_open', { host, port }),
   intifaceCentralRunning: (): Promise<boolean> => invoke('intiface_central_running'),
   steamVrAvailable: (): Promise<IntegrationAvailability> => invoke('steamvr_available'),
-  steamVrSetAutoLaunch: (enable: boolean): Promise<void> => invoke('steamvr_set_auto_launch', { enable }),
+  steamVrSetAutoLaunch: (enable: boolean): Promise<void> =>
+    invoke('steamvr_set_auto_launch', { enable }),
   steamVrGetAutoLaunch: (): Promise<boolean> => invoke('steamvr_get_auto_launch'),
   vrcxAvailable: (): Promise<IntegrationAvailability> => invoke('vrcx_available'),
   vrcxSetAutoLaunch: (enable: boolean): Promise<void> => invoke('vrcx_set_auto_launch', { enable }),
@@ -268,23 +292,28 @@ export const api = {
   boardsList: (): Promise<BoardsSnapshot> => invoke('boards_list'),
   // Both resolve once someone pressed the board's BOOT button, and reject with a message to show.
   boardAdd: (id: string): Promise<Board> => invoke('board_add', { id }),
-  boardAddByAddress: (address: string): Promise<Board> => invoke('board_add_by_address', { address }),
+  boardAddByAddress: (address: string): Promise<Board> =>
+    invoke('board_add_by_address', { address }),
   boardPairCancel: (): Promise<void> => invoke('board_pair_cancel'),
   boardRemove: (id: string): Promise<void> => invoke('board_remove', { id }),
   boardSaveOutputs: (id: string, outputs: BoardOutputConfig[]): Promise<void> =>
     invoke('board_save_outputs', { id, outputs }),
-  boardTestOutput: (id: string, pin: number): Promise<void> => invoke('board_test_output', { id, pin }),
+  boardTestOutput: (id: string, pin: number): Promise<void> =>
+    invoke('board_test_output', { id, pin }),
   boardsStopAll: (): Promise<void> => invoke('boards_stop_all'),
   automationsList: (): Promise<Automation[]> => invoke('automations_list'),
   // Rejects with a message to show.
-  automationSave: (automation: Automation): Promise<void> => invoke('automation_save', { automation }),
+  automationSave: (automation: Automation): Promise<void> =>
+    invoke('automation_save', { automation }),
   automationDelete: (id: string): Promise<void> => invoke('automation_delete', { id }),
   automationSetEnabled: (id: string, enabled: boolean): Promise<void> =>
     invoke('automation_set_enabled', { id, enabled }),
   automationTest: (id: string): Promise<void> => invoke('automation_test', { id }),
-  automationsSetPaused: (paused: boolean): Promise<void> => invoke('automations_set_paused', { paused }),
+  automationsSetPaused: (paused: boolean): Promise<void> =>
+    invoke('automations_set_paused', { paused }),
   automationEvent: (event: AppEvent): Promise<void> => invoke('automation_event', { event }),
-  automationsSetContext: (context: AutomationContext): Promise<void> => invoke('automations_set_context', { context }),
+  automationsSetContext: (context: AutomationContext): Promise<void> =>
+    invoke('automations_set_context', { context }),
   onAutomationsChanged: (callback: (automations: Automation[]) => void): void => {
     void listen<Automation[]>('automations-changed', (event) => callback(event.payload))
   },
@@ -297,6 +326,10 @@ export const api = {
   },
   onAutomationRun: (callback: (run: AutomationRun) => void): void => {
     void listen<AutomationRun>('automation-run', (event) => callback(event.payload))
+  },
+  // An output step with "Send to chatbox" switched its output on or off; the text to post.
+  onAutomationChatbox: (callback: (text: string) => void): void => {
+    void listen<string>('automation-chatbox', (event) => callback(event.payload))
   },
   onBoardError: (callback: (error: BoardError) => void): void => {
     void listen<BoardError>('board-error', (event) => callback(event.payload))

@@ -203,7 +203,14 @@ fn one_or_many<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Step>, 
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Action {
     #[serde(rename_all = "camelCase")]
-    BoardOutput { board_id: String, pin: u8, output: OutputAction },
+    BoardOutput {
+        board_id: String,
+        pin: u8,
+        output: OutputAction,
+        /// Also says so in the chatbox (see `chatbox_text`).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        chatbox: bool
+    },
     /// Sets one of the worn avatar's own parameters.
     #[serde(rename_all = "camelCase")]
     AvatarParameter {
@@ -388,6 +395,42 @@ impl OutputAction {
     }
 }
 
+/// What a `chatbox` output step says.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BoardNote {
+    Pulse { on_ms: u32, count: u32 },
+    On,
+    Off
+}
+
+/// E.g. `0.5s`, `2s`, `1m 30s`.
+pub fn format_duration(ms: u32) -> String {
+    if ms >= 60_000 {
+        let seconds = (ms + 500) / 1000;
+        return match seconds % 60 {
+            0 => format!("{}m", seconds / 60),
+            rest => format!("{}m {rest}s", seconds / 60)
+        };
+    }
+    let tenths = (ms + 50) / 100;
+    if tenths % 10 == 0 {
+        format!("{}s", tenths / 10)
+    } else {
+        format!("{}.{}s", tenths / 10, tenths % 10)
+    }
+}
+
+/// The chatbox message for an output, named by its label in Settings › ESP32 boards.
+pub fn chatbox_text(label: &str, note: BoardNote) -> String {
+    let text = match note {
+        BoardNote::Pulse { on_ms, count: 0 | 1 } => format!("{label} activated for {}", format_duration(on_ms)),
+        BoardNote::Pulse { on_ms, count } => format!("{label} activated for {}, {count} times", format_duration(on_ms)),
+        BoardNote::On => format!("{label} activated"),
+        BoardNote::Off => format!("{label} turned off")
+    };
+    text.chars().take(CHATBOX_MAX).collect()
+}
+
 /// Checks what can be checked without knowing the boards. Returns a message to show.
 pub fn validate(automation: &Automation) -> Result<(), String> {
     if automation.name.trim().is_empty() {
@@ -510,7 +553,10 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
     }
 
     match &step.action {
-        Action::BoardOutput { output, .. } => match output {
+        Action::BoardOutput { output, chatbox, .. } => match output {
+            OutputAction::Follow { .. } if *chatbox => {
+                return Err("Follow can't post to the chatbox: it changes all the time.".into());
+            }
             OutputAction::Pulse { on_ms, count, .. } => {
                 if *on_ms == 0 || *count == 0 || *count > 100 {
                     return Err("A pulse needs a length, and 1 to 100 repeats.".into());
@@ -604,9 +650,10 @@ mod tests {
                 any_avatar: false,
                 held_ms: 0
             },
-            then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output }, delay_ms: 0 }],
+            then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output, chatbox: false }, delay_ms: 0 }],
             cooldown_ms: 0,
-            retrigger: Retrigger::Restart,            only_if: Vec::new()
+            retrigger: Retrigger::Restart,
+            only_if: Vec::new()
         }
     }
 
@@ -693,7 +740,7 @@ mod tests {
         let automation: Automation = serde_json::from_value(json).unwrap();
         assert_eq!(
             automation.then,
-            vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output: OutputAction::Toggle }, delay_ms: 0 }]
+            vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output: OutputAction::Toggle, chatbox: false }, delay_ms: 0 }]
         );
     }
 
@@ -776,7 +823,7 @@ mod tests {
         let mut changed = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
         changed.when = Trigger::AvatarChanged { avatar_id: None, avatar_name: None };
         assert!(validate(&changed).is_ok());
-        changed.then[0] = Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output: OutputAction::Hold }, delay_ms: 0 };
+        changed.then[0] = Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output: OutputAction::Hold, chatbox: false }, delay_ms: 0 };
         assert!(validate(&changed).is_err(), "an avatar change is a moment");
     }
 
@@ -790,5 +837,38 @@ mod tests {
         assert!(validate(&a).is_err());
         a.then.clear();
         assert!(validate(&a).is_err());
+    }
+
+    #[test]
+    fn output_chatbox() {
+        let mut a = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        let json = serde_json::to_value(&a).unwrap();
+        assert!(json["then"][0].get("chatbox").is_none(), "left out when off");
+        if let Action::BoardOutput { chatbox, .. } = &mut a.then[0].action {
+            *chatbox = true;
+        }
+        assert!(validate(&a).is_ok());
+        assert_eq!(serde_json::to_value(&a).unwrap()["then"][0]["chatbox"], true);
+
+        let mut follow = sample(Condition::Any, ValueType::Float, OutputAction::Follow { min: 0.0, max: 1.0 });
+        assert!(validate(&follow).is_ok());
+        if let Action::BoardOutput { chatbox, .. } = &mut follow.then[0].action {
+            *chatbox = true;
+        }
+        assert!(validate(&follow).is_err(), "follow can't post");
+    }
+
+    #[test]
+    fn output_chatbox_text() {
+        assert_eq!(format_duration(500), "0.5s");
+        assert_eq!(format_duration(2000), "2s");
+        assert_eq!(format_duration(1500), "1.5s");
+        assert_eq!(format_duration(60_000), "1m");
+        assert_eq!(format_duration(90_000), "1m 30s");
+        assert_eq!(chatbox_text("Buzzer", BoardNote::Pulse { on_ms: 2000, count: 1 }), "Buzzer activated for 2s");
+        assert_eq!(chatbox_text("Buzzer", BoardNote::Pulse { on_ms: 500, count: 3 }), "Buzzer activated for 0.5s, 3 times");
+        assert_eq!(chatbox_text("Lamp", BoardNote::On), "Lamp activated");
+        assert_eq!(chatbox_text("Lamp", BoardNote::Off), "Lamp turned off");
+        assert_eq!(chatbox_text(&"x".repeat(200), BoardNote::On).chars().count(), CHATBOX_MAX);
     }
 }
