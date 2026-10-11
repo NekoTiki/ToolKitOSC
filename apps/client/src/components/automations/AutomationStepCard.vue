@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
@@ -356,11 +357,10 @@ const toInt = (value: number | string): number => Math.min(255, Math.max(0, Math
     </div>
 
     <div class="grid gap-1.5">
-      <SegmentedControl
+      <OptionGrid
         :model-value="step.kind"
         :items="kindItems"
         aria-label="What this step does"
-        class="w-fit max-w-full flex-wrap"
         @update:model-value="setKind"
       />
       <p class="text-[13px] text-muted">

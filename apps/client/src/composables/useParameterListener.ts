@@ -4,7 +4,7 @@ import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { Ref } from 'vue'
 import { computed, ref } from 'vue'
 
-// "Listen" in the automation editor: while it's on, collects the avatar parameters that change,
+// "Listen" (ParameterListen.vue): while it's on, collects the avatar parameters that change,
 // so you can touch a contact or grab a PhysBone and see which parameters it sets - often several
 // at once. VRChat's avatar files don't say which parameters are contacts, so this is the reliable
 // way to find them.
@@ -12,6 +12,9 @@ import { computed, ref } from 'vue'
 // Noisy parameters are left out, the same ones the pickers hide (see addressFilter.ts), and so
 // are VRChat's own built-ins, which change all the time as you move. Everything else that
 // changes is listed, parameters your controls drive included: those name the control.
+//
+// One listens at a time: each caller gets its own Listen, and starting one stops the others, whose
+// lists then empty.
 
 export interface HeardParameter {
   address: string
@@ -59,6 +62,8 @@ const VRCHAT_BUILT_INS = new Set([
 ])
 
 const listening = ref(false)
+// The caller whose Listen this is.
+const owner = ref<symbol | null>(null)
 const endsAt = ref(0)
 const heard = ref<Map<string, HeardParameter>>(new Map())
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -84,16 +89,16 @@ api.onOscMessage((msg) => {
   heard.value = next
 })
 
-const stop = (): void => {
+const stopAll = (): void => {
   clearTimeout(timer)
   listening.value = false
 }
 
 export function useParameterListener(): {
-  listening: Ref<boolean>
+  listening: Readonly<Ref<boolean>>
   endsAt: Ref<number>
   // Newest first. Kept after listening stops, until the next Listen.
-  heard: Ref<HeardParameter[]>
+  heard: Readonly<Ref<HeardParameter[]>>
   start: () => void
   stop: () => void
 } {
@@ -121,18 +126,26 @@ export function useParameterListener(): {
     return names
   }
 
+  const me = Symbol('listener')
+  const mine = computed(() => owner.value === me)
+
   const start = (): void => {
+    owner.value = me
     heard.value = new Map()
     listening.value = true
     endsAt.value = Date.now() + LISTEN_MS
     clearTimeout(timer)
-    timer = setTimeout(stop, LISTEN_MS)
+    timer = setTimeout(stopAll, LISTEN_MS)
+  }
+
+  const stop = (): void => {
+    if (mine.value) stopAll()
   }
 
   return {
-    listening,
+    listening: computed(() => mine.value && listening.value),
     endsAt,
-    heard: computed(() => [...heard.value.values()].sort((a, b) => b.at - a.at)),
+    heard: computed(() => (mine.value ? [...heard.value.values()].sort((a, b) => b.at - a.at) : [])),
     start,
     stop
   }

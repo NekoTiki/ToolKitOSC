@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
@@ -40,6 +41,9 @@ const parameterItems = computed(() =>
     .map((p) => ({ label: `${p.name} · ${p.output!.type}`, value: p.output!.address, valueType: p.output!.type as ParameterValueType }))
     .sort((a, b) => a.label.localeCompare(b.label))
 )
+
+// Listen can hear parameters the picker hides; only those it lists can be checked.
+const canPick = (address: string): boolean => parameterItems.value.some((p) => p.value === address)
 
 const parameter = computed({
   get: () => param.value?.parameter || undefined,
@@ -148,6 +152,11 @@ const viewers = computed({
         placeholder="Pick a parameter"
         class="w-full"
         virtualize
+      />
+      <ParameterListen
+        v-if="!otherAvatar"
+        :can-pick="canPick"
+        @pick="parameter = $event"
       />
       <div
         v-if="param.parameter"

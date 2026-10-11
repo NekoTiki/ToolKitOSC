@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import AutomationGuardRow from '@renderer/components/automations/AutomationGuardRow.vue'
 import AutomationStepCard from '@renderer/components/automations/AutomationStepCard.vue'
+import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
+import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAutomations } from '@renderer/composables/useAutomations'
@@ -9,7 +11,6 @@ import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
-import { useParameterListener } from '@renderer/composables/useParameterListener'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
 import type { Automation, AutomationStep, AutomationTrigger, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
@@ -34,8 +35,7 @@ import {
   stepFits,
   stepKindsFor,
   triggerCondition} from '@renderer/utils/automations'
-import { useNow } from '@vueuse/core'
-import { computed, onBeforeUnmount, ref, toRaw, watch } from 'vue'
+import { computed, ref, toRaw, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 // Create or edit one automation: when (an avatar parameter changes), do one or more things (on a
@@ -122,7 +122,7 @@ const eventControlItems = computed(() => [
 
 const addGuard = (): void => {
   if (!draft.value || draft.value.onlyIf.length >= MAX_GUARDS) return
-  draft.value.onlyIf.push({ kind: 'viewers', online: true })
+  draft.value.onlyIf.push({ kind: 'parameter', parameter: '', valueType: 'Bool', condition: { type: 'is-on' }, not: false })
 }
 
 // An automation for another avatar keeps its parameter, controls and profiles: this avatar's
@@ -253,18 +253,8 @@ const conditionValue = computed({
 
 // ---- Listen and live value
 
-const { listening, endsAt, heard, start: startListening, stop: stopListening } = useParameterListener()
-const now = useNow({ interval: 500 })
-const secondsLeft = computed(() => Math.max(0, Math.ceil((endsAt.value - now.value.getTime()) / 1000)))
-onBeforeUnmount(stopListening)
-
 // Anything the avatar reports can be a trigger.
 const canTrigger = (address: string): boolean => !!avatarDetails.value?.parameters.some((p) => p.output?.address === address)
-
-const pickHeard = (address: string): void => {
-  parameter.value = address
-  stopListening()
-}
 
 const { args } = useOscMessages()
 
@@ -474,11 +464,10 @@ onBeforeRouteLeave(async () => {
           :description="TRIGGER_KINDS[draft.when.kind].description"
           class="max-lg:order-2"
         >
-          <SegmentedControl
+          <OptionGrid
             v-model="triggerKind"
             :items="triggerKindItems"
             aria-label="When"
-            class="w-fit max-w-full flex-wrap"
           />
 
           <template v-if="eventWhen">
@@ -486,11 +475,11 @@ onBeforeRouteLeave(async () => {
               label="Event"
               :description="APP_EVENTS[eventType].description"
             >
-              <SegmentedControl
+              <OptionGrid
                 v-model="eventType"
+                min-width="12rem"
                 :items="eventItems"
                 aria-label="Event"
-                class="w-fit max-w-full flex-wrap"
               />
             </UFormField>
             <UFormField
@@ -512,11 +501,10 @@ onBeforeRouteLeave(async () => {
             label="Avatar"
             description="Also runs when the app starts while you already wear it."
           >
-            <SegmentedControl
+            <OptionGrid
               v-model="changedTarget"
               :items="changedItems"
               aria-label="Avatar"
-              class="w-fit max-w-full flex-wrap"
             />
           </UFormField>
 
@@ -553,58 +541,11 @@ onBeforeRouteLeave(async () => {
               </div>
             </UFormField>
 
-            <div
+            <ParameterListen
               v-if="!otherAvatar"
-              class="grid gap-2"
-            >
-              <div class="flex flex-wrap items-center gap-2.5">
-                <UButton
-                  :icon="listening ? 'i-lucide-square' : 'i-lucide-ear'"
-                  color="neutral"
-                  variant="subtle"
-                  @click="listening ? stopListening() : startListening()"
-                >
-                  {{ listening ? `Stop listening (${secondsLeft} s)` : 'Listen' }}
-                </UButton>
-                <span class="min-w-0 flex-1 text-sm text-muted">
-                  {{
-                    listening
-                      ? 'Touch the contact or move the PhysBone in VRChat now.'
-                      : 'Not sure which parameter a contact uses? Press Listen, then touch it in VRChat.'
-                  }}
-                </span>
-              </div>
-              <ul
-                v-if="heard.length"
-                class="grid max-h-96 gap-1.5 overflow-y-auto"
-              >
-                <li
-                  v-for="item in heard"
-                  :key="item.address"
-                  class="flex items-center gap-2.5 rounded-field border border-default bg-(--aurora-glass) px-3 py-2"
-                >
-                  <span class="min-w-0 flex-1">
-                    <b class="block truncate text-sm font-medium text-highlighted">{{ parameterName(item.address) }}</b>
-                    <small class="text-xs text-muted">
-                      {{ parameterFamily(item.address) ?? 'Changed' }} · {{ item.count }}× · now {{ item.value }}{{ item.control ? ` · your control ${item.control}` : '' }}
-                    </small>
-                  </span>
-                  <UButton
-                    size="sm"
-                    :disabled="!canTrigger(item.address)"
-                    @click="pickHeard(item.address)"
-                  >
-                    Use
-                  </UButton>
-                </li>
-              </ul>
-              <p
-                v-else-if="listening"
-                class="text-sm text-muted"
-              >
-                Nothing has changed yet.
-              </p>
-            </div>
+              :can-pick="canTrigger"
+              @pick="parameter = $event"
+            />
 
             <USwitch
               v-if="paramWhen.parameter"
