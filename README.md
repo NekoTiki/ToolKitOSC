@@ -32,7 +32,8 @@ invite can drive your avatar, toys and shockers in real time.
 - Every host gets a **share page** that viewers open in the browser — no install needed.
 - Sign-in with Discord, or join anonymously with a random _Adjective Animal_ name.
 - See who's connected and what they did on the **Viewers** and **Activity** pages, and ban anyone who misbehaves.
-- **Lock profiles** decide which controls viewers are allowed to touch.
+- Viewers see who else is on the page and the last action taken, or you can keep them private.
+- **Profiles** decide which controls viewers can touch, and can limit options and ranges.
 - **Stop everything** from the top bar, a global hotkey or the `TKOSC/Panic` avatar parameter: every toy and
   shocker stops, and viewers see a paused page until you resume.
 - Optionally post viewer actions to your **VRChat chatbox**, so the people in your instance see who's controlling you.
@@ -42,6 +43,8 @@ invite can drive your avatar, toys and shockers in real time.
 - **VRChat OSC** — automatic avatar detection, live parameter values and a parameter change log.
 - **Intiface / Buttplug** — control connected toys and play vibration patterns.
 - **OpenShock** — shocker controls, including the gamble slot-machine reels.
+- **ESP32 boards** — pair boards running the [ToolKitOSC ESP32 firmware](https://github.com/NekoTiki/ToolKitOSC-ESP32)
+  and drive their outputs with **automations** (_when Boop turns on, pulse the fan_).
 - **SteamVR & VRCX** — optionally launch the toolkit alongside your VR session.
 
 ### 🤖 AI suggestions
@@ -71,7 +74,8 @@ This is an npm workspaces monorepo:
  VRChat ◄──OSC──► Desktop client ◄──WebSocket──► Server ◄──WebSocket──► Viewers (browser)
                      │
                      ├── Intiface Central (toys)
-                     └── OpenShock (shockers)
+                     ├── OpenShock (shockers)
+                     └── ESP32 boards (outputs)
 ```
 
 ---
