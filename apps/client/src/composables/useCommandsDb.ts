@@ -36,28 +36,32 @@ const LOG_DEBOUNCE_MAX_WAIT = 2000
 const debouncedWriters = new Map<string, _.DebouncedFunc<(command: NewCommand) => void>>()
 
 export function useCommandsDb(): {
-  add: (command: NewCommand) => void
+  // Resolves to the new row's id, or undefined when the write was debounced or failed.
+  add: (command: NewCommand) => Promise<number | undefined>
+  update: (id: number, changes: Partial<Pick<Command, 'endedAt'>>) => void
 } {
-  const write = (command: NewCommand): void => {
+  const write = (command: NewCommand): Promise<number | undefined> =>
     // Fire-and-forget, but don't let a failed write (e.g. a value Dexie's structured-clone can't
     // store) vanish silently - it used to just drop the log entry with no trace.
-    db.commands
-      .add({ ...command, createdAt: Date.now() })
-      .catch((error) => console.error('Failed to write command log:', error))
+    db.commands.add({ ...command, createdAt: Date.now() }).catch((error) => {
+      console.error('Failed to write command log:', error)
+
+      return undefined
+    })
+
+  const update = (id: number, changes: Partial<Pick<Command, 'endedAt'>>): void => {
+    db.commands.update(id, changes).catch((error) => console.error('Failed to update command log:', error))
   }
 
-  const add = (command: NewCommand): void => {
-    if (!DEBOUNCED_LOG_TYPES.has(command.type)) {
-      write(command)
-      return
-    }
+  const add = async (command: NewCommand): Promise<number | undefined> => {
+    if (!DEBOUNCED_LOG_TYPES.has(command.type)) return write(command)
 
     const key = `${command.peerId}:${command.controlId}`
 
     if (!debouncedWriters.has(key)) {
       debouncedWriters.set(
         key,
-        _.debounce(write, LOG_DEBOUNCE_WAIT, {
+        _.debounce((next: NewCommand) => void write(next), LOG_DEBOUNCE_WAIT, {
           leading: false,
           trailing: true,
           maxWait: LOG_DEBOUNCE_MAX_WAIT
@@ -66,7 +70,9 @@ export function useCommandsDb(): {
     }
 
     debouncedWriters.get(key)!(command)
+
+    return undefined
   }
 
-  return { add }
+  return { add, update }
 }

@@ -152,7 +152,7 @@ export function useWebsocketHost(): {
 
   const { onlineClients, upsertViewers } = useClientsDb()
   const { isBanned } = useBannedClientsDb()
-  const { add: addCommandToDb } = useCommandsDb()
+  const { add: addCommandToDb, update: updateCommandInDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
   const { lastUpdate: intifaceLastUpdate, controlValue: intifaceValues } = useIntifaceControl()
   const { lastUpdate: intifacePatternLastUpdate, controlValue: intifacePatternValues } = useIntifacePatternControl()
@@ -311,8 +311,19 @@ export function useWebsocketHost(): {
               // For an open-shock-shocker command, the intensity/duration/shockers actually applied
               // are randomized inside handleCommand and weren't known yet when this message arrived
               // - run it first and log its result instead of the (always absent) message value.
+              // A viewer's own pattern is logged with its samples, and its row gets the time it stopped.
+              const samples = command?.type === 'intiface-pattern' && command.value === VIEWER_PATTERN_ID ? command.samples : undefined
+              // Filled in once the row is written, which is after the pattern starts.
+              const logged: { id?: Promise<number | undefined> } = {}
+              const onPatternEnd = (): void => {
+                const endedAt = Date.now()
+
+                void logged.id?.then((id) => id !== undefined && updateCommandInDb(id, { endedAt }))
+              }
               const openShockResult =
-                control && command ? handleCommand(control, command, { viewerName: showViewers.value ? viewer.displayName : undefined }) : undefined
+                control && command
+                  ? handleCommand(control, command, { viewerName: showViewers.value ? viewer.displayName : undefined, onPatternEnd: samples ? onPatternEnd : undefined })
+                  : undefined
               const sent = command ?? data.message
               const accepted = {
                 groupId: data.message.groupId,
@@ -322,7 +333,7 @@ export function useWebsocketHost(): {
                 value: openShockResult ?? ('value' in sent ? sent.value : undefined)
               }
 
-              addCommandToDb({ ...accepted, discordId: viewer.discordId ?? undefined, peerId: client.peerId, ip })
+              logged.id = addCommandToDb({ ...accepted, samples, discordId: viewer.discordId ?? undefined, peerId: client.peerId, ip })
               // Shown to every viewer as the share page's last action (see the server's host.ts).
               sendMessage('command-accepted', { ...accepted, peerId: client.peerId })
               // And to the instance, in VRChat's chatbox, if the host turned it on. Names follow
