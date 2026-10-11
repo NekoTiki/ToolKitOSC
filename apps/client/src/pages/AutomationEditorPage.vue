@@ -238,6 +238,9 @@ const now = useNow({ interval: 500 })
 const secondsLeft = computed(() => Math.max(0, Math.ceil((endsAt.value - now.value.getTime()) / 1000)))
 onBeforeUnmount(stopListening)
 
+// Anything the avatar reports can be a trigger.
+const canTrigger = (address: string): boolean => !!avatarDetails.value?.parameters.some((p) => p.output?.address === address)
+
 const pickHeard = (address: string): void => {
   parameter.value = address
   stopListening()
@@ -569,22 +572,22 @@ onBeforeRouteLeave(async () => {
             </div>
             <ul
               v-if="heard.length"
-              class="grid gap-1.5"
+              class="grid max-h-96 gap-1.5 overflow-y-auto"
             >
               <li
-                v-for="item in heard.slice(0, 8)"
+                v-for="item in heard"
                 :key="item.address"
                 class="flex items-center gap-2.5 rounded-field border border-default bg-(--aurora-glass) px-3 py-2"
               >
                 <span class="min-w-0 flex-1">
                   <b class="block truncate text-sm font-medium text-highlighted">{{ parameterName(item.address) }}</b>
                   <small class="text-xs text-muted">
-                    {{ parameterFamily(item.address) ?? 'Changed' }} · {{ item.count }}× · now {{ item.value }}
+                    {{ parameterFamily(item.address) ?? 'Changed' }} · {{ item.count }}× · now {{ item.value }}{{ item.control ? ` · your control ${item.control}` : '' }}
                   </small>
                 </span>
                 <UButton
                   size="sm"
-                  :disabled="!parameterItems.some((p) => p.value === item.address)"
+                  :disabled="!canTrigger(item.address)"
                   @click="pickHeard(item.address)"
                 >
                   Use
