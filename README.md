@@ -38,6 +38,18 @@ invite can drive your avatar, toys and shockers in real time.
   shocker stops, and viewers see a paused page until you resume.
 - Optionally post viewer actions to your **VRChat chatbox**, so the people in your instance see who's controlling you.
 
+### ⚡ Automations
+
+- **When something happens, do something** — the app reacts to you, not only to viewers.
+- **Triggers:** an avatar parameter (a contact, a PhysBone, a gesture), optionally only once it's
+  held for a while or on any avatar with that name; putting on an avatar; or the share page
+  (a viewer uses a control or sends a shock, viewers join or leave, controls resume).
+- **Steps:** run a control or a toy, switch profile, post to the chatbox, set another avatar
+  parameter, drive an ESP32 output or stop everything. Up to 8 per automation, each after its
+  own delay.
+- **Only if** another parameter is on, a profile is active, or viewers are watching.
+- **Listen** finds the parameter a contact uses: press it, then touch the contact in VRChat.
+
 ### 🔌 Integrations
 
 - **VRChat OSC** — automatic avatar detection, live parameter values and a parameter change log.

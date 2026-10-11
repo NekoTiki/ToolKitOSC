@@ -5,11 +5,22 @@ import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import type { Automation } from '@renderer/lib/tauri-bridge'
 import { describe } from '@renderer/utils/automations'
+import { timeAgo } from '@renderer/utils/time'
+import { useNow } from '@vueuse/core'
 import { computed } from 'vue'
 
 // Every automation: when something happens, do something. Avatar-parameter automations only run
 // while their avatar is worn, so the current avatar's come first.
-const { automations, running, setEnabled, describeContext } = useAutomations()
+const { automations, running, runs, setEnabled, describeContext } = useAutomations()
+// Re-renders the "x min ago" now and then.
+const now = useNow({ interval: 30_000 })
+
+const lastRan = (id: string): string => {
+  const run = runs.value[id]
+  if (!run) return "Hasn't run yet"
+  return `Ran ${run.count === 1 ? 'once' : `${run.count} times`} · last ${timeAgo(run.at, now.value)}`
+}
+
 const { avatarDetails } = useAvatarDetails()
 
 // Whose an automation is, or null when it runs on any avatar.
@@ -149,6 +160,7 @@ const groups = computed(() => [
                   >Running</span>
                 </span>
                 <small class="truncate text-xs text-muted">{{ describe(automation, describeContext) }}</small>
+                <small class="text-xs text-dimmed">{{ lastRan(automation.id) }}</small>
               </div>
               <USwitch
                 :model-value="automation.enabled"

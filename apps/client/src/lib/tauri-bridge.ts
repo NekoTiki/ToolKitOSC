@@ -291,6 +291,10 @@ export const api = {
   onAutomationActivity: (callback: (activity: AutomationActivity) => void): void => {
     void listen<AutomationActivity>('automation-activity', (event) => callback(event.payload))
   },
+  // An automation started, with its id.
+  onAutomationRan: (callback: (id: string) => void): void => {
+    void listen<string>('automation-ran', (event) => callback(event.payload))
+  },
   onAutomationRun: (callback: (run: AutomationRun) => void): void => {
     void listen<AutomationRun>('automation-run', (event) => callback(event.payload))
   },

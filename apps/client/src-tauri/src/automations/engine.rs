@@ -113,7 +113,9 @@ pub enum Effect {
     App(AppRun),
     /// Sets one of the worn avatar's parameters.
     Parameter { address: String, value_type: ValueType, value: f64 },
-    Activity(Activity)
+    Activity(Activity),
+    /// An automation started (a moment fired, or a state began), for "Last ran".
+    Ran(String)
 }
 
 #[derive(Default)]
@@ -179,7 +181,10 @@ impl State {
                 Edge::Enter if *held_ms > 0 => {
                     self.pending.push(Pending { due: after(now, *held_ms), automation_id: automation.id.clone(), step: None });
                 }
-                Edge::Enter => self.start(&automation, Runs::State, now, env, &mut effects),
+                Edge::Enter => {
+                    effects.push(Effect::Ran(automation.id.clone()));
+                    self.start(&automation, Runs::State, now, env, &mut effects);
+                }
                 Edge::Exit => {
                     self.pending.retain(|p| p.automation_id != automation.id);
                     self.unclaim(&automation.id, None, now, &mut effects);
@@ -240,6 +245,7 @@ impl State {
             .unwrap_or(0);
         let runtime = self.runtime.entry(automation.id.clone()).or_default();
         runtime.last_run = Some(now);
+        effects.push(Effect::Ran(automation.id.clone()));
         runtime.busy_until = (busy > 0).then(|| after(now, busy));
 
         self.start(automation, Runs::Moment, now, env, effects);
@@ -482,7 +488,10 @@ impl State {
             };
             match pending.step {
                 Some(step) => self.run_step(&automation, step, now, env, &mut effects),
-                None if self.guards_hold(&automation, env) => self.start(&automation, Runs::State, now, env, &mut effects),
+                None if self.guards_hold(&automation, env) => {
+                    effects.push(Effect::Ran(automation.id.clone()));
+                    self.start(&automation, Runs::State, now, env, &mut effects);
+                }
                 None => {}
             }
         }
@@ -1102,6 +1111,25 @@ mod tests {
         assert!(change(&mut state, 0.0, 1.0).is_empty());
         state.context.profile_id = Some("spicy".into());
         assert_eq!(change(&mut state, 0.0, 1.0).len(), 1);
+    }
+
+    fn ran(effects: &[Effect]) -> usize {
+        effects.iter().filter(|e| matches!(e, Effect::Ran(_))).count()
+    }
+
+    #[test]
+    fn reports_each_run_once() {
+        let mut state = State::default();
+        state.automations.push(automation("moment", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle));
+        let mut hold = automation("hold", Condition::IsOn, ValueType::Bool, OutputAction::Hold);
+        if let Trigger::AvatarParameter { parameter, .. } = &mut hold.when {
+            *parameter = "/avatar/parameters/Q".into();
+        }
+        state.automations.push(hold);
+
+        assert_eq!(ran(&change_effects(&mut state, 0.0, 1.0)), 1);
+        assert_eq!(ran(&state.on_parameter("avtr_1", "/avatar/parameters/Q", Some(0.0), 1.0, &TestEnv)), 1);
+        assert_eq!(ran(&state.on_parameter("avtr_1", "/avatar/parameters/Q", Some(1.0), 0.0, &TestEnv)), 0);
     }
 
     #[test]

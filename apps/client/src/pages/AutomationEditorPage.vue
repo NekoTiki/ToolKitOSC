@@ -9,12 +9,15 @@ import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
+import { useOscMessages } from '@renderer/composables/useOscMessages'
+import { useParameterListener } from '@renderer/composables/useParameterListener'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
 import type { Automation, AutomationStep, AutomationTrigger, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { AppEventType, ConditionType } from '@renderer/utils/automations'
 import {
   APP_EVENTS,
+  conditionHolds,
   CONDITIONS,
   conditionsFor,
   defaultCondition,
@@ -26,12 +29,14 @@ import {
   MAX_STEPS,
   newAutomation,
   newStep,
+  parameterFamily,
   parameterName,
   STEP_KINDS,
   stepFits,
   stepKindsFor,
   triggerCondition} from '@renderer/utils/automations'
-import { computed, ref, toRaw, watch } from 'vue'
+import { useNow } from '@vueuse/core'
+import { computed, onBeforeUnmount, ref, toRaw, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 // Create or edit one automation: when (an avatar parameter changes), do one or more things (on a
@@ -170,7 +175,10 @@ const changedItems = computed(() => {
 const parameterItems = computed(() =>
   (avatarDetails.value?.parameters ?? [])
     .filter((p) => p.output && (showAllParameters.value || !isNoisyAddress(p.name)))
-    .map((p) => ({ label: `${p.name} · ${p.output!.type}`, value: p.output!.address, valueType: p.output!.type }))
+    .map((p) => {
+      const family = parameterFamily(p.output!.address)
+      return { label: `${p.name} · ${p.output!.type}${family ? ` · ${family}` : ''}`, value: p.output!.address, valueType: p.output!.type }
+    })
     .sort((a, b) => a.label.localeCompare(b.label))
 )
 
@@ -221,6 +229,35 @@ const conditionValue = computed({
   set: (value: number) => {
     if (paramWhen.value && 'value' in paramWhen.value.condition) paramWhen.value.condition.value = value
   }
+})
+
+// ---- Listen and live value
+
+const { listening, endsAt, heard, start: startListening, stop: stopListening } = useParameterListener()
+const now = useNow({ interval: 500 })
+const secondsLeft = computed(() => Math.max(0, Math.ceil((endsAt.value - now.value.getTime()) / 1000)))
+onBeforeUnmount(stopListening)
+
+const pickHeard = (address: string): void => {
+  parameter.value = address
+  stopListening()
+}
+
+const { args } = useOscMessages()
+
+// The trigger parameter's value right now, as a number (Bools are 0/1).
+const liveValue = computed((): number | null => {
+  const address = paramWhen.value?.parameter
+  const value = address ? args.value[address]?.[0] : undefined
+  if (typeof value === 'boolean') return value ? 1 : 0
+  return typeof value === 'number' ? value : null
+})
+
+const liveText = computed(() => {
+  if (liveValue.value === null || !paramWhen.value) return null
+  const shown = paramWhen.value.valueType === 'Bool' ? (liveValue.value ? 'on' : 'off') : String(liveValue.value)
+  const holds = conditionHolds(paramWhen.value.condition, liveValue.value)
+  return holds === null ? `Right now: ${shown}` : `Right now: ${shown}, so the condition is ${holds ? 'true' : 'not true'}`
 })
 
 const canHold = computed(() => !CONDITIONS[conditionType.value].moment && conditionType.value !== 'any')
@@ -509,6 +546,59 @@ onBeforeRouteLeave(async () => {
             </div>
           </UFormField>
 
+          <div
+            v-if="!otherAvatar"
+            class="grid gap-2"
+          >
+            <div class="flex flex-wrap items-center gap-2.5">
+              <UButton
+                :icon="listening ? 'i-lucide-square' : 'i-lucide-ear'"
+                color="neutral"
+                variant="subtle"
+                @click="listening ? stopListening() : startListening()"
+              >
+                {{ listening ? `Stop listening (${secondsLeft} s)` : 'Listen' }}
+              </UButton>
+              <span class="min-w-0 flex-1 text-sm text-muted">
+                {{
+                  listening
+                    ? 'Touch the contact or move the PhysBone in VRChat now.'
+                    : 'Not sure which parameter a contact uses? Press Listen, then touch it in VRChat.'
+                }}
+              </span>
+            </div>
+            <ul
+              v-if="heard.length"
+              class="grid gap-1.5"
+            >
+              <li
+                v-for="item in heard.slice(0, 8)"
+                :key="item.address"
+                class="flex items-center gap-2.5 rounded-field border border-default bg-(--aurora-glass) px-3 py-2"
+              >
+                <span class="min-w-0 flex-1">
+                  <b class="block truncate text-sm font-medium text-highlighted">{{ parameterName(item.address) }}</b>
+                  <small class="text-xs text-muted">
+                    {{ parameterFamily(item.address) ?? 'Changed' }} · {{ item.count }}× · now {{ item.value }}
+                  </small>
+                </span>
+                <UButton
+                  size="sm"
+                  :disabled="!parameterItems.some((p) => p.value === item.address)"
+                  @click="pickHeard(item.address)"
+                >
+                  Use
+                </UButton>
+              </li>
+            </ul>
+            <p
+              v-else-if="listening"
+              class="text-sm text-muted"
+            >
+              Nothing has changed yet.
+            </p>
+          </div>
+
           <USwitch
             v-if="paramWhen.parameter"
             v-model="paramWhen.anyAvatar"
@@ -553,6 +643,17 @@ onBeforeRouteLeave(async () => {
               </div>
             </div>
           </UFormField>
+
+          <p
+            v-if="liveText && !otherAvatar"
+            class="flex items-center gap-1.5 text-sm text-muted"
+          >
+            <UIcon
+              name="i-lucide-activity"
+              class="size-4 shrink-0"
+            />
+            {{ liveText }}
+          </p>
 
           <UFormField
             v-if="paramWhen.parameter && canHold"

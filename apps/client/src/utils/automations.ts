@@ -337,6 +337,38 @@ export const fitStep = (step: AutomationStep, condition: ConditionType, control?
 
 export const parameterName = (address: string): string => address.replace(/^\/avatar\/parameters\//, '')
 
+// What a parameter probably is, from the naming conventions of common avatar tools.
+const PHYSBONE_SUFFIXES: Record<string, string> = {
+  _IsGrabbed: 'PhysBone grabbed',
+  _IsPosed: 'PhysBone posed',
+  _Angle: 'PhysBone angle',
+  _Stretch: 'PhysBone stretch',
+  _Squish: 'PhysBone squish'
+}
+
+export const parameterFamily = (address: string): string | null => {
+  const name = parameterName(address)
+  if (name.startsWith('VFH/')) return 'VRCFury Haptics'
+  if (name.startsWith('OGB/')) return 'OSC Goes Brrr'
+  const suffix = Object.keys(PHYSBONE_SUFFIXES).find((s) => name.endsWith(s))
+  return suffix ? PHYSBONE_SUFFIXES[suffix]! : null
+}
+
+// For a state condition: whether a value satisfies it right now (model.rs `Condition::holds`).
+// Moments are edges, so they have no "right now".
+export const conditionHolds = (condition: ParameterCondition, value: number): boolean | null => {
+  switch (condition.type) {
+    case 'is-on':
+      return value >= 0.5
+    case 'is':
+      return Math.round(value) === Math.round(condition.value)
+    case 'is-above':
+      return value > condition.value
+    default:
+      return null
+  }
+}
+
 // ESP32 timings are always shown in milliseconds, like the board itself counts them.
 export const formatMs = (ms: number): string => `${Math.round(ms)} ms`
 
