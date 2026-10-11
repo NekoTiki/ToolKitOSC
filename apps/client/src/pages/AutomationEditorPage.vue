@@ -277,12 +277,11 @@ const canHold = computed(() => !CONDITIONS[conditionType.value].moment && condit
 
 // ---- Do
 
-// A new step is a Control: that's what most automations drive.
+// A new step is the first kind that fits: an Avatar parameter, unless the trigger rules it out.
 const addStep = (): void => {
   if (!draft.value || draft.value.then.length >= MAX_STEPS) return
   const condition = conditionType.value
-  const kinds = stepKindsFor(condition)
-  draft.value.then.push(newStep(kinds.includes('control') ? 'control' : kinds[0]!, condition))
+  draft.value.then.push(newStep(stepKindsFor(condition)[0]!, condition))
 }
 
 const removeStep = (index: number): void => {

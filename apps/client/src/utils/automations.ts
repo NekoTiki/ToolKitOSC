@@ -529,7 +529,7 @@ export const newAutomation = (avatarId: string, avatarName: string): Automation 
     anyAvatar: false,
     heldMs: 0
   },
-  then: [newStep('control', 'turns-on')],
+  then: [newStep('avatar-parameter', 'turns-on')],
   cooldownMs: 0,
   retrigger: 'restart',
   onlyIf: []
