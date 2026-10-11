@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, provide } from 'vue'
 
-import type { CommandWithoutIds, ControlLimits, ControlType, LastUser } from '../types/controls'
+import type { CommandWithoutIds, ControlLimits, ControlType, LastUser, ViewerGroupInfo } from '../types/controls'
 import ControlBoolean from './ControlBoolean.vue'
 import ControlBooleanEnum from './ControlBooleanEnum.vue'
 import ControlBooleanGroup from './ControlBooleanGroup.vue'
@@ -28,6 +28,8 @@ type Props = {
   // The active profile's limits (viewer side): blocked options can't be picked, sliders stop at the
   // range.
   limits?: ControlLimits
+  // The viewer group that lets this viewer use more of the control than everyone else (viewer side).
+  viaGroup?: Pick<ViewerGroupInfo, 'name' | 'color'>
   // Informational states (host side): the host can still use the tile, but viewers can't.
   lockedIndicator?: boolean
   unavailableIndicator?: boolean
@@ -62,6 +64,7 @@ provide(
     ...(props.unavailableIndicator && !props.lockedIndicator
       ? [{ key: 'unavailable', icon: 'i-lucide-shield-off', label: `${unavailableReason.value}, so viewers can't use it`, tone: 'warning' as const }]
       : []),
+    ...(props.viaGroup ? [{ key: 'via-group', color: props.viaGroup.color, label: `You can use more of this as part of ${props.viaGroup.name}` }] : []),
     ...(props.lastUser ? [{ key: 'last-user', avatar: props.lastUser.avatar, label: `Last used by ${props.lastUser.displayName}` }] : [])
   ])
 )

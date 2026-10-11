@@ -7,6 +7,7 @@ import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { useBanViewerModal } from '@renderer/composables/useBanViewerModal'
 import { useClientsDb } from '@renderer/composables/useClientsDb'
 import { useLiveQuery } from '@renderer/composables/useLiveQuery'
+import { MEMBERSHIP_DURATIONS, useViewerGroups } from '@renderer/composables/useViewerGroups'
 import type { Client } from '@renderer/db/clients.db'
 import { db as clientsDb } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
@@ -39,6 +40,7 @@ const { isOnline, clearViewerActivity, deleteViewer } = useClientsDb()
 const { isBanned, ban, unban } = useBannedClientsDb()
 const { openModal: openBanModal } = useBanViewerModal()
 const { openModal: confirm } = useAreYouSureModal()
+const { viewerGroups, membershipsOf, addToGroup, removeFromGroup } = useViewerGroups()
 
 const clients = useLiveQuery(
   () => null,
@@ -195,10 +197,43 @@ const copyDiscordId = async (discordId: string): Promise<void> => {
   }
 }
 
+const formatTime = (timestamp: number): string => new Date(timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+// Groups the viewer isn't in, each with how long to add them for.
+const addToGroupItems = (client: Client): ContextMenuItem[] => {
+  const inGroups = new Set(membershipsOf(client).map((membership) => membership.id))
+
+  return viewerGroups.value
+    .filter((group) => !inGroups.has(group.id))
+    .map((group) => ({
+      label: group.name,
+      children: MEMBERSHIP_DURATIONS.map((duration) => ({
+        label: duration.label,
+        onSelect: async () => {
+          await addToGroup(client, group.id, duration.ms)
+          toast.add({ title: `${client.displayName} added to ${group.name}`, icon: 'i-lucide-users-round' })
+        }
+      }))
+    }))
+}
+
+const doRemoveFromGroup = async (client: Client, groupId: string, groupName: string): Promise<void> => {
+  await removeFromGroup(client, groupId)
+  toast.add({ title: `${client.displayName} removed from ${groupName}`, icon: 'i-lucide-user-minus' })
+}
+
 const viewerMenu = (client: Client): ContextMenuItem[][] => [
   [
     { label: 'See activity', icon: 'i-lucide-history', to: { path: '/activity', query: { viewer: String(client.id) } } },
     ...(client.discordId ? [{ label: 'Copy Discord ID', icon: 'i-lucide-copy', onSelect: () => copyDiscordId(client.discordId!) }] : [])
+  ],
+  [
+    ...(addToGroupItems(client).length ? [{ label: 'Add to group', icon: 'i-lucide-user-plus', children: addToGroupItems(client) }] : []),
+    ...membershipsOf(client).map((membership) => ({
+      label: `Remove from ${membership.group.name}`,
+      icon: 'i-lucide-user-minus',
+      onSelect: () => doRemoveFromGroup(client, membership.id, membership.group.name)
+    }))
   ],
   [
     isBanned(client.ip, client.discordId)
@@ -240,6 +275,16 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
           {{ option.label }}
           <span class="font-mono text-xs opacity-70">{{ kindCount(option.value) }}</span>
         </UButton>
+        <UButton
+          size="md"
+          icon="i-lucide-users-round"
+          color="neutral"
+          variant="subtle"
+          class="rounded-full"
+          to="/viewers/groups"
+        >
+          Groups
+        </UButton>
       </div>
 
       <nav
@@ -280,7 +325,16 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
                   size="md"
                 />
               </UChip>
-              <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ client.displayName }}</b>
+              <span class="flex min-w-0 items-center gap-1.5">
+                <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ client.displayName }}</b>
+                <span
+                  v-for="membership in membershipsOf(client)"
+                  :key="membership.id"
+                  class="size-2 shrink-0 rounded-full"
+                  :style="{ backgroundColor: membership.group.color }"
+                  :title="membership.group.name"
+                />
+              </span>
               <small class="col-start-2 truncate text-xs text-muted">
                 {{ client.discordId ? 'Discord' : 'Guest' }}<template v-if="section.key !== 'online' && lastSeen(client)"> · last seen {{ lastSeen(client) }}</template>
               </small>
@@ -420,6 +474,76 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
             </dt>
             <dd>{{ activity.count.toLocaleString() }}</dd>
           </dl>
+        </FormSection>
+
+        <!-- Full width above Details and Recent activity. -->
+        <FormSection
+          class="order-first lg:col-span-2"
+          title="Groups"
+          :description="selected.discordId ? 'What their groups get is set in each profile.' : 'Guests stay in a group only until their session ends. What their groups get is set in each profile.'"
+        >
+          <template #actions>
+            <UDropdownMenu
+              v-if="viewerGroups.length"
+              :items="addToGroupItems(selected)"
+              :content="{ align: 'end' }"
+            >
+              <UButton
+                size="md"
+                icon="i-lucide-user-plus"
+                color="neutral"
+                variant="subtle"
+                :disabled="!addToGroupItems(selected).length"
+              >
+                Add to group
+              </UButton>
+            </UDropdownMenu>
+            <UButton
+              v-else
+              size="md"
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="subtle"
+              to="/viewers/groups"
+            >
+              Make a group
+            </UButton>
+          </template>
+          <div
+            v-if="membershipsOf(selected).length"
+            class="flex flex-wrap gap-2"
+          >
+            <span
+              v-for="membership in membershipsOf(selected)"
+              :key="membership.id"
+              class="flex items-center gap-2 rounded-full bg-(--aurora-well) py-1 pr-1 pl-3 text-sm"
+            >
+              <span
+                class="size-2.5 rounded-full"
+                :style="{ backgroundColor: membership.group.color }"
+              />
+              <b class="font-medium text-highlighted">{{ membership.group.name }}</b>
+              <small
+                v-if="membership.until"
+                class="text-xs text-muted"
+              >until {{ formatTime(membership.until) }}</small>
+              <UButton
+                icon="i-lucide-x"
+                size="sm"
+                color="neutral"
+                variant="ghost"
+                class="rounded-full"
+                :aria-label="`Remove from ${membership.group.name}`"
+                @click="doRemoveFromGroup(selected, membership.id, membership.group.name)"
+              />
+            </span>
+          </div>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            Not in any group. They get what the active profile gives everyone.
+          </p>
         </FormSection>
 
         <FormSection title="Recent activity">

@@ -22,6 +22,28 @@ export interface Client {
   // When they were last connected to the share page - see useClientsDb.ts. Not indexed, so no
   // schema bump; viewers recorded before it existed don't have one until they next connect.
   lastSeenAt?: number
+  // The viewer groups the host put them in (see useViewerGroups.ts). Not indexed, so no schema bump.
+  groups?: GroupMembership[]
+}
+
+export interface GroupMembership {
+  id: string
+  // When a temporary membership ends. Unset: until the host removes them.
+  until?: number
+}
+
+// Two lists of memberships as one, keeping the longer of two for the same group.
+export const mergeMemberships = (a: GroupMembership[] = [], b: GroupMembership[] = []): GroupMembership[] => {
+  const merged = new Map<string, GroupMembership>()
+
+  for (const membership of [...a, ...b]) {
+    const seen = merged.get(membership.id)
+    const longer = !seen || !membership.until || (seen.until !== undefined && membership.until > seen.until)
+
+    if (longer) merged.set(membership.id, membership)
+  }
+
+  return [...merged.values()]
 }
 
 // A ban targets either a stable IP or a Discord ID, never a pair of the two (banning "by IP"
@@ -55,7 +77,8 @@ export const mergeClients = (into: Client, from: Client): Client => {
     ips: [...new Set(newer ? [...from.ips, ...into.ips] : [...into.ips, ...from.ips])],
     peerIds: [...new Set([...into.peerIds, ...from.peerIds])],
     createdAt: Math.min(into.createdAt, from.createdAt),
-    ...(lastSeen ? { lastSeenAt: lastSeen } : {})
+    ...(lastSeen ? { lastSeenAt: lastSeen } : {}),
+    ...(into.groups?.length || from.groups?.length ? { groups: mergeMemberships(into.groups, from.groups) } : {})
   }
 }
 

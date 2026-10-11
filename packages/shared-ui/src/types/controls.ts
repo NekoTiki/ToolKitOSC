@@ -82,6 +82,13 @@ export interface BaseControl {
   // that is still usable. Computed client-side (see useControls.ts), never saved, and enforced by
   // sanitizeCommand (utils/controlLimits.ts) on the host and the relay.
   limits?: ControlLimits
+  // Set by the host's active profile next to `limits`: what each viewer group gets instead of the
+  // rules above, keyed by group id. Never saved, and never sent on to viewers: the relay resolves it
+  // per viewer (see resolveControlForViewer in utils/controlLimits.ts) and strips it.
+  groupRules?: Record<string, ViewerGroupRule>
+  // Set by the relay on a viewer's own copy: the group that gives this viewer more than everyone
+  // else gets on this control. The share page shows it as a badge.
+  viaGroup?: Pick<ViewerGroupInfo, 'name' | 'color'>
   type: ControlTypes
   // Tile width in a tile grid. Left unset, the width is automatic (see utils/tiles.ts'
   // controlTileSpan): one cell for most types, two for option pickers. 'wide' asks for two cells.
@@ -103,6 +110,20 @@ export interface ControlLimits {
   // Enum: option `value`s. Toggle Logic: input `id`s. Toy Pattern: pattern `id`s - never 'off',
   // which stays available so a viewer can always stop a toy.
   disabledOptions?: (string | number)[]
+}
+
+// A viewer group's rule for one control in a profile. A field left out means "same as everyone".
+// `limits: {}` means no limits for the group, even when everyone else has some.
+export interface ViewerGroupRule {
+  locked?: boolean
+  limits?: ControlLimits
+}
+
+// A group of viewers the host made (Friends, Mods...). `color` is a CSS color.
+export interface ViewerGroupInfo {
+  id: string
+  name: string
+  color: string
 }
 
 // The control types a profile can set limits on.

@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto'
 import type { Peer } from 'crossws'
 
 import type { User } from '#auth-utils'
-import type { PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
-import { sanitizeCommand } from '#shared/utils/controlLimits'
+import type { ControlGroup, ControlType, PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
+import { resolveControlForViewer, sanitizeCommand } from '#shared/utils/controlLimits'
 import { guestName } from '#shared/utils/guestName'
 import {
   hostArgs,
@@ -14,6 +14,7 @@ import {
   hostPaused,
   hostShareSettings,
   hostTheme,
+  hostViewerGroups,
   sendClientListToHost,
   sendMessageToHost
 } from '~~/server/routes/host'
@@ -146,6 +147,33 @@ export const sendToClient = (roomId: RoomId, peerId: PeerId, data: unknown) => {
   for (const peer of clientList.get(roomId)?.get(peerId)?.peers.values() ?? []) peer.send(data)
 }
 
+const groupIdsOf = (roomId: RoomId, sessionId: string): string[] => hostViewerGroups.get(roomId)?.members[sessionId] ?? []
+
+// One control as this viewer may use it: the active profile's rules, opened up by their groups.
+const viewerControl = (roomId: RoomId, sessionId: string, control: ControlType): ControlType =>
+  resolveControlForViewer(control, groupIdsOf(roomId, sessionId), hostViewerGroups.get(roomId)?.groups)
+
+const viewerControlsFor = (roomId: RoomId, sessionId: string): ControlGroup[] | undefined =>
+  hostControls.get(roomId)?.map((group) => ({
+    ...group,
+    controls: group.controls.map((control) => viewerControl(roomId, sessionId, control))
+  }))
+
+// Sends every viewer their own copy of the controls. Viewers in the same groups share one.
+export const sendControlsToRoom = (roomId: RoomId) => {
+  if (!hostControls.has(roomId)) return
+
+  const copies = new Map<string, ControlGroup[] | undefined>()
+
+  for (const client of clientList.get(roomId)?.values() ?? []) {
+    const key = [...groupIdsOf(roomId, client.sessionId)].sort().join(',')
+
+    if (!copies.has(key)) copies.set(key, viewerControlsFor(roomId, client.sessionId))
+
+    for (const peer of client.peers.values()) peer.send({ type: 'controls-update', message: copies.get(key) })
+  }
+}
+
 export default defineWebSocketHandler({
   async open(_peer) {
     const peer: Peer = _peer as unknown as Peer
@@ -157,12 +185,12 @@ export default defineWebSocketHandler({
 
     addClient(roomId!, sessionId, peer, { sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
 
-    const controls = hostControls.get(roomId!)
+    const controls = viewerControlsFor(roomId!, sessionId)
     const args = hostArgs.get(roomId!)!
     const theme = hostTheme.get(roomId!)
 
     if (controls) {
-      peer.send({ type: 'controls-update', message: Array.from(controls) })
+      peer.send({ type: 'controls-update', message: controls })
     }
 
     if (args) {
@@ -223,16 +251,17 @@ export default defineWebSocketHandler({
         // The host stopped everything: the page shows a paused card, and the host would reject it.
         if (hostPaused.has(roomId!)) return
 
-        // Check the command against the controls this room's viewers were sent (locks, the active
-        // profile's limits, value types) so a hand-written message never reaches the host or the
-        // stats. A control the cache doesn't know is passed on as-is: the host decides, and logs it.
+        // Check the command against the controls this viewer was sent (locks, the active profile's
+        // limits and their groups' rules, value types) so a hand-written message never reaches the
+        // host or the stats. A control the cache doesn't know is passed on as-is: the host decides,
+        // and logs it.
         const control = hostControls
           .get(roomId!)
           ?.find((group) => group.id === data.message.groupId)
           ?.controls.find((c) => c.id === data.message.controlId)
 
         if (control) {
-          const command = sanitizeCommand(control, data.message)
+          const command = sanitizeCommand(viewerControl(roomId!, sessionId, control), data.message)
 
           if (!command) return
 

@@ -37,6 +37,7 @@ export const router = createRouter({
     { path: '/profiles', name: 'profiles', component: () => import('@renderer/pages/ProfilesPage.vue') },
     { path: '/profiles/new', name: 'profile-new', component: () => import('@renderer/pages/ProfilesPage.vue') },
     { path: '/profiles/:profileId', name: 'profile', component: () => import('@renderer/pages/ProfilesPage.vue') },
+    { path: '/viewers/groups', name: 'viewer-groups', component: () => import('@renderer/pages/ViewerGroupsPage.vue') },
     { path: '/viewers/:clientId?', name: 'viewers', component: () => import('@renderer/pages/ViewersPage.vue') },
     { path: '/activity', name: 'activity', component: () => import('@renderer/pages/ActivityPage.vue') },
     { path: '/ai', name: 'ai', component: () => import('@renderer/pages/AiPage.vue') },

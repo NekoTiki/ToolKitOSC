@@ -5,6 +5,7 @@ import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
 import { formatHotkey, useStopEverything } from '@renderer/composables/useStopEverything'
+import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
@@ -42,6 +43,7 @@ const profileLabel = computed(() => {
   return activeProfile.value.id === defaultLockedControlsGroup.value ? `${activeProfile.value.name} · Default` : activeProfile.value.name
 })
 
+const { viewerGroups } = useViewerGroups()
 const controlIds = computed(() => new Set(controls.value.flatMap((group) => group.controls.map((control) => control.id))))
 
 // The profile chip's picker: switch profiles from any page. The pick is remembered for this avatar
@@ -59,7 +61,7 @@ const profileItems = computed<DropdownMenuItem[][]>(() => [
     ...lockedControlGroups.value.map(
       (profile): DropdownMenuItem => ({
         label: profile.name,
-        description: [profile.id === defaultLockedControlsGroup.value ? 'Default' : '', profileSummary(profile, controlIds.value)]
+        description: [profile.id === defaultLockedControlsGroup.value ? 'Default' : '', profileSummary(profile, controlIds.value, viewerGroups.value)]
           .filter(Boolean)
           .join(' · '),
         icon: profile.id === defaultLockedControlsGroup.value ? 'i-lucide-star' : 'i-lucide-lock',

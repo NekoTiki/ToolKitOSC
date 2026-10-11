@@ -1,6 +1,6 @@
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { getUUID } from '@renderer/utils/uuid'
-import type { ControlLimits } from '@toolkitosc/shared-ui'
+import type { ControlLimits, ViewerGroupRule } from '@toolkitosc/shared-ui'
 import { computed, ref, watch } from 'vue'
 
 export type LockedControlGroup = {
@@ -10,7 +10,13 @@ export type LockedControlGroup = {
   // Per-control limits for viewers, keyed by control id. Optional: profiles saved before limits
   // existed load as "no limits".
   limits?: Record<string, ControlLimits>
+  // What each viewer group gets instead, by group id, then control id. A control a group has no
+  // rule for is the same for the group as for everyone. Optional: older profiles load as "no group
+  // rules".
+  groupOverrides?: Record<string, GroupOverrides>
 }
+
+export type GroupOverrides = Record<string, ViewerGroupRule>
 
 // What sessionStorage holds for an avatar whose last pick this session was "No profile" - kept
 // apart from no entry at all, which means "not picked yet this session, use the default".
@@ -29,6 +35,18 @@ const lockedControls = computed<LockedControlGroup['lockedControls']>(
 const controlLimits = computed<NonNullable<LockedControlGroup['limits']>>(
   () => lockedControlGroups.value.find((g) => g.id === currentLockedControlsGroup.value)?.limits ?? {}
 )
+const groupOverrides = computed<NonNullable<LockedControlGroup['groupOverrides']>>(
+  () => lockedControlGroups.value.find((g) => g.id === currentLockedControlsGroup.value)?.groupOverrides ?? {}
+)
+
+// How many of the controls that exist now (`controlIds`) have a rule for each group, by group id.
+// Groups with none are left out.
+export const groupOverrideCounts = (profile: Pick<LockedControlGroup, 'groupOverrides'>, controlIds: Set<string>): Record<string, number> =>
+  Object.fromEntries(
+    Object.entries(profile.groupOverrides ?? {})
+      .map(([groupId, rules]) => [groupId, Object.keys(rules).filter((id) => controlIds.has(id)).length] as const)
+      .filter(([, count]) => count > 0)
+  )
 
 // "3 locked · 2 limited", counted against the controls that exist now (`controlIds`), so entries
 // left behind by deleted controls don't inflate it. A locked control doesn't count as limited.
@@ -40,15 +58,24 @@ export const profileCounts = (
   limited: Object.keys(profile.limits ?? {}).filter((id) => controlIds.has(id) && !profile.lockedControls[id]).length
 })
 
-export const profileSummary = (profile: Pick<LockedControlGroup, 'lockedControls' | 'limits'>, controlIds: Set<string>): string => {
+// `groups` names the viewer groups, so the summary can say "Friends +2" for a group with rules on
+// two controls. Rules for deleted groups aren't mentioned.
+export const profileSummary = (
+  profile: Pick<LockedControlGroup, 'lockedControls' | 'limits' | 'groupOverrides'>,
+  controlIds: Set<string>,
+  groups: { id: string; name: string }[] = []
+): string => {
   const { locked, limited } = profileCounts(profile, controlIds)
+  const counts = groupOverrideCounts(profile, controlIds)
+  const forGroups = groups.filter((group) => counts[group.id]).map((group) => `${group.name} +${counts[group.id]}`)
 
-  return `${locked} locked${limited ? ` · ${limited} limited` : ''}`
+  return [`${locked} locked`, limited ? `${limited} limited` : '', ...forGroups].filter(Boolean).join(' · ')
 }
 
 export function useLockedControls(): {
   lockedControls: typeof lockedControls
   controlLimits: typeof controlLimits
+  groupOverrides: typeof groupOverrides
   currentLockedControlsGroup: typeof currentLockedControlsGroup
   defaultLockedControlsGroup: typeof defaultLockedControlsGroup
   setDefaultLockedControlGroup: (groupId: LockedControlGroup['id'] | null) => void
@@ -89,6 +116,7 @@ export function useLockedControls(): {
       group.name = lockedControlsGroup.name
       group.lockedControls = lockedControlsGroup.lockedControls
       group.limits = lockedControlsGroup.limits
+      group.groupOverrides = lockedControlsGroup.groupOverrides
     }
 
     saveLockedControlsGroups()
@@ -146,6 +174,7 @@ export function useLockedControls(): {
   return {
     lockedControls,
     controlLimits,
+    groupOverrides,
     currentLockedControlsGroup,
     defaultLockedControlsGroup,
     setDefaultLockedControlGroup,

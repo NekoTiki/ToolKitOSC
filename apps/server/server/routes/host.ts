@@ -7,7 +7,8 @@ import type {
   HostToServerMessage,
   OSCArg,
   ShareSettingsMessage,
-  ViewerActionMessage
+  ViewerActionMessage,
+  ViewerGroupsMessage
 } from '#shared/types/protocol'
 import {
   KNOWN_CONTROL_TYPES,
@@ -19,6 +20,7 @@ import {
   broadcastPresence,
   clientList,
   presenceOf,
+  sendControlsToRoom,
   sendToClient,
   sendToEveryoneInRoom,
   showViewers
@@ -45,6 +47,9 @@ export const hostPaused = new Set<RoomId>()
 // The room's most recent accepted command, with the viewer always filled in - hidden per send while
 // the host hides viewers. Replayed to anyone who joins, so the bar isn't empty until the next one.
 export const hostLastAction = new Map<RoomId, ViewerActionMessage>()
+// Which viewer groups the room's viewers are in (see ViewerGroupsMessage). Kept while the host is
+// away, like share settings, so viewers keep what their groups give them.
+export const hostViewerGroups = new Map<RoomId, ViewerGroupsMessage>()
 
 interface Host {
   peer: Peer
@@ -196,8 +201,16 @@ export default defineWebSocketHandler({
       )
 
       // Re-sent as just `groups` (ServerToViewerMessage's own 'controls-update' shape never
-      // changed) - viewers don't need, and shouldn't rely on, which avatar these came from.
-      sendToEveryoneInRoom(roomId!, { type: 'controls-update', message: groups })
+      // changed) - viewers don't need, and shouldn't rely on, which avatar these came from. Each
+      // viewer gets their own copy, with what their viewer groups give them.
+      sendControlsToRoom(roomId!)
+    } else if (data.type === 'viewer-groups') {
+      const { groups, members } = data.message
+
+      if (!Array.isArray(groups) || !members || typeof members !== 'object') return
+
+      hostViewerGroups.set(roomId, { groups, members })
+      sendControlsToRoom(roomId)
     } else if (data.type === 'args-initial') {
       hostArgs.set(roomId!, data.message)
 
