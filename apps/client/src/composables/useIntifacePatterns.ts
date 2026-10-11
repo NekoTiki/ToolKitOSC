@@ -27,6 +27,17 @@ const seededRandom = (seed: number): number => {
   return x - Math.floor(x)
 }
 
+// Smooth noise: a random level every `stepMs`, eased from one to the next instead of jumping.
+const smoothNoise = (t: number, stepMs: number, seedOffset = 0): number => {
+  const position = t / stepMs
+  const step = Math.floor(position)
+  const f = position - step
+  const eased = f * f * (3 - 2 * f)
+  const from = seededRandom(step + seedOffset)
+
+  return from + (seededRandom(step + 1 + seedOffset) - from) * eased
+}
+
 // The one place that knows how to turn a pattern id into an actual waveform. A control only ever
 // stores a pattern's id/name/icon (see IntifacePatternRef in controls.ts), denormalized at authoring
 // time the same way a toy's name is. Two registries feed it: the built-in patterns below and the
@@ -58,11 +69,9 @@ export const BUILTIN_PATTERNS: IntifacePatternDefinition[] = [
     id: 'random',
     name: 'Random',
     icon: 'i-lucide-shuffle',
-    value: (t) => {
-      const stepMs = 350
-
-      return seededRandom(Math.floor(t / stepMs))
-    }
+    // A slow drift with a little faster wobble on top, kept off the extremes, so it wanders instead
+    // of jumping between full random levels.
+    value: (t) => 0.15 + 0.75 * (0.75 * smoothNoise(t, 1200) + 0.25 * smoothNoise(t, 400, 1000))
   }
 ]
 
