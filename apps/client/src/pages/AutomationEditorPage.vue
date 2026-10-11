@@ -281,7 +281,8 @@ const canHold = computed(() => !CONDITIONS[conditionType.value].moment && condit
 const addStep = (): void => {
   if (!draft.value || draft.value.then.length >= MAX_STEPS) return
   const condition = conditionType.value
-  draft.value.then.push(newStep(stepKindsFor(condition)[0] === 'board-output' ? 'control' : stepKindsFor(condition)[0]!, condition))
+  const kinds = stepKindsFor(condition)
+  draft.value.then.push(newStep(kinds.includes('control') ? 'control' : kinds[0]!, condition))
 }
 
 const removeStep = (index: number): void => {
