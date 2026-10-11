@@ -197,7 +197,13 @@ const copyDiscordId = async (discordId: string): Promise<void> => {
   }
 }
 
-const formatTime = (timestamp: number): string => new Date(timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+// When a temporary membership ends: "14:32", or "Sat 14:32" when that isn't today.
+const formatTime = (timestamp: number): string => {
+  const date = new Date(timestamp)
+  const today = date.toDateString() === new Date().toDateString()
+
+  return date.toLocaleString(undefined, { ...(today ? {} : { weekday: 'short' }), hour: '2-digit', minute: '2-digit' })
+}
 
 // Groups the viewer isn't in, each with how long to add them for.
 const addToGroupItems = (client: Client): ContextMenuItem[] => {
@@ -415,7 +421,7 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
 
     <div
       v-if="selected"
-      class="grid max-w-5xl grid-cols-1 gap-3.5"
+      class="grid grid-cols-1 gap-3.5"
     >
       <div
         v-if="banned"
@@ -432,119 +438,120 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
       </div>
 
       <div class="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
-        <FormSection title="Details">
-          <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4.5 gap-y-2.5 text-[13.5px]">
-            <dt class="text-muted">
-              Discord ID
-            </dt>
-            <dd class="truncate font-mono">
-              {{ selected.discordId ?? '—' }}
-            </dd>
-            <dt class="self-start pt-1 text-muted">
-              {{ maskedIps.length > 1 ? `IP addresses (${maskedIps.length})` : 'IP address' }}
-            </dt>
-            <dd class="flex min-w-0 items-start gap-2 font-mono">
-              <span class="grid min-w-0 gap-0.5 pt-1">
-                <span
-                  v-for="(ip, index) in maskedIps"
-                  :key="index"
-                  class="truncate"
-                  :class="{ 'text-muted': index > 0 }"
-                >{{ ip }}</span>
-              </span>
-              <UButton
-                size="sm"
-                color="neutral"
-                variant="ghost"
-                @click="showIp = !showIp"
-              >
-                {{ showIp ? 'Hide' : 'Show' }}
-              </UButton>
-            </dd>
-            <dt class="text-muted">
-              First seen
-            </dt>
-            <dd>{{ timeAgo(selected.createdAt, now) }}</dd>
-            <dt class="text-muted">
-              Last seen
-            </dt>
-            <dd>{{ isOnline(selected) ? 'Online now' : lastSeen(selected) ?? 'Not recorded yet' }}</dd>
-            <dt class="text-muted">
-              Total actions
-            </dt>
-            <dd>{{ activity.count.toLocaleString() }}</dd>
-          </dl>
-        </FormSection>
+        <!-- Details with Groups under it, next to Recent activity. -->
+        <div class="grid grid-cols-1 content-start gap-3.5">
+          <FormSection title="Details">
+            <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4.5 gap-y-2.5 text-[13.5px]">
+              <dt class="text-muted">
+                Discord ID
+              </dt>
+              <dd class="truncate font-mono">
+                {{ selected.discordId ?? '—' }}
+              </dd>
+              <dt class="self-start pt-1 text-muted">
+                {{ maskedIps.length > 1 ? `IP addresses (${maskedIps.length})` : 'IP address' }}
+              </dt>
+              <dd class="flex min-w-0 items-start gap-2 font-mono">
+                <span class="grid min-w-0 gap-0.5 pt-1">
+                  <span
+                    v-for="(ip, index) in maskedIps"
+                    :key="index"
+                    class="truncate"
+                    :class="{ 'text-muted': index > 0 }"
+                  >{{ ip }}</span>
+                </span>
+                <UButton
+                  size="sm"
+                  color="neutral"
+                  variant="ghost"
+                  @click="showIp = !showIp"
+                >
+                  {{ showIp ? 'Hide' : 'Show' }}
+                </UButton>
+              </dd>
+              <dt class="text-muted">
+                First seen
+              </dt>
+              <dd>{{ timeAgo(selected.createdAt, now) }}</dd>
+              <dt class="text-muted">
+                Last seen
+              </dt>
+              <dd>{{ isOnline(selected) ? 'Online now' : lastSeen(selected) ?? 'Not recorded yet' }}</dd>
+              <dt class="text-muted">
+                Total actions
+              </dt>
+              <dd>{{ activity.count.toLocaleString() }}</dd>
+            </dl>
+          </FormSection>
 
-        <!-- Full width above Details and Recent activity. -->
-        <FormSection
-          class="order-first lg:col-span-2"
-          title="Groups"
-          :description="selected.discordId ? 'What their groups get is set in each profile.' : 'Guests stay in a group only until their session ends. What their groups get is set in each profile.'"
-        >
-          <template #actions>
-            <UDropdownMenu
-              v-if="viewerGroups.length"
-              :items="addToGroupItems(selected)"
-              :content="{ align: 'end' }"
-            >
+          <FormSection
+            title="Groups"
+            :description="selected.discordId ? 'What their groups get is set in each profile.' : 'Guests stay in a group only until their session ends. What their groups get is set in each profile.'"
+          >
+            <template #actions>
+              <UDropdownMenu
+                v-if="viewerGroups.length"
+                :items="addToGroupItems(selected)"
+                :content="{ align: 'end' }"
+              >
+                <UButton
+                  size="md"
+                  icon="i-lucide-user-plus"
+                  color="neutral"
+                  variant="subtle"
+                  :disabled="!addToGroupItems(selected).length"
+                >
+                  Add to group
+                </UButton>
+              </UDropdownMenu>
               <UButton
+                v-else
                 size="md"
-                icon="i-lucide-user-plus"
+                icon="i-lucide-plus"
                 color="neutral"
                 variant="subtle"
-                :disabled="!addToGroupItems(selected).length"
+                to="/viewers/groups"
               >
-                Add to group
+                Make a group
               </UButton>
-            </UDropdownMenu>
-            <UButton
-              v-else
-              size="md"
-              icon="i-lucide-plus"
-              color="neutral"
-              variant="subtle"
-              to="/viewers/groups"
-            >
-              Make a group
-            </UButton>
-          </template>
-          <div
-            v-if="membershipsOf(selected).length"
-            class="flex flex-wrap gap-2"
-          >
-            <span
-              v-for="membership in membershipsOf(selected)"
-              :key="membership.id"
-              class="flex items-center gap-2 rounded-full bg-(--aurora-well) py-1 pr-1 pl-3 text-sm"
+            </template>
+            <div
+              v-if="membershipsOf(selected).length"
+              class="flex flex-wrap gap-2"
             >
               <span
-                class="size-2.5 rounded-full"
-                :style="{ backgroundColor: membership.group.color }"
-              />
-              <b class="font-medium text-highlighted">{{ membership.group.name }}</b>
-              <small
-                v-if="membership.until"
-                class="text-xs text-muted"
-              >until {{ formatTime(membership.until) }}</small>
-              <UButton
-                icon="i-lucide-x"
-                size="sm"
-                color="neutral"
-                variant="ghost"
-                class="rounded-full"
-                :aria-label="`Remove from ${membership.group.name}`"
-                @click="doRemoveFromGroup(selected, membership.id, membership.group.name)"
-              />
-            </span>
-          </div>
-          <p
-            v-else
-            class="text-sm text-muted"
-          >
-            Not in any group. They get what the active profile gives everyone.
-          </p>
-        </FormSection>
+                v-for="membership in membershipsOf(selected)"
+                :key="membership.id"
+                class="flex items-center gap-2 rounded-full bg-(--aurora-well) py-1 pr-1 pl-3 text-sm"
+              >
+                <span
+                  class="size-2.5 rounded-full"
+                  :style="{ backgroundColor: membership.group.color }"
+                />
+                <b class="font-medium text-highlighted">{{ membership.group.name }}</b>
+                <small
+                  v-if="membership.until"
+                  class="text-xs text-muted"
+                >until {{ formatTime(membership.until) }}</small>
+                <UButton
+                  icon="i-lucide-x"
+                  size="sm"
+                  color="neutral"
+                  variant="ghost"
+                  class="rounded-full"
+                  :aria-label="`Remove from ${membership.group.name}`"
+                  @click="doRemoveFromGroup(selected, membership.id, membership.group.name)"
+                />
+              </span>
+            </div>
+            <p
+              v-else
+              class="text-sm text-muted"
+            >
+              Not in any group. They get what the active profile gives everyone.
+            </p>
+          </FormSection>
+        </div>
 
         <FormSection title="Recent activity">
           <template #actions>

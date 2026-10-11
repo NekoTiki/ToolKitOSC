@@ -20,7 +20,8 @@ export const GROUP_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#22d3ee', '#34d39
 export const MEMBERSHIP_DURATIONS: { label: string; ms: number | null }[] = [
   { label: 'Until I remove them', ms: null },
   { label: 'For 10 minutes', ms: 10 * 60_000 },
-  { label: 'For 1 hour', ms: 60 * 60_000 }
+  { label: 'For 1 hour', ms: 60 * 60_000 },
+  { label: 'For 24 hours', ms: 24 * 60 * 60_000 }
 ]
 
 const load = (): ViewerGroup[] => {

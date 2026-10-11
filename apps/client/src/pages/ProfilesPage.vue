@@ -460,10 +460,20 @@ onBeforeRouteLeave(async () => {
             />
           </span>
           <b class="truncate text-[14.5px] font-semibold text-highlighted">No profile</b>
-          <span
+          <UTooltip
             v-if="currentLockedControlsGroup === null"
-            class="row-span-2 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success"
-          >Active</span>
+            text="On: no profile, everything is unlocked"
+          >
+            <span
+              class="row-span-2 grid size-6 place-items-center rounded-full bg-success/15 text-success"
+              aria-label="On"
+            >
+              <UIcon
+                name="i-lucide-power"
+                class="size-3.5"
+              />
+            </span>
+          </UTooltip>
           <small class="col-start-2 truncate text-xs text-muted">{{ defaultProfile ? `Everything unlocked · Default: ${defaultProfile.name}` : 'Everything unlocked' }}</small>
         </button>
         <div class="mx-1 h-px shrink-0 bg-(--ui-border)" />
@@ -489,21 +499,34 @@ onBeforeRouteLeave(async () => {
             </span>
             <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.name }}</b>
             <span class="row-span-2 flex items-center gap-1">
-              <span
+              <UTooltip
                 v-if="defaultLockedControlsGroup === item.id"
-                class="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary"
-                title="Turns on when this avatar first loads"
+                text="Default: turns on when this avatar first loads"
               >
-                <UIcon
-                  name="i-lucide-star"
-                  class="size-3"
-                />
-                Default
-              </span>
-              <span
+                <span
+                  class="grid size-6 place-items-center rounded-full bg-primary/15 text-primary"
+                  aria-label="Default"
+                >
+                  <UIcon
+                    name="i-lucide-star"
+                    class="size-3.5"
+                  />
+                </span>
+              </UTooltip>
+              <UTooltip
                 v-if="currentLockedControlsGroup === item.id"
-                class="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning"
-              >On</span>
+                text="On: viewers get this profile's rules"
+              >
+                <span
+                  class="grid size-6 place-items-center rounded-full bg-warning/15 text-warning"
+                  aria-label="On"
+                >
+                  <UIcon
+                    name="i-lucide-power"
+                    class="size-3.5"
+                  />
+                </span>
+              </UTooltip>
               <!-- .prevent: the menu button sits inside the link, and must not follow it. -->
               <UDropdownMenu
                 v-if="item.id === profileId"
@@ -577,6 +600,117 @@ onBeforeRouteLeave(async () => {
           </UButton>
         </template>
       </PageHeader>
+
+      <!-- Name and Editing for stay put while the control groups scroll under them. basis-full puts them on their own row under the title and actions. -->
+      <div class="grid w-full basis-full grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
+        <FormSection>
+          <UFormField
+            label="Name"
+            required
+            :error="nameError"
+          >
+            <UInput
+              ref="nameInput"
+              v-model="draft.name"
+              placeholder="Stream safe, Public world…"
+              class="w-full"
+              @update:model-value="nameError = undefined"
+            />
+          </UFormField>
+          <div
+            v-if="isActive"
+            class="flex items-center gap-3 rounded-field border border-warning/40 bg-warning/10 px-3.5 py-3 text-sm"
+          >
+            <UIcon
+              name="i-lucide-lock"
+              class="size-5 shrink-0 text-warning"
+            />
+            <span>This profile is on for viewers. You can still use everything.</span>
+          </div>
+        </FormSection>
+
+        <FormSection
+          title="Editing for"
+          :description="
+            editingGroup
+              ? `What ${editingGroup.name} gets instead. Controls you don't change stay the same as for everyone.`
+              : viewerGroups.length
+                ? 'Rules for every viewer. Pick a group to change some controls just for it.'
+                : 'Rules for every viewer.'
+          "
+        >
+          <template
+            v-if="editingGroup && copyItems.length"
+            #actions
+          >
+            <UDropdownMenu
+              :items="copyItems"
+              :content="{ align: 'end' }"
+            >
+              <UButton
+                icon="i-lucide-copy"
+                color="neutral"
+                variant="subtle"
+              >
+                Copy from profile…
+              </UButton>
+            </UDropdownMenu>
+          </template>
+
+          <div
+            v-if="viewerGroups.length"
+            class="flex flex-wrap gap-2"
+            role="radiogroup"
+            aria-label="Editing for"
+          >
+            <UButton
+              role="radio"
+              :aria-checked="editingFor === null"
+              icon="i-lucide-users"
+              size="lg"
+              :color="editingFor === null ? 'primary' : 'neutral'"
+              :variant="editingFor === null ? 'soft' : 'subtle'"
+              class="rounded-full"
+              @click="editingFor = null"
+            >
+              Everyone
+            </UButton>
+            <UButton
+              v-for="group in viewerGroups"
+              :key="group.id"
+              role="radio"
+              :aria-checked="editingFor === group.id"
+              size="lg"
+              :color="editingFor === group.id ? 'primary' : 'neutral'"
+              :variant="editingFor === group.id ? 'soft' : 'subtle'"
+              class="rounded-full"
+              @click="editingFor = group.id"
+            >
+              <span
+                class="size-2.5 rounded-full"
+                :style="{ backgroundColor: group.color }"
+              />
+              {{ group.name }}
+              <span
+                v-if="draftGroupCounts[group.id]"
+                class="font-mono text-xs opacity-70"
+              >+{{ draftGroupCounts[group.id] }}</span>
+            </UButton>
+          </div>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            Want friends or mods to get more than everyone else?
+            <RouterLink
+              to="/viewers/groups"
+              class="text-primary underline underline-offset-3"
+            >
+              Make a viewer group
+            </RouterLink>, then pick it here.
+          </p>
+        </FormSection>
+      </div>
     </template>
 
     <EmptyState
@@ -588,116 +722,8 @@ onBeforeRouteLeave(async () => {
 
     <div
       v-else-if="draft"
-      class="grid max-w-4xl grid-cols-1 gap-3.5"
+      class="grid grid-cols-1 gap-3.5"
     >
-      <FormSection>
-        <UFormField
-          label="Name"
-          required
-          :error="nameError"
-        >
-          <UInput
-            ref="nameInput"
-            v-model="draft.name"
-            placeholder="Stream safe, Public world…"
-            class="w-full"
-            @update:model-value="nameError = undefined"
-          />
-        </UFormField>
-        <div
-          v-if="isActive"
-          class="flex items-center gap-3 rounded-field border border-warning/40 bg-warning/10 px-3.5 py-3 text-sm"
-        >
-          <UIcon
-            name="i-lucide-lock"
-            class="size-5 shrink-0 text-warning"
-          />
-          <span>This profile is on. Viewers can't use locked controls, and limited ones only within their limits. You can still use everything.</span>
-        </div>
-      </FormSection>
-
-      <FormSection
-        title="Editing for"
-        :description="
-          editingGroup
-            ? `What ${editingGroup.name} gets instead of what everyone gets. Controls you don't change here stay the same as for everyone. A viewer in several groups gets the most generous rule.`
-            : viewerGroups.length
-              ? 'These rules apply to every viewer. Pick a group to give its viewers more, or less, on some controls.'
-              : 'These rules apply to every viewer.'
-        "
-      >
-        <template
-          v-if="editingGroup && copyItems.length"
-          #actions
-        >
-          <UDropdownMenu
-            :items="copyItems"
-            :content="{ align: 'end' }"
-          >
-            <UButton
-              icon="i-lucide-copy"
-              color="neutral"
-              variant="subtle"
-            >
-              Copy from profile…
-            </UButton>
-          </UDropdownMenu>
-        </template>
-
-        <div
-          v-if="viewerGroups.length"
-          class="flex flex-wrap gap-2"
-          role="radiogroup"
-          aria-label="Editing for"
-        >
-          <UButton
-            role="radio"
-            :aria-checked="editingFor === null"
-            icon="i-lucide-users"
-            size="lg"
-            :color="editingFor === null ? 'primary' : 'neutral'"
-            :variant="editingFor === null ? 'soft' : 'subtle'"
-            class="rounded-full"
-            @click="editingFor = null"
-          >
-            Everyone
-          </UButton>
-          <UButton
-            v-for="group in viewerGroups"
-            :key="group.id"
-            role="radio"
-            :aria-checked="editingFor === group.id"
-            size="lg"
-            :color="editingFor === group.id ? 'primary' : 'neutral'"
-            :variant="editingFor === group.id ? 'soft' : 'subtle'"
-            class="rounded-full"
-            @click="editingFor = group.id"
-          >
-            <span
-              class="size-2.5 rounded-full"
-              :style="{ backgroundColor: group.color }"
-            />
-            {{ group.name }}
-            <span
-              v-if="draftGroupCounts[group.id]"
-              class="font-mono text-xs opacity-70"
-            >+{{ draftGroupCounts[group.id] }}</span>
-          </UButton>
-        </div>
-        <p
-          v-else
-          class="text-sm text-muted"
-        >
-          Want friends or mods to get more than everyone else?
-          <RouterLink
-            to="/viewers/groups"
-            class="text-primary underline underline-offset-3"
-          >
-            Make a viewer group
-          </RouterLink>, then pick it here.
-        </p>
-      </FormSection>
-
       <FormSection
         v-for="group in controls"
         :key="group.id"
