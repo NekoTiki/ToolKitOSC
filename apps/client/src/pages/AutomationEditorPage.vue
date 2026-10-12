@@ -7,6 +7,7 @@ import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
+import { useControls } from '@renderer/composables/useControls'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
 import type { Automation, AutomationStep, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
@@ -19,9 +20,11 @@ import {
   fitStep,
   MAX_STEPS,
   newAutomation,
-  newBoardStep,
-  newParameterStep,
-  parameterName
+  newStep,
+  parameterName,
+  STEP_KINDS,
+  stepFits,
+  stepKindsFor
 } from '@renderer/utils/automations'
 import { computed, ref, toRaw, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
@@ -32,7 +35,8 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const { automations, running, save, remove, test } = useAutomations()
+const { automations, running, save, remove, test, describeContext } = useAutomations()
+const { getControl } = useControls()
 const { avatarDetails } = useAvatarDetails()
 const { boards } = useBoards()
 const { paused } = useStopEverything()
@@ -125,10 +129,11 @@ const conditionValue = computed({
 
 // ---- Do
 
-const addStep = (kind: AutomationStep['kind']): void => {
+// A new step is a Control: that's what most automations drive.
+const addStep = (): void => {
   if (!draft.value || draft.value.then.length >= MAX_STEPS) return
   const condition = draft.value.when.condition.type
-  draft.value.then.push(kind === 'board-output' ? newBoardStep(condition) : newParameterStep(condition))
+  draft.value.then.push(newStep(stepKindsFor(condition)[0] === 'board-output' ? 'control' : stepKindsFor(condition)[0]!, condition))
 }
 
 const removeStep = (index: number): void => {
@@ -137,15 +142,33 @@ const removeStep = (index: number): void => {
 
 // What's missing from one step, or null.
 const stepProblem = (step: AutomationStep): string | null => {
-  if (step.kind === 'avatar-parameter') {
-    if (!step.parameter) return 'Pick the parameter each step sets.'
-    return step.parameter === draft.value?.when.parameter ? "A step can't set the parameter that triggers it." : null
+  const condition = draft.value?.when.condition.type ?? 'turns-on'
+  if (!stepFits(step, condition)) {
+    return CONDITIONS[condition].moment
+      ? `${STEP_KINDS[step.kind].label} can't hold. Change it, or pick a state like "is on".`
+      : `${STEP_KINDS[step.kind].label} needs a moment, like "turns on".`
   }
-  if (step.pin < 0) return 'Pick the output each step drives.'
-  if (step.output.type !== 'pulse') return null
-  if (step.output.onMs <= 0) return 'Set how long the pulse lasts.'
-  const output = boards.value.find((b) => b.id === step.boardId)?.config?.find((o) => o.pin === step.pin)
-  return output && step.output.onMs > output.maxOnMs ? `The pulse is longer than ${output.label}'s max on-time.` : null
+
+  switch (step.kind) {
+    case 'avatar-parameter':
+      if (!step.parameter) return 'Pick the parameter each step sets.'
+      return step.parameter === draft.value?.when.parameter ? "A step can't set the parameter that triggers it." : null
+    case 'control':
+      if (!step.controlId) return 'Pick the control each step runs.'
+      if (!otherAvatar.value && !getControl(step.groupId, step.controlId)) return 'One of its controls was deleted. Pick another.'
+      return null
+    case 'chatbox':
+      return step.text.trim() ? null : 'Write the chatbox message.'
+    case 'board-output': {
+      if (step.pin < 0) return 'Pick the output each step drives.'
+      if (step.output.type !== 'pulse') return null
+      if (step.output.onMs <= 0) return 'Set how long the pulse lasts.'
+      const output = boards.value.find((b) => b.id === step.boardId)?.config?.find((o) => o.pin === step.pin)
+      return output && step.output.onMs > output.maxOnMs ? `The pulse is longer than ${output.label}'s max on-time.` : null
+    }
+    default:
+      return null
+  }
 }
 
 // Every ESP32 timing is entered in milliseconds.
@@ -227,7 +250,7 @@ onBeforeRouteLeave(async () => {
     <template #header>
       <PageHeader
         :title="isNew ? 'New automation' : draft?.name || 'Automation'"
-        :meta="draft && !problem ? describe(draft, boards) : undefined"
+        :meta="draft && !problem ? describe(draft, describeContext) : undefined"
         :crumbs="[{ label: 'Automations', to: '/automations' }, { label: isNew ? 'New' : draft?.name || 'Untitled' }]"
       >
         <template
@@ -395,17 +418,9 @@ onBeforeRouteLeave(async () => {
             icon="i-lucide-plus"
             color="neutral"
             variant="subtle"
-            @click="addStep('board-output')"
+            @click="addStep"
           >
-            Add ESP32 output
-          </UButton>
-          <UButton
-            icon="i-lucide-plus"
-            color="neutral"
-            variant="subtle"
-            @click="addStep('avatar-parameter')"
-          >
-            Add avatar parameter
+            Add a step
           </UButton>
         </div>
       </FormSection>

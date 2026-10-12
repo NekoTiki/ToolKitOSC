@@ -3,16 +3,14 @@ import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { useBoards } from '@renderer/composables/useBoards'
 import type { Automation } from '@renderer/lib/tauri-bridge'
 import { describe } from '@renderer/utils/automations'
 import { computed } from 'vue'
 
 // Every automation: when something happens, do something. Avatar-parameter automations only run
 // while their avatar is worn, so the current avatar's come first.
-const { automations, running, setEnabled } = useAutomations()
+const { automations, running, setEnabled, describeContext } = useAutomations()
 const { avatarDetails } = useAvatarDetails()
-const { boards } = useBoards()
 
 const forThisAvatar = computed(() =>
   automations.value.filter((a) => a.when.avatarId === avatarDetails.value?.id)
@@ -51,7 +49,6 @@ const groups = computed(() => [
   }))
 ])
 
-const hasOutputs = computed(() => boards.value.some((b) => b.config?.length))
 </script>
 
 <template>
@@ -77,27 +74,15 @@ const hasOutputs = computed(() => boards.value.some((b) => b.config?.length))
       v-if="!automations.length"
       icon="i-lucide-workflow"
       title="No automations yet"
-      :description="
-        hasOutputs
-          ? 'Make your avatar switch things for real: when a parameter changes, pulse, hold or dim an output on your ESP32 board.'
-          : 'Automations switch outputs on your ESP32 boards when an avatar parameter changes. Add a board and its outputs first.'
-      "
+      description="Make the app react to you: when one of your avatar's parameters changes, run a control or a toy, switch profile, post to the chatbox, set another parameter or drive an ESP32 output."
     >
       <template #actions>
         <UButton
-          v-if="hasOutputs"
           icon="i-lucide-plus"
           to="/automations/new"
           :disabled="!avatarDetails"
         >
           New automation
-        </UButton>
-        <UButton
-          v-else
-          icon="i-lucide-cpu"
-          to="/settings/esp32"
-        >
-          Set up an ESP32 board
         </UButton>
       </template>
     </EmptyState>
@@ -146,7 +131,7 @@ const hasOutputs = computed(() => boards.value.some((b) => b.config?.length))
                     class="shrink-0 rounded-full bg-secondary/15 px-2 py-0.5 text-xs font-medium text-secondary"
                   >Running</span>
                 </span>
-                <small class="truncate text-xs text-muted">{{ describe(automation, boards) }}</small>
+                <small class="truncate text-xs text-muted">{{ describe(automation, describeContext) }}</small>
               </div>
               <USwitch
                 :model-value="automation.enabled"

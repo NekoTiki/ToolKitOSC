@@ -129,7 +129,38 @@ export type AvatarParameterAction = {
   valueType: ParameterValueType
   set: ParameterAction
 }
-export type AutomationAction = BoardOutputAction | AvatarParameterAction
+// How a step runs a control. Values are what the control's command takes: a bool for toggles,
+// an option index for enums, 0-1 for sliders and toys, a pattern id for patterns.
+export type ControlRun =
+  | { type: 'set'; value: boolean | number | string }
+  | { type: 'toggle' }
+  // A toy at `value` for `ms`, then off.
+  | { type: 'pulse'; value: number; ms: number }
+  // Presets and shockers.
+  | { type: 'press' }
+  | { type: 'hold'; value: boolean | number | string }
+  | { type: 'follow'; min: number; max: number }
+
+export type ControlAction = { kind: 'control'; groupId: string; controlId: string; controlType: string; run: ControlRun }
+// profileId null: No profile.
+export type ProfileAction = { kind: 'profile'; profileId: string | null; whileHeld: boolean }
+export type ChatboxStepAction = { kind: 'chatbox'; text: string }
+export type StopEverythingAction = { kind: 'stop-everything' }
+
+export type AutomationAction =
+  | BoardOutputAction
+  | AvatarParameterAction
+  | ControlAction
+  | ProfileAction
+  | ChatboxStepAction
+  | StopEverythingAction
+
+// The backend asking the app to carry out a step (see useAutomationRunner.ts). `start` and `stop`
+// bracket a hold; `follow` carries the trigger's value, 0-1.
+export type AutomationRun = { automationId: string; step: number; action: AutomationAction } & (
+  | { phase: 'run' | 'start' | 'stop' }
+  | { phase: 'follow'; value: number }
+)
 
 // One thing an automation does, starting `delayMs` after the trigger.
 export type AutomationStep = AutomationAction & { delayMs: number }
@@ -221,6 +252,9 @@ export const api = {
   },
   onAutomationActivity: (callback: (activity: AutomationActivity) => void): void => {
     void listen<AutomationActivity>('automation-activity', (event) => callback(event.payload))
+  },
+  onAutomationRun: (callback: (run: AutomationRun) => void): void => {
+    void listen<AutomationRun>('automation-run', (event) => callback(event.payload))
   },
   onBoardError: (callback: (error: BoardError) => void): void => {
     void listen<BoardError>('board-error', (event) => callback(event.payload))

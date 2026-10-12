@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use super::model::{Action, Automation, Edge, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType};
+use super::model::{Action, Automation, ControlRun, Edge, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType};
 use crate::boards::protocol::OutputMessage;
 
 /// How long each hold/follow message keeps the output on, and how often it's renewed.
@@ -42,7 +42,9 @@ enum Hold {
     /// On (or dimmed, for a follow) while claimed, renewed by `tick`.
     Pin { board_id: String, pin: u8, follow: bool, duty: f32, sent_at: Option<Instant>, sent_duty: Option<f32> },
     /// Set while claimed; `restore` has what goes back afterwards.
-    Parameter { address: String }
+    Parameter { address: String },
+    /// Run by the frontend, which gets a `stop` when this goes.
+    App { action: Action }
 }
 
 struct Claim {
@@ -82,8 +84,32 @@ pub struct Activity {
     pub running: bool
 }
 
+/// Where an app action is at. The frontend remembers what a `start` changed and puts it back on
+/// `stop`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "phase", rename_all = "kebab-case")]
+pub enum Phase {
+    Run,
+    Start,
+    Stop,
+    /// The trigger's value, 0–1; the frontend maps it onto the step's range.
+    Follow { value: f32 }
+}
+
+/// An action for the frontend to carry out (`automation-run`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppRun {
+    pub automation_id: String,
+    pub step: usize,
+    pub action: Action,
+    #[serde(flatten)]
+    pub phase: Phase
+}
+
 pub enum Effect {
     Send(String, OutputMessage),
+    App(AppRun),
     /// Sets one of the worn avatar's parameters.
     Parameter { address: String, value_type: ValueType, value: f64 },
     Activity(Activity)
@@ -103,6 +129,10 @@ pub struct State {
     values: HashMap<String, f64>,
     /// Ids last reported as running.
     reported: HashSet<String>
+}
+
+fn app(automation: &Automation, step: usize, action: &Action, phase: Phase) -> Effect {
+    Effect::App(AppRun { automation_id: automation.id.clone(), step, action: action.clone(), phase })
 }
 
 fn is_future(at: Option<Instant>, now: Instant) -> bool {
@@ -167,13 +197,7 @@ impl State {
         let busy = automation
             .then
             .iter()
-            .map(|step| {
-                let length = match &step.action {
-                    Action::BoardOutput { output, .. } => output.busy_ms().unwrap_or(0),
-                    Action::AvatarParameter { .. } => 0
-                };
-                step.delay_ms.saturating_add(length)
-            })
+            .map(|step| step.delay_ms.saturating_add(step.action.busy_ms()))
             .max()
             .unwrap_or(0);
         let runtime = self.runtime.entry(automation.id.clone()).or_default();
@@ -202,15 +226,17 @@ impl State {
             return;
         };
         match step.action.runs() {
-            Runs::Moment => self.moment(automation, &step.action, now, env, effects),
+            Runs::Moment => self.moment(automation, index, &step.action, now, env, effects),
             Runs::State => self.claim(automation, index, &step.action, 1.0, now, env, effects),
             // Follows run on every change, never from a delay (validation rules that out).
             Runs::Follow => {}
         }
     }
 
-    fn moment(&mut self, automation: &Automation, action: &Action, now: Instant, env: &dyn Env, effects: &mut Vec<Effect>) {
+    #[allow(clippy::too_many_arguments)]
+    fn moment(&mut self, automation: &Automation, index: usize, action: &Action, now: Instant, env: &dyn Env, effects: &mut Vec<Effect>) {
         match action {
+            action if action.in_app() => effects.push(app(automation, index, action, Phase::Run)),
             Action::BoardOutput { board_id, pin, output } => {
                 let key = (board_id.clone(), *pin);
                 match output {
@@ -258,7 +284,8 @@ impl State {
                     self.set_parameter(parameter, *value_type, if on { 0.0 } else { 1.0 }, effects);
                 }
                 ParameterAction::Hold { .. } | ParameterAction::Follow { .. } => {}
-            }
+            },
+            Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => {}
         }
     }
 
@@ -286,6 +313,9 @@ impl State {
                     let target = min + f64::from(value) * (max - min);
                     self.set_parameter(parameter, *value_type, target, effects);
                 }
+                Action::Control { run: ControlRun::Follow { .. }, .. } => {
+                    effects.push(app(automation, index, &step.action, Phase::Follow { value }));
+                }
                 _ => {}
             }
         }
@@ -312,6 +342,14 @@ impl State {
                 self.set_parameter(parameter, *value_type, *value, effects);
             }
             Action::AvatarParameter { .. } => {}
+            action if action.in_app() => {
+                if self.claims.iter().any(|c| c.automation_id == automation.id && c.step == index) {
+                    return;
+                }
+                self.claims.push(Claim { automation_id: automation.id.clone(), step: index, hold: Hold::App { action: action.clone() } });
+                effects.push(app(automation, index, action, Phase::Start));
+            }
+            _ => {}
         }
     }
 
@@ -349,16 +387,20 @@ impl State {
         while index < self.claims.len() {
             let claim = &self.claims[index];
             if claim.automation_id == automation_id && step.map_or(true, |s| s == claim.step) {
-                released.push(self.claims.remove(index).hold);
+                let claim = self.claims.remove(index);
+                released.push((claim.step, claim.hold));
             } else {
                 index += 1;
             }
         }
 
-        for hold in released {
+        for (step, hold) in released {
             match hold {
                 Hold::Pin { board_id, pin, .. } => self.release_pin(&board_id, pin, now, effects),
-                Hold::Parameter { address } => self.release_parameter(&address, effects)
+                Hold::Parameter { address } => self.release_parameter(&address, effects),
+                Hold::App { action } => {
+                    effects.push(Effect::App(AppRun { automation_id: automation_id.to_string(), step, action, phase: Phase::Stop }));
+                }
             }
         }
     }
@@ -420,8 +462,8 @@ impl State {
         effects
     }
 
-    /// The avatar changed: every output lets go. Parameter holds are dropped without setting
-    /// anything back, since those parameters belonged to the old avatar.
+    /// The avatar changed: every output lets go. Parameter and app holds are dropped without
+    /// setting anything back, since what they changed belonged to the old avatar.
     pub fn release_all(&mut self) -> Vec<Effect> {
         let now = Instant::now();
         let mut effects = Vec::new();
@@ -457,7 +499,7 @@ impl State {
     }
 
     /// Stop everything: the boards get `stop` separately, so this only forgets what was running.
-    /// Held parameters go back to what they were.
+    /// Held parameters go back to what they were, and the frontend gets a `stop` for its holds.
     pub fn set_paused(&mut self, paused: bool) -> Vec<Effect> {
         self.paused = paused;
         let mut effects = Vec::new();
@@ -465,7 +507,11 @@ impl State {
             return effects;
         }
         let parameters: Vec<String> = self.restore.keys().cloned().collect();
-        self.claims.clear();
+        for claim in std::mem::take(&mut self.claims) {
+            if let Hold::App { action } = claim.hold {
+                effects.push(Effect::App(AppRun { automation_id: claim.automation_id, step: claim.step, action, phase: Phase::Stop }));
+            }
+        }
         for address in parameters {
             self.release_parameter(&address, &mut effects);
         }
@@ -798,6 +844,92 @@ mod tests {
         change(&mut state, 0.0, 1.0);
 
         assert_eq!(parameters(&state.set_paused(true)), vec![("/avatar/parameters/Ears".to_string(), 0.0)]);
+    }
+
+    fn app_phases(effects: &[Effect]) -> Vec<(usize, Phase)> {
+        effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::App(run) => Some((run.step, run.phase.clone())),
+                _ => None
+            })
+            .collect()
+    }
+
+    fn control(run: ControlRun, control_type: &str) -> Step {
+        Step {
+            action: Action::Control { group_id: "g".into(), control_id: "c".into(), control_type: control_type.into(), run },
+            delay_ms: 0
+        }
+    }
+
+    #[test]
+    fn app_moments_run_once() {
+        let mut state = State::default();
+        state.automations.push(automation_with(
+            "a",
+            Condition::TurnsOn,
+            ValueType::Bool,
+            vec![control(ControlRun::Press, "preset"), Step { action: Action::Chatbox { text: "Boop!".into() }, delay_ms: 0 }]
+        ));
+
+        assert_eq!(app_phases(&change_effects(&mut state, 0.0, 1.0)), vec![(0, Phase::Run), (1, Phase::Run)]);
+    }
+
+    #[test]
+    fn app_holds_start_and_stop() {
+        let mut state = State::default();
+        state.automations.push(automation_with(
+            "a",
+            Condition::IsOn,
+            ValueType::Bool,
+            vec![control(ControlRun::Hold { value: serde_json::json!(true) }, "boolean")]
+        ));
+
+        assert_eq!(app_phases(&change_effects(&mut state, 0.0, 1.0)), vec![(0, Phase::Start)]);
+        assert!(app_phases(&change_effects(&mut state, 1.0, 1.0)).is_empty());
+        assert_eq!(app_phases(&change_effects(&mut state, 1.0, 0.0)), vec![(0, Phase::Stop)]);
+
+        change(&mut state, 0.0, 1.0);
+        assert_eq!(app_phases(&state.set_paused(true)), vec![(0, Phase::Stop)]);
+    }
+
+    #[test]
+    fn app_holds_are_dropped_on_avatar_change() {
+        let mut state = State::default();
+        state.automations.push(automation_with(
+            "a",
+            Condition::IsOn,
+            ValueType::Bool,
+            vec![Step { action: Action::Profile { profile_id: Some("p".into()), while_held: true }, delay_ms: 0 }]
+        ));
+        change(&mut state, 0.0, 1.0);
+        assert!(app_phases(&state.release_all()).is_empty());
+    }
+
+    #[test]
+    fn app_follow_passes_the_value() {
+        let mut state = State::default();
+        state.automations.push(automation_with(
+            "a",
+            Condition::Any,
+            ValueType::Float,
+            vec![control(ControlRun::Follow { min: 0.0, max: 1.0 }, "intiface-toy")]
+        ));
+        assert_eq!(app_phases(&change_effects(&mut state, 0.0, 0.25)), vec![(0, Phase::Follow { value: 0.25 })]);
+    }
+
+    #[test]
+    fn toy_pulse_keeps_it_running() {
+        let mut state = State::default();
+        state.automations.push(automation_with(
+            "a",
+            Condition::TurnsOn,
+            ValueType::Bool,
+            vec![control(ControlRun::Pulse { value: 0.5, ms: 2000 }, "intiface-toy")]
+        ));
+        change(&mut state, 0.0, 1.0);
+        assert!(state.is_running("a", Instant::now()));
     }
 
     #[test]
