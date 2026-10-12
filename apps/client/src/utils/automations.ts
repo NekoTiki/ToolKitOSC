@@ -178,12 +178,6 @@ export const stepCanWait = (step: AutomationAction): boolean => stepRuns(step) !
 
 // The kinds of step that have something to do on this condition.
 export const STEP_KINDS: Record<AutomationStep['kind'], { label: string; description: string; icon: string; runs: Runs[] }> = {
-  'board-output': {
-    label: 'ESP32 output',
-    description: 'Switch something wired to one of your boards.',
-    icon: 'i-lucide-cpu',
-    runs: ['moment', 'state', 'follow']
-  },
   'avatar-parameter': {
     label: 'Avatar parameter',
     description: "Set one of your avatar's own parameters.",
@@ -194,6 +188,12 @@ export const STEP_KINDS: Record<AutomationStep['kind'], { label: string; descrip
     label: 'Control',
     description: 'Run one of your controls, toys included.',
     icon: 'i-lucide-gamepad-2',
+    runs: ['moment', 'state', 'follow']
+  },
+  'board-output': {
+    label: 'ESP32 output',
+    description: 'Switch something wired to one of your boards.',
+    icon: 'i-lucide-cpu',
     runs: ['moment', 'state', 'follow']
   },
   profile: { label: 'Profile', description: 'Switch to another profile.', icon: 'i-lucide-shield', runs: ['moment', 'state'] },
@@ -529,7 +529,7 @@ export const newAutomation = (avatarId: string, avatarName: string): Automation 
     anyAvatar: false,
     heldMs: 0
   },
-  then: [newStep('control', 'turns-on')],
+  then: [newStep('avatar-parameter', 'turns-on')],
   cooldownMs: 0,
   retrigger: 'restart',
   onlyIf: []

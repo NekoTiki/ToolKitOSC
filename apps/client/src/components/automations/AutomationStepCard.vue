@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
+import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
@@ -59,6 +59,8 @@ const kinds = computed(() => {
   const fitting = stepKindsFor(props.condition)
   return fitting.includes(step.value.kind) ? fitting : [...fitting, step.value.kind]
 })
+
+const kindItems = computed(() => kinds.value.map((kind) => ({ value: kind, label: STEP_KINDS[kind].label, icon: STEP_KINDS[kind].icon })))
 
 const setKind = (kind: AutomationStep['kind']): void => {
   if (step.value.kind === kind) return
@@ -322,30 +324,48 @@ const toInt = (value: number | string): number => Math.min(255, Math.max(0, Math
 
 <template>
   <div class="grid gap-3.5 rounded-field border border-default bg-(--aurora-glass) p-3.5">
-    <div class="flex items-center gap-2">
+    <!-- The header carries the delay, so the body is only about what the step does. -->
+    <div class="flex flex-wrap items-center gap-2.5">
       <span class="text-sm font-semibold text-highlighted">Step {{ index + 1 }}</span>
+      <label
+        v-if="stepCanWait(step)"
+        class="ml-auto flex items-center gap-2 text-sm text-muted"
+        :title="`How long after it's triggered this step starts. Up to ${formatMs(MAX_DELAY_MS)}.`"
+      >
+        After
+        <UInput
+          :model-value="step.delayMs"
+          type="number"
+          min="0"
+          :max="MAX_DELAY_MS"
+          step="100"
+          class="w-28"
+          aria-label="Milliseconds after it's triggered"
+          @update:model-value="step.delayMs = toMs($event, MAX_DELAY_MS)"
+        />
+        ms
+      </label>
       <UButton
         v-if="canRemove"
-        icon="i-lucide-x"
+        icon="i-lucide-trash-2"
         color="neutral"
         variant="ghost"
-        size="sm"
-        class="ml-auto"
+        :class="stepCanWait(step) ? '' : 'ml-auto'"
         :aria-label="`Remove step ${index + 1}`"
         @click="emit('remove')"
       />
     </div>
 
-    <div class="grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3">
-      <ChoiceCard
-        v-for="kind in kinds"
-        :key="kind"
-        :title="STEP_KINDS[kind].label"
-        :description="STEP_KINDS[kind].description"
-        :icon="STEP_KINDS[kind].icon"
-        :selected="step.kind === kind"
-        @click="setKind(kind)"
+    <div class="grid gap-1.5">
+      <OptionGrid
+        :model-value="step.kind"
+        :items="kindItems"
+        aria-label="What this step does"
+        @update:model-value="setKind"
       />
+      <p class="text-[13px] text-muted">
+        {{ STEP_KINDS[step.kind].description }}
+      </p>
     </div>
 
     <template v-if="board">
@@ -733,22 +753,5 @@ const toInt = (value: number | string): number => Math.min(255, Math.max(0, Math
     >
       Stops every toy, pattern, shock and board output and pauses your controls, like the button in the top bar.
     </p>
-
-    <UFormField
-      v-if="stepCanWait(step)"
-      label="After"
-      :description="`Milliseconds after it's triggered. Up to ${formatMs(MAX_DELAY_MS)}.`"
-      class="max-w-56"
-    >
-      <UInput
-        :model-value="step.delayMs"
-        type="number"
-        min="0"
-        :max="MAX_DELAY_MS"
-        step="100"
-        class="w-full"
-        @update:model-value="step.delayMs = toMs($event, MAX_DELAY_MS)"
-      />
-    </UFormField>
   </div>
 </template>
