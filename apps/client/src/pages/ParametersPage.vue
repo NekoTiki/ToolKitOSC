@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import ParameterValue from '@renderer/components/parameters/ParameterValue.vue'
+import PhysBoneGrid from '@renderer/components/parameters/PhysBoneGrid.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
+import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -13,16 +15,15 @@ import { useRoute, useRouter } from 'vue-router'
 
 // Every parameter of the loaded avatar with its live value, which controls use it, and whether
 // it's excluded from presets - one table replacing the parameters modal and the excluded
-// parameters modal. Filters live in the sidebar; `?filter=` deep-links one (Presets links to
-// the excluded list).
-type Filter = 'all' | 'received' | 'missing' | 'used' | 'excluded'
+// parameters modal. `?filter=physbones` swaps the table for one live card per PhysBone. The
+// table's filters (used by controls, excluded from presets, received) are toggles in the header;
+// `?filter=excluded` opens with the excluded one on (Presets links there).
+type Filter = 'all' | 'physbones'
+type Received = 'any' | 'received' | 'missing'
 
 const FILTERS: { value: Filter; label: string; icon: string }[] = [
   { value: 'all', label: 'All parameters', icon: 'i-lucide-list-tree' },
-  { value: 'received', label: 'Received', icon: 'i-lucide-circle-check' },
-  { value: 'missing', label: 'Not received yet', icon: 'i-lucide-clock' },
-  { value: 'used', label: 'Used by controls', icon: 'i-lucide-layout-grid' },
-  { value: 'excluded', label: 'Excluded from presets', icon: 'i-lucide-eye-off' }
+  { value: 'physbones', label: 'PhysBones', icon: 'i-lucide-bone' }
 ]
 
 const route = useRoute()
@@ -38,7 +39,22 @@ const filter = computed<Filter>({
   set: (value) => void router.replace({ query: value === 'all' ? {} : { filter: value } })
 })
 
+const RECEIVED: { value: Received; label: string; icon?: string }[] = [
+  { value: 'any', label: 'All' },
+  { value: 'received', label: 'Received', icon: 'i-lucide-circle-check' },
+  { value: 'missing', label: 'Not received', icon: 'i-lucide-clock' }
+]
+
 const search = ref('')
+const received = ref<Received>('any')
+const usedOnly = ref(false)
+const excludedOnly = ref(route.query.filter === 'excluded')
+
+const TOGGLES = [
+  { label: 'Used by controls', icon: 'i-lucide-layout-grid', ref: usedOnly },
+  { label: 'Excluded from presets', icon: 'i-lucide-eye-off', ref: excludedOnly }
+]
+const physBoneGrid = ref<InstanceType<typeof PhysBoneGrid> | null>(null)
 const showNoisy = ref(false)
 const sortDesc = ref(false)
 const pulling = ref(false)
@@ -112,20 +128,19 @@ const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: tr
 
 const visibleRows = computed(() => allRows.value.filter((row) => showNoisy.value || !row.noisy))
 
-const counts = computed<Record<Filter, number>>(() => ({
-  all: visibleRows.value.length,
-  received: visibleRows.value.filter((row) => row.received).length,
-  missing: visibleRows.value.filter((row) => !row.received).length,
-  used: visibleRows.value.filter((row) => row.usedBy.length).length,
-  excluded: visibleRows.value.filter((row) => row.excluded).length
-}))
+const counts = computed(() => ({ all: visibleRows.value.length }))
+
+const receivedCount = computed(() => visibleRows.value.filter((row) => row.received).length)
 
 const noisyCount = computed(() => allRows.value.filter((row) => row.noisy).length)
 
 const rows = computed(() => {
   const query = search.value.trim().toLowerCase()
   const matches = (row: Row): boolean =>
-    ({ all: true, received: row.received, missing: !row.received, used: row.usedBy.length > 0, excluded: row.excluded })[filter.value]
+    filter.value === 'all' &&
+    ({ any: true, received: row.received, missing: !row.received })[received.value] &&
+    (!usedOnly.value || row.usedBy.length > 0) &&
+    (!excludedOnly.value || row.excluded)
 
   return visibleRows.value
     .filter((row) => matches(row) && (!query || row.name.toLowerCase().includes(query) || row.address.toLowerCase().includes(query)))
@@ -206,7 +221,7 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
             />
           </span>
           <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.label }}</b>
-          <small class="col-start-2 text-xs text-muted">{{ counts[item.value] }} parameters</small>
+          <small class="col-start-2 text-xs text-muted">{{ item.value === 'physbones' ? 'Grabbed, posed, stretched…' : `${counts.all} parameters` }}</small>
         </button>
 
         <RouterLink
@@ -261,9 +276,41 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
 
     <template #header>
       <PageHeader
-        title="Parameters"
-        :meta="avatarDetails ? `${counts.received} of ${counts.all} received · live` : undefined"
+        v-if="filter === 'physbones'"
+        title="PhysBones"
+        :meta="avatarDetails ? `${physBoneGrid?.total ?? 0} PhysBones · ${physBoneGrid?.grabbed ?? 0} grabbed · live` : undefined"
       />
+      <PageHeader
+        v-else
+        title="Parameters"
+        :meta="avatarDetails ? `${receivedCount} of ${counts.all} received · live` : undefined"
+      >
+        <template
+          v-if="avatarDetails"
+          #actions
+        >
+          <button
+            v-for="toggle in TOGGLES"
+            :key="toggle.label"
+            type="button"
+            class="flex h-12 shrink-0 cursor-pointer items-center gap-1.5 rounded-[calc(var(--ui-radius)*4)] glass px-4 text-sm font-medium transition-colors"
+            :class="toggle.ref.value ? 'text-primary ring-1 ring-primary/50' : 'text-muted hover:text-default'"
+            :aria-pressed="toggle.ref.value"
+            @click="toggle.ref.value = !toggle.ref.value"
+          >
+            <UIcon
+              :name="toggle.icon"
+              class="size-4"
+            />
+            {{ toggle.label }}
+          </button>
+          <SegmentedControl
+            v-model="received"
+            :items="RECEIVED"
+            aria-label="Received values"
+          />
+        </template>
+      </PageHeader>
     </template>
 
     <EmptyState
@@ -271,6 +318,12 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
       icon="i-lucide-radio-tower"
       title="VRChat not detected"
       description="Parameters show up here once VRChat sends your avatar over OSC."
+    />
+
+    <PhysBoneGrid
+      v-else-if="filter === 'physbones'"
+      ref="physBoneGrid"
+      :search="search"
     />
 
     <div
