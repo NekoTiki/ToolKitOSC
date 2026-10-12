@@ -121,13 +121,13 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
   const { devices: intifaceDevices, isAvailable: intifaceAvailable } = useIntiface()
   const { presets } = usePresets()
 
-  // `getControl` returns the computed copy with derived locked/unavailable flags - strip them so
-  // they're never saved back.
+  // `getControl` returns the computed copy with flags derived from the profile and services - strip
+  // them so they're never saved back.
   const source = controlId ? getControl(groupId, controlId) : undefined
   const initial = (): AnyDraft => {
     if (!source) return { type: 'boolean', name: '', inputAddress: '' }
 
-    return _.omit(_.cloneDeep(source), ['locked', 'unavailable']) as AnyDraft
+    return _.omit(_.cloneDeep(source), ['locked', 'unavailable', 'limits', 'groupRules']) as AnyDraft
   }
 
   // Cast rather than ref<AnyDraft>(): unwrapping this wide type sends TS past its depth limit.

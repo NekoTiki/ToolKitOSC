@@ -69,6 +69,11 @@ const badges = inject(
           :alt="badge.label"
           class="size-full object-cover"
         >
+        <span
+          v-else-if="badge.color"
+          class="size-2.5 rounded-full"
+          :style="{ backgroundColor: badge.color }"
+        />
         <UIcon
           v-else-if="badge.icon"
           :name="badge.icon"

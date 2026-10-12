@@ -323,6 +323,7 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
                 :locked="control.locked"
                 :unavailable="control.unavailable"
                 :limits="control.limits"
+                :via-group="control.viaGroup"
                 :offline="hostOffline"
                 @command="sendCommand(groupId, control, $event)"
               />

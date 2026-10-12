@@ -2,7 +2,7 @@
 // hand-parsed independently in useWebsocketHost.ts (client), useWebsocketClient.ts (server app),
 // and the Nitro routes server/routes/host.ts + server/routes/ws/[ws].ts. Shapes below are taken
 // directly from those call sites, not guessed.
-import type { ControlCommand, ControlGroup, ControlTypes } from './controls'
+import type { ControlCommand, ControlGroup, ControlTypes, ViewerGroupInfo } from './controls'
 import type { OpenShockCommandResult, OpenShockControlValue } from './openShock'
 import type { OSCArg } from './osc'
 import type { ColorFamilyWithoutNeutral } from './theme'
@@ -28,6 +28,11 @@ export interface WsEnvelope<Type extends string, Message> {
 // Additive, no bump: 'pause-state' (host -> server) and 'host-paused' (server -> viewer). An older
 // server drops the first and an older viewer page ignores the second; the host rejects commands
 // while paused either way.
+//
+// Additive, no bump: controls may carry `groupRules` (host -> server) and `viaGroup` (server ->
+// viewer), and the host sends 'viewer-groups'. An older server drops 'viewer-groups' and sends
+// everyone the rules for everyone; the host checks each viewer's groups either way, so groups just
+// don't open anything up until the server is updated.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
@@ -197,6 +202,16 @@ export interface ShareSettingsMessage {
   showViewers: boolean
 }
 
+// Which viewer groups the people on the share page are in, so the server can send each of them
+// their own copy of the controls (see resolveControlForViewer). Only lists viewers who are online
+// and in a group; sent again whenever that or a group's name or color changes, and after each
+// auth-success.
+export interface ViewerGroupsMessage {
+  groups: ViewerGroupInfo[]
+  // Session id (ClientListEntry.peerId) -> group ids.
+  members: Record<string, string[]>
+}
+
 // Stop everything: the host stopped every toy, pattern and shocker, and rejects viewer commands
 // until it resumes. Sent on every change and after each auth-success.
 export interface PauseStateMessage {
@@ -263,6 +278,7 @@ export type HostToServerMessage =
   | WsEnvelope<'share-settings', ShareSettingsMessage>
   | WsEnvelope<'command-accepted', CommandAcceptedMessage>
   | WsEnvelope<'pause-state', PauseStateMessage>
+  | WsEnvelope<'viewer-groups', ViewerGroupsMessage>
 
 // Server -> desktop client, over /host. `command`/`update-username` are relays of a viewer's
 // message with a `from` (session id) field appended directly onto the envelope, not nested.

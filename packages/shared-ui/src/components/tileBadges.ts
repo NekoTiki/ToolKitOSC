@@ -8,6 +8,8 @@ export interface TileBadge {
   label: string
   icon?: string
   avatar?: string
+  // A CSS color: the badge is a dot of that color instead of an icon (a viewer group's color).
+  color?: string
   tone?: 'warning' | 'info' | 'muted'
 }
 

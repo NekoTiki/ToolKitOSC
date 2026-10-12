@@ -6,6 +6,7 @@ import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { usePresets } from '@renderer/composables/usePresets'
+import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import type {
   BooleanEnumControl,
   CommandWithoutIds,
@@ -14,7 +15,8 @@ import type {
   EnumControl,
   LastUser,
   OpenShockCommandResult,
-  StepEnumControl
+  StepEnumControl,
+  ViewerGroupRule
 } from '@toolkitosc/shared-ui'
 import { useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
@@ -91,7 +93,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   ) => OpenShockCommandResult | undefined
 } {
   const { avatarDetails } = useAvatarDetails(() => loadControls())
-  const { lockedControls, controlLimits } = useLockedControls()
+  const { lockedControls, controlLimits, groupOverrides } = useLockedControls()
+  const { viewerGroups } = useViewerGroups()
   const { command: osCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
   const {
@@ -104,6 +107,20 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { update } = useOscMessages()
   const { getPreset } = usePresets()
 
+  // The active profile's rules for each viewer group, by control id then group id. Groups that
+  // were deleted are left out.
+  const groupRulesByControl = computed(() => {
+    const byControl = new Map<string, Record<string, ViewerGroupRule>>()
+
+    viewerGroups.value.forEach((group) => {
+      Object.entries(groupOverrides.value[group.id] ?? {}).forEach(([controlId, rule]) => {
+        byControl.set(controlId, { ...byControl.get(controlId), [group.id]: rule })
+      })
+    })
+
+    return byControl
+  })
+
   const controls = computed((): ControlGroup[] => {
     return controlsList.value.map((controlGroup) => ({
       ...controlGroup,
@@ -111,6 +128,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         ...control,
         locked: lockedControls.value[control.id] ?? false,
         limits: controlLimits.value[control.id],
+        groupRules: groupRulesByControl.value.get(control.id),
         // OpenShock/Intiface controls are unavailable to everyone - same as a locked control -
         // unless the service is actually reachable (see useOpenShock.ts/useIntiface.ts). An
         // Intiface toy/pattern control is additionally unavailable when every toy it targets has
@@ -236,7 +254,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     // Callers pass groups from `controls`, so drop the derived flags it adds.
     controlsList.value = groups.map((group) => ({
       ...group,
-      controls: group.controls.map((control) => _.omit(control, ['locked', 'unavailable', 'limits']) as ControlType)
+      controls: group.controls.map((control) => _.omit(control, ['locked', 'unavailable', 'limits', 'groupRules']) as ControlType)
     }))
 
     saveControls()

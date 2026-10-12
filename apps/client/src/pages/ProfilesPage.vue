@@ -5,9 +5,10 @@ import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
-import type { LockedControlGroup } from '@renderer/composables/useLockedControls'
-import { profileCounts, profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
-import type { ControlLimits, ControlType } from '@toolkitosc/shared-ui'
+import type { GroupOverrides, LockedControlGroup } from '@renderer/composables/useLockedControls'
+import { groupOverrideCounts, profileCounts, profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
+import { useViewerGroups } from '@renderer/composables/useViewerGroups'
+import type { ControlLimits, ControlType, ViewerGroupRule } from '@toolkitosc/shared-ui'
 import { CONTROL_TYPE_LABELS, isOptionDisabled, LIMITABLE_CONTROL_TYPES, limitRange, normalizeLimits } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue'
@@ -34,6 +35,7 @@ const {
   removeLockedControlGroup
 } = useLockedControls()
 const { openModal: confirm } = useAreYouSureModal()
+const { viewerGroups } = useViewerGroups()
 
 const isNew = route.name === 'profile-new'
 const profileId = computed(() => (typeof route.params.profileId === 'string' ? route.params.profileId : null))
@@ -52,16 +54,18 @@ interface Draft {
   name: string
   lockedControls: Record<string, boolean>
   limits: Record<string, ControlLimits>
+  groupOverrides: Record<string, GroupOverrides>
 }
 
 const initial = (): Draft | null => {
-  if (isNew) return { name: '', lockedControls: {}, limits: {} }
+  if (isNew) return { name: '', lockedControls: {}, limits: {}, groupOverrides: {} }
   if (!profile.value) return null
 
   return {
     name: profile.value.name,
     lockedControls: _.cloneDeep(profile.value.lockedControls),
-    limits: _.cloneDeep(profile.value.limits ?? {})
+    limits: _.cloneDeep(profile.value.limits ?? {}),
+    groupOverrides: _.cloneDeep(profile.value.groupOverrides ?? {})
   }
 }
 
@@ -79,12 +83,55 @@ const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== sn
 const nameError = ref<string>()
 const saved = ref(false)
 
-const isLocked = (control: ControlType): boolean => !!draft.value?.lockedControls[control.id]
+// --- Editing for -------------------------------------------------------------------------------
+// The editor shows the rules for everyone, or for one viewer group: what the group gets instead. In
+// a group's view every control starts as "same as everyone", and only what's changed is saved.
+
+// The viewer group being edited, or null for everyone.
+const editingFor = ref<string | null>(null)
+const editingGroup = computed(() => viewerGroups.value.find((group) => group.id === editingFor.value) ?? null)
+
+watch(viewerGroups, () => {
+  if (editingFor.value && !editingGroup.value) editingFor.value = null
+})
+
+const ruleOf = (control: ControlType): ViewerGroupRule | undefined =>
+  editingFor.value ? draft.value?.groupOverrides[editingFor.value]?.[control.id] : undefined
+
+// Changes the edited group's rule for a control. A rule left with nothing in it is removed, and so
+// is a group left with no rules.
+const changeRule = (control: ControlType, change: (rule: ViewerGroupRule) => void): void => {
+  if (!draft.value || !editingFor.value) return
+
+  const rules = (draft.value.groupOverrides[editingFor.value] ??= {})
+  const rule = (rules[control.id] ??= {})
+
+  change(rule)
+  if (rule.locked === undefined && rule.limits === undefined) delete rules[control.id]
+  if (!Object.keys(rules).length) delete draft.value.groupOverrides[editingFor.value]
+}
+
+const isOverridden = (control: ControlType): boolean => !!ruleOf(control)
+
+const resetToEveryone = (control: ControlType): void =>
+  changeRule(control, (rule) => {
+    delete rule.locked
+    delete rule.limits
+  })
+
+const lockedForEveryone = (control: ControlType): boolean => !!draft.value?.lockedControls[control.id]
+
+const isLocked = (control: ControlType): boolean => ruleOf(control)?.locked ?? lockedForEveryone(control)
 
 const setAllowed = (control: ControlType, allowed: boolean): void => {
   if (!draft.value) return
 
-  if (allowed) delete draft.value.lockedControls[control.id]
+  if (editingFor.value) {
+    changeRule(control, (rule) => {
+      if (allowed === !lockedForEveryone(control)) delete rule.locked
+      else rule.locked = !allowed
+    })
+  } else if (allowed) delete draft.value.lockedControls[control.id]
   else draft.value.lockedControls[control.id] = true
 }
 
@@ -98,7 +145,25 @@ const controlTotal = computed(() => allControls.value.length)
 
 const draftCounts = computed(() => profileCounts(draft.value ?? { lockedControls: {} }, controlIds.value))
 
-const summary = (item: LockedControlGroup): string => profileSummary(item, controlIds.value)
+const draftGroupCounts = computed(() => groupOverrideCounts(draft.value ?? {}, controlIds.value))
+
+const summary = (item: LockedControlGroup): string => profileSummary(item, controlIds.value, viewerGroups.value)
+
+// Other profiles of this avatar with rules for the group being edited, to copy them from.
+const copySources = computed(() =>
+  lockedControlGroups.value.filter((item) => item.id !== profileId.value && !!editingFor.value && !!item.groupOverrides?.[editingFor.value])
+)
+
+const copyRulesFrom = (source: LockedControlGroup): void => {
+  if (!draft.value || !editingFor.value) return
+
+  draft.value.groupOverrides[editingFor.value] = _.cloneDeep(source.groupOverrides![editingFor.value]!)
+  toast.add({ title: `Copied the ${editingGroup.value?.name} rules from "${source.name}"`, icon: 'i-lucide-copy' })
+}
+
+const copyItems = computed<DropdownMenuItem[]>(() =>
+  copySources.value.map((source) => ({ label: source.name, icon: 'i-lucide-lock', onSelect: () => copyRulesFrom(source) }))
+)
 
 const defaultProfile = computed(() => lockedControlGroups.value.find((g) => g.id === defaultLockedControlsGroup.value) ?? null)
 const isDefault = computed(() => !!profileId.value && defaultLockedControlsGroup.value === profileId.value)
@@ -106,7 +171,11 @@ const isDefault = computed(() => !!profileId.value && defaultLockedControlsGroup
 const headerMeta = computed(() => {
   const { locked, limited } = draftCounts.value
 
-  return [`${locked} of ${controlTotal.value} controls locked`, limited ? `${limited} limited` : '', isDefault.value ? 'Default' : '']
+  const forGroups = viewerGroups.value
+    .filter((group) => draftGroupCounts.value[group.id])
+    .map((group) => `${group.name} +${draftGroupCounts.value[group.id]}`)
+
+  return [`${locked} of ${controlTotal.value} controls locked`, limited ? `${limited} limited` : '', ...forGroups, isDefault.value ? 'Default' : '']
     .filter(Boolean)
     .join(' · ')
 })
@@ -114,16 +183,30 @@ const headerMeta = computed(() => {
 // --- Limits -------------------------------------------------------------------------------------
 
 const isLimitable = (control: ControlType): boolean => (LIMITABLE_CONTROL_TYPES as readonly string[]).includes(control.type)
-const limitsOf = (control: ControlType): ControlLimits | undefined => draft.value?.limits[control.id]
+const limitsForEveryone = (control: ControlType): ControlLimits | undefined => draft.value?.limits[control.id]
+
+const limitsOf = (control: ControlType): ControlLimits | undefined => {
+  const rule = ruleOf(control)
+
+  return rule?.limits ? normalizeLimits(rule.limits) : limitsForEveryone(control)
+}
+
 const isLimited = (control: ControlType): boolean => !isLocked(control) && !!limitsOf(control)
 
 // Stored normalized, so a range dragged back to 0-100 % or a chip turned back on leaves no entry.
+// For a group, limits that match everyone's leave no entry either, and "no limits" while everyone
+// has some is stored as `{}`.
 const setLimits = (control: ControlType, limits: ControlLimits | undefined): void => {
   if (!draft.value) return
 
   const normalized = normalizeLimits(limits)
 
-  if (normalized) draft.value.limits[control.id] = normalized
+  if (editingFor.value) {
+    changeRule(control, (rule) => {
+      if (_.isEqual(normalized, limitsForEveryone(control))) delete rule.limits
+      else rule.limits = normalized ?? {}
+    })
+  } else if (normalized) draft.value.limits[control.id] = normalized
   else delete draft.value.limits[control.id]
 }
 
@@ -211,7 +294,12 @@ const save = (): boolean => {
     return false
   }
 
-  const data = { name, lockedControls: pruned(draft.value.lockedControls), limits: pruned(draft.value.limits) }
+  // Rules for deleted groups are dropped, and so are groups left with none.
+  const groupOverrides = _.pickBy(
+    _.mapValues(_.pick(draft.value.groupOverrides, viewerGroups.value.map((group) => group.id)), (rules) => pruned(rules)),
+    (rules) => !_.isEmpty(rules)
+  )
+  const data = { name, lockedControls: pruned(draft.value.lockedControls), limits: pruned(draft.value.limits), groupOverrides }
 
   if (isNew) {
     saved.value = true
@@ -271,7 +359,8 @@ const duplicate = (item: LockedControlGroup): void => {
   const id = addLockedControlGroup({
     name: `${item.name} copy`,
     lockedControls: _.cloneDeep(item.lockedControls),
-    limits: _.cloneDeep(item.limits ?? {})
+    limits: _.cloneDeep(item.limits ?? {}),
+    groupOverrides: _.cloneDeep(item.groupOverrides ?? {})
   })
 
   toast.add({ title: `Duplicated "${item.name}"`, icon: 'i-lucide-copy' })
@@ -371,10 +460,20 @@ onBeforeRouteLeave(async () => {
             />
           </span>
           <b class="truncate text-[14.5px] font-semibold text-highlighted">No profile</b>
-          <span
+          <UTooltip
             v-if="currentLockedControlsGroup === null"
-            class="row-span-2 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success"
-          >Active</span>
+            text="On: no profile, everything is unlocked"
+          >
+            <span
+              class="row-span-2 grid size-6 place-items-center rounded-full bg-success/15 text-success"
+              aria-label="On"
+            >
+              <UIcon
+                name="i-lucide-power"
+                class="size-3.5"
+              />
+            </span>
+          </UTooltip>
           <small class="col-start-2 truncate text-xs text-muted">{{ defaultProfile ? `Everything unlocked · Default: ${defaultProfile.name}` : 'Everything unlocked' }}</small>
         </button>
         <div class="mx-1 h-px shrink-0 bg-(--ui-border)" />
@@ -400,21 +499,34 @@ onBeforeRouteLeave(async () => {
             </span>
             <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.name }}</b>
             <span class="row-span-2 flex items-center gap-1">
-              <span
+              <UTooltip
                 v-if="defaultLockedControlsGroup === item.id"
-                class="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary"
-                title="Turns on when this avatar first loads"
+                text="Default: turns on when this avatar first loads"
               >
-                <UIcon
-                  name="i-lucide-star"
-                  class="size-3"
-                />
-                Default
-              </span>
-              <span
+                <span
+                  class="grid size-6 place-items-center rounded-full bg-primary/15 text-primary"
+                  aria-label="Default"
+                >
+                  <UIcon
+                    name="i-lucide-star"
+                    class="size-3.5"
+                  />
+                </span>
+              </UTooltip>
+              <UTooltip
                 v-if="currentLockedControlsGroup === item.id"
-                class="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning"
-              >On</span>
+                text="On: viewers get this profile's rules"
+              >
+                <span
+                  class="grid size-6 place-items-center rounded-full bg-warning/15 text-warning"
+                  aria-label="On"
+                >
+                  <UIcon
+                    name="i-lucide-power"
+                    class="size-3.5"
+                  />
+                </span>
+              </UTooltip>
               <!-- .prevent: the menu button sits inside the link, and must not follow it. -->
               <UDropdownMenu
                 v-if="item.id === profileId"
@@ -488,6 +600,117 @@ onBeforeRouteLeave(async () => {
           </UButton>
         </template>
       </PageHeader>
+
+      <!-- Name and Editing for stay put while the control groups scroll under them. basis-full puts them on their own row under the title and actions. -->
+      <div class="grid w-full basis-full grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
+        <FormSection>
+          <UFormField
+            label="Name"
+            required
+            :error="nameError"
+          >
+            <UInput
+              ref="nameInput"
+              v-model="draft.name"
+              placeholder="Stream safe, Public world…"
+              class="w-full"
+              @update:model-value="nameError = undefined"
+            />
+          </UFormField>
+          <div
+            v-if="isActive"
+            class="flex items-center gap-3 rounded-field border border-warning/40 bg-warning/10 px-3.5 py-3 text-sm"
+          >
+            <UIcon
+              name="i-lucide-lock"
+              class="size-5 shrink-0 text-warning"
+            />
+            <span>This profile is on for viewers. You can still use everything.</span>
+          </div>
+        </FormSection>
+
+        <FormSection
+          title="Editing for"
+          :description="
+            editingGroup
+              ? `What ${editingGroup.name} gets instead. Controls you don't change stay the same as for everyone.`
+              : viewerGroups.length
+                ? 'Rules for every viewer. Pick a group to change some controls just for it.'
+                : 'Rules for every viewer.'
+          "
+        >
+          <template
+            v-if="editingGroup && copyItems.length"
+            #actions
+          >
+            <UDropdownMenu
+              :items="copyItems"
+              :content="{ align: 'end' }"
+            >
+              <UButton
+                icon="i-lucide-copy"
+                color="neutral"
+                variant="subtle"
+              >
+                Copy from profile…
+              </UButton>
+            </UDropdownMenu>
+          </template>
+
+          <div
+            v-if="viewerGroups.length"
+            class="flex flex-wrap gap-2"
+            role="radiogroup"
+            aria-label="Editing for"
+          >
+            <UButton
+              role="radio"
+              :aria-checked="editingFor === null"
+              icon="i-lucide-users"
+              size="lg"
+              :color="editingFor === null ? 'primary' : 'neutral'"
+              :variant="editingFor === null ? 'soft' : 'subtle'"
+              class="rounded-full"
+              @click="editingFor = null"
+            >
+              Everyone
+            </UButton>
+            <UButton
+              v-for="group in viewerGroups"
+              :key="group.id"
+              role="radio"
+              :aria-checked="editingFor === group.id"
+              size="lg"
+              :color="editingFor === group.id ? 'primary' : 'neutral'"
+              :variant="editingFor === group.id ? 'soft' : 'subtle'"
+              class="rounded-full"
+              @click="editingFor = group.id"
+            >
+              <span
+                class="size-2.5 rounded-full"
+                :style="{ backgroundColor: group.color }"
+              />
+              {{ group.name }}
+              <span
+                v-if="draftGroupCounts[group.id]"
+                class="font-mono text-xs opacity-70"
+              >+{{ draftGroupCounts[group.id] }}</span>
+            </UButton>
+          </div>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            Want friends or mods to get more than everyone else?
+            <RouterLink
+              to="/viewers/groups"
+              class="text-primary underline underline-offset-3"
+            >
+              Make a viewer group
+            </RouterLink>, then pick it here.
+          </p>
+        </FormSection>
+      </div>
     </template>
 
     <EmptyState
@@ -499,34 +722,8 @@ onBeforeRouteLeave(async () => {
 
     <div
       v-else-if="draft"
-      class="grid max-w-4xl grid-cols-1 gap-3.5"
+      class="grid grid-cols-1 gap-3.5"
     >
-      <FormSection>
-        <UFormField
-          label="Name"
-          required
-          :error="nameError"
-        >
-          <UInput
-            ref="nameInput"
-            v-model="draft.name"
-            placeholder="Stream safe, Public world…"
-            class="w-full"
-            @update:model-value="nameError = undefined"
-          />
-        </UFormField>
-        <div
-          v-if="isActive"
-          class="flex items-center gap-3 rounded-field border border-warning/40 bg-warning/10 px-3.5 py-3 text-sm"
-        >
-          <UIcon
-            name="i-lucide-lock"
-            class="size-5 shrink-0 text-warning"
-          />
-          <span>This profile is on. Viewers can't use locked controls, and limited ones only within their limits. You can still use everything.</span>
-        </div>
-      </FormSection>
-
       <FormSection
         v-for="group in controls"
         :key="group.id"
@@ -570,6 +767,20 @@ onBeforeRouteLeave(async () => {
               >
                 Limits
               </UButton>
+              <UButton
+                v-if="isOverridden(control)"
+                icon="i-lucide-rotate-ccw"
+                color="neutral"
+                variant="ghost"
+                :title="`Give ${editingGroup?.name} the same as everyone on ${control.name}`"
+                @click="resetToEveryone(control)"
+              >
+                Reset to everyone
+              </UButton>
+              <small
+                v-else-if="editingGroup"
+                class="text-xs text-muted"
+              >Same as everyone</small>
               <span
                 class="rounded-full px-2.5 py-0.5 text-xs font-medium"
                 :class="isLocked(control) ? 'bg-warning/15 text-warning' : isLimited(control) ? 'bg-info/15 text-info' : 'bg-success/15 text-success'"

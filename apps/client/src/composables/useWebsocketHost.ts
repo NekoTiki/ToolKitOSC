@@ -13,15 +13,17 @@ import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { useShareSettings } from '@renderer/composables/useShareSettings'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
+import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import { checkClient } from '@renderer/utils/checkClient'
 import { AUTHENTICATED_MAX_PER_WINDOW, isRateLimited } from '@renderer/utils/rateLimit'
-import type { ClientListEntry, ControlTypes } from '@toolkitosc/shared-ui'
+import type { ClientListEntry, ControlTypes, ViewerGroupsMessage } from '@toolkitosc/shared-ui'
 import {
   INTIFACE_PATTERN_OFF_ID,
   isOptionDisabled,
   limitRange,
   PROTOCOL_VERSION,
+  resolveControlForViewer,
   sanitizeCommand,
   useIntifaceControl,
   useIntifacePatternControl,
@@ -155,6 +157,7 @@ export function useWebsocketHost(): {
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
   const { paused } = useStopEverything()
+  const { viewerGroups, activeGroupIds } = useViewerGroups()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
   const { status, data, send, open, close } = useWebSocket(() => `${serverWsUrl.value}/host`, {
@@ -195,6 +198,7 @@ export function useWebsocketHost(): {
         sendTheme()
         sendMessage('share-settings', shareSettings.value)
         sendMessage('pause-state', { paused: paused.value })
+        sendMessage('viewer-groups', viewerGroupsMessage.value)
       } else if (data.type === 'auth-error') {
         console.error('Authentication failed:', data.message)
         setToken(undefined)
@@ -245,9 +249,10 @@ export function useWebsocketHost(): {
           // sanitizeCommand also applies the active profile's limits: a blocked option or a value
           // of the wrong type is dropped the same way, and slider/toy values are clamped to the
           // allowed range. The relay already did this, but the host has the final say.
-          const control = getControl(data.message.groupId, data.message.controlId)
-          const command = control ? sanitizeCommand(control, data.message) : undefined
+          // The viewer's groups can give them more than the profile gives everyone.
           const viewer = describeViewer(client)
+          const control = getControl(data.message.groupId, data.message.controlId)
+          const command = control ? sanitizeCommand(resolveControlForViewer(control, activeGroupIds(viewer.key)), data.message) : undefined
           const { ip } = viewer
 
           if (command !== null && !isGroupHidden(data.message.groupId)) {
@@ -436,11 +441,34 @@ export function useWebsocketHost(): {
     if (status.value === 'OPEN') sendMessage('pause-state', { paused: value })
   })
 
+  // Who on the share page is in which viewer group, so the server sends each of them their own
+  // copy of the controls. Changes when someone joins or leaves, is added to or removed from a
+  // group, a temporary membership ends, or a group is renamed or recolored.
+  const viewerGroupsMessage = computed<ViewerGroupsMessage>(() => {
+    const members: Record<string, string[]> = {}
+
+    clients.value.forEach((client) => {
+      const ids = activeGroupIds(describeViewer(client).key)
+
+      if (ids.length) members[client.peerId] = ids
+    })
+
+    return { groups: viewerGroups.value, members }
+  })
+
+  watch(viewerGroupsMessage, (message, previous) => {
+    if (status.value === 'OPEN' && JSON.stringify(message) !== JSON.stringify(previous)) sendMessage('viewer-groups', message)
+  })
+
   // When a profile turns on, or its limits change while it's on, bring running toys within the new
   // limits: a toy above its new max drops to it, and a pattern that's now blocked stops. Only ever
-  // lowers, so it can't start anything; slider and enum avatar state is left alone.
+  // lowers, so it can't start anything; slider and enum avatar state is left alone. Uses the most
+  // a viewer group gets, so a friend's toy isn't cut to what everyone else may set.
   watch(
-    () => controls.value.flatMap((group) => group.controls).map((control) => [control, control.limits] as const),
+    () =>
+      controls.value
+        .flatMap((group) => group.controls)
+        .map((control) => [control, resolveControlForViewer(control, Object.keys(control.groupRules ?? {})).limits] as const),
     (entries, previous) => {
       const before = new Map(previous?.map(([control, limits]) => [control.id, JSON.stringify(limits)]))
 
