@@ -1,6 +1,8 @@
 import type {
+  AppEvent,
   Automation,
   AutomationAction,
+  AutomationGuard,
   AutomationStep,
   AutomationTrigger,
   AvatarParameterAction,
@@ -344,7 +346,25 @@ const formatValue = (value: number, valueType: ParameterValueType): string =>
 // Seconds when it's a round number of them, like "held for 2 s".
 const formatSeconds = (ms: number): string => (ms % 1000 === 0 ? `${ms / 1000} s` : formatMs(ms))
 
-export const describeWhen = (when: AutomationTrigger): string => {
+export type AppEventType = AppEvent['type']
+
+export const APP_EVENTS: Record<AppEventType, { label: string; description: string }> = {
+  'viewer-command': { label: 'A viewer uses a control', description: 'On the share page: a control you pick, any shock, or anything.' },
+  'viewer-joined': { label: 'A viewer joins', description: 'Someone opens your share page.' },
+  'first-viewer': { label: 'First viewer joins', description: 'Your share page goes from nobody to someone.' },
+  'last-viewer-left': { label: 'Last viewer leaves', description: 'Nobody is on your share page any more.' },
+  resumed: { label: 'Controls resume', description: 'You turn Stop everything off again.' }
+}
+
+const describeEvent = (event: AppEvent, context?: DescribeContext): string => {
+  if (event.type !== 'viewer-command') return APP_EVENTS[event.type].label.toLowerCase()
+  if (event.controlType === 'open-shock-shocker' && !event.controlId) return 'a viewer sends a shock'
+  if (!event.controlId) return 'a viewer uses a control'
+  return `a viewer uses ${context?.controlName?.(event.controlId) ?? 'a control'}`
+}
+
+export const describeWhen = (when: AutomationTrigger, context?: DescribeContext): string => {
+  if (when.kind === 'app-event') return describeEvent(when.event, context)
   if (when.kind === 'avatar-changed') return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
   const value = 'value' in when.condition ? ` ${when.condition.value}` : ''
@@ -353,6 +373,7 @@ export const describeWhen = (when: AutomationTrigger): string => {
 }
 
 // What the steps have to fit: an avatar change is a moment, like a parameter turning on.
+// App events and avatar changes are moments.
 export const triggerCondition = (when: AutomationTrigger): ConditionType =>
   when.kind === 'avatar-parameter' ? when.condition.type : 'turns-on'
 
@@ -397,7 +418,7 @@ export const describeParameterAction = (action: AvatarParameterAction): string =
 // Names the steps point at. Controls and profiles are only known for the worn avatar.
 export interface DescribeContext {
   boards: Board[]
-  controlName?: (groupId: string, controlId: string) => string | undefined
+  controlName?: (controlId: string) => string | undefined
   profileName?: (id: string) => string | undefined
 }
 
@@ -422,7 +443,7 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
       what = describeParameterAction(step)
       break
     case 'control':
-      what = `${context.controlName?.(step.groupId, step.controlId) ?? 'a control'}: ${describeControlRun(step.run)}`
+      what = `${context.controlName?.(step.controlId) ?? 'a control'}: ${describeControlRun(step.run)}`
       break
     case 'profile': {
       const name = step.profileId ? (context.profileName?.(step.profileId) ?? 'a profile') : 'No profile'
@@ -438,8 +459,29 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
   return step.delayMs ? `after ${formatMs(step.delayMs)}, ${what}` : what
 }
 
-export const describe = (automation: Automation, context: DescribeContext): string =>
-  `When ${describeWhen(automation.when)} → ${automation.then.map((step) => describeStep(step, context)).join(' · ')}`
+// Conditions an "only if" can check: states only.
+export const GUARD_CONDITIONS: ConditionType[] = ['is-on', 'is', 'is-above']
+
+export const MAX_GUARDS = 4
+
+export const describeGuard = (guard: AutomationGuard, context: DescribeContext): string => {
+  switch (guard.kind) {
+    case 'parameter': {
+      const value = 'value' in guard.condition ? ` ${guard.condition.value}` : ''
+      const verb = guard.condition.type === 'is-on' ? 'is on' : guard.condition.type === 'is' ? 'is' : 'is above'
+      return `${parameterName(guard.parameter)} ${guard.not ? verb.replace(/^is/, "isn't") : verb}${value}`
+    }
+    case 'profile':
+      return guard.profileId ? `${context.profileName?.(guard.profileId) ?? 'a profile'} is active` : 'no profile is active'
+    default:
+      return guard.online ? 'viewers are on' : 'nobody is watching'
+  }
+}
+
+export const describe = (automation: Automation, context: DescribeContext): string => {
+  const onlyIf = automation.onlyIf.length ? `, only if ${automation.onlyIf.map((g) => describeGuard(g, context)).join(' and ')}` : ''
+  return `When ${describeWhen(automation.when, context)}${onlyIf} → ${automation.then.map((step) => describeStep(step, context)).join(' · ')}`
+}
 
 export const newAutomation = (avatarId: string, avatarName: string): Automation => ({
   id: crypto.randomUUID(),
@@ -457,5 +499,6 @@ export const newAutomation = (avatarId: string, avatarName: string): Automation 
   },
   then: [newStep('control', 'turns-on')],
   cooldownMs: 0,
-  retrigger: 'restart'
+  retrigger: 'restart',
+  onlyIf: []
 })

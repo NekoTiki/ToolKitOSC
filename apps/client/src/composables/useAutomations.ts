@@ -35,12 +35,12 @@ export function useAutomations(): {
   test: (id: string) => Promise<void>
 } {
   const { boards } = useBoards()
-  const { getControl } = useControls()
+  const { controls } = useControls()
   const { getLockedControlGroup } = useLockedControls()
   const describeContext = computed(
     (): DescribeContext => ({
       boards: boards.value,
-      controlName: (groupId, controlId) => getControl(groupId, controlId)?.name,
+      controlName: (controlId) => controls.value.flatMap((group) => group.controls).find((c) => c.id === controlId)?.name,
       profileName: (id) => getLockedControlGroup(id)?.name
     })
   )

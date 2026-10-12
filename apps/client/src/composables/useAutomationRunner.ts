@@ -1,5 +1,6 @@
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useChatbox } from '@renderer/composables/useChatbox'
+import { useClientsDb } from '@renderer/composables/useClientsDb'
 import { useControls } from '@renderer/composables/useControls'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -8,9 +9,11 @@ import type { AutomationRun, ControlAction, ProfileAction } from '@renderer/lib/
 import { api } from '@renderer/lib/tauri-bridge'
 import type { CommandWithoutIds, ControlType } from '@toolkitosc/shared-ui'
 import { useIntifaceControl, useIntifacePatternControl } from '@toolkitosc/shared-ui'
+import { watch } from 'vue'
 
 // Carries out the automation steps that live in the app: controls, profiles, the chatbox and
-// Stop everything. The backend decides when (src-tauri/src/automations/engine.rs) and sends
+// Stop everything, and tells the backend what automations can start from or check: viewers coming
+// and going, controls resuming, the active profile. The backend decides when (src-tauri/src/automations/engine.rs) and sends
 // `automation-run`; a hold comes as `start`, then `stop`, and whatever `start` changed is put
 // back on `stop`. Automations act as you, so profile locks and limits don't apply to them.
 // Stop everything still does: nothing new starts while it's on.
@@ -33,6 +36,31 @@ export function useAutomationRunner(): void {
   const { paused, stop: stopEverything } = useStopEverything()
   const { controlValue: toyValues } = useIntifaceControl()
   const { controlValue: patternValues } = useIntifacePatternControl()
+  const { onlineClients } = useClientsDb()
+
+  // Before the events below, so "only if viewers are on" already counts a first viewer.
+  watch(
+    [currentLockedControlsGroup, () => onlineClients.value.size],
+    ([profileId, viewers]) => void api.automationsSetContext({ profileId, viewers }),
+    { immediate: true }
+  )
+
+  watch(
+    () => onlineClients.value.size,
+    (now, before) => {
+      if (now > before) {
+        if (before === 0) void api.automationEvent({ type: 'first-viewer' })
+        void api.automationEvent({ type: 'viewer-joined' })
+      } else if (now === 0 && before > 0) {
+        void api.automationEvent({ type: 'last-viewer-left' })
+      }
+    }
+  )
+
+  // After useStopEverythingTriggers has told the backend it's no longer paused (it's set up first).
+  watch(paused, (now, before) => {
+    if (before && !now) void api.automationEvent({ type: 'resumed' })
+  })
 
   // What each running hold changed, keyed by automation and step, to put back on `stop`.
   const held = new Map<string, Value | string | null>()
