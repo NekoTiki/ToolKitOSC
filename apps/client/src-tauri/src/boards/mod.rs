@@ -313,7 +313,7 @@ fn link(app: &AppHandle, id: &str) -> Option<mpsc::UnboundedSender<LinkCommand>>
     boards(app).inner.lock().unwrap().links.get(id).cloned()
 }
 
-fn is_online(app: &AppHandle, id: &str) -> bool {
+pub fn is_online(app: &AppHandle, id: &str) -> bool {
     boards(app).inner.lock().unwrap().status.get(id).map(|(s, _)| *s) == Some(LinkStatus::Online)
 }
 
