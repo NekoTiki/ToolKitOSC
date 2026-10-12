@@ -1,7 +1,9 @@
-import type { IntifaceActuatorRef } from '@toolkitosc/shared-ui'
+import type { IntifaceActuatorRef, IntifacePatternRef } from '@toolkitosc/shared-ui'
 import { INTIFACE_PATTERN_OFF_ID, useIntifacePatternControl } from '@toolkitosc/shared-ui'
 
 import { useIntiface } from './useIntiface'
+import type { SavedPattern } from './useSavedPatterns'
+import { PATTERN_SAMPLE_MS, useSavedPatterns } from './useSavedPatterns'
 
 // Buttplug/Intiface has no server-side concept of a named, timed pattern (Pulse/Wave/...) - every
 // message is a one-shot "set this value now" instruction (see the ScalarCmd usage in
@@ -14,6 +16,8 @@ export interface IntifacePatternDefinition {
   icon?: string
   // Scalar value (0-1) this pattern wants at `elapsedMs` since it started playing.
   value: (elapsedMs: number) => number
+  // Set for a pattern the host recorded (see useSavedPatterns.ts): the length of one loop.
+  durationMs?: number
 }
 
 // Deterministic PRNG so 'Random' doesn't need to carry mutable state between calls - the same
@@ -23,13 +27,21 @@ const seededRandom = (seed: number): number => {
   return x - Math.floor(x)
 }
 
-// Built-in patterns only, for now - this registry is deliberately the one and only place that
-// knows how to turn a pattern id into an actual waveform. A control only ever stores a pattern's
-// id/name/icon (see IntifacePatternRef in controls.ts), denormalized at authoring time the same
-// way a toy's name is - so a future custom/user-authored pattern just needs its own
-// IntifacePatternDefinition added to a registry (this one, or a second user-editable one merged
-// alongside it); nothing about the control data, the settings picker, or playback below needs to
-// change to accommodate it.
+// Smooth noise: a random level every `stepMs`, eased from one to the next instead of jumping.
+const smoothNoise = (t: number, stepMs: number, seedOffset = 0): number => {
+  const position = t / stepMs
+  const step = Math.floor(position)
+  const f = position - step
+  const eased = f * f * (3 - 2 * f)
+  const from = seededRandom(step + seedOffset)
+
+  return from + (seededRandom(step + 1 + seedOffset) - from) * eased
+}
+
+// The one place that knows how to turn a pattern id into an actual waveform. A control only ever
+// stores a pattern's id/name/icon (see IntifacePatternRef in controls.ts), denormalized at authoring
+// time the same way a toy's name is. Two registries feed it: the built-in patterns below and the
+// ones the host recorded (useSavedPatterns.ts), which getPattern looks up first.
 export const BUILTIN_PATTERNS: IntifacePatternDefinition[] = [
   {
     id: 'pulse',
@@ -57,16 +69,40 @@ export const BUILTIN_PATTERNS: IntifacePatternDefinition[] = [
     id: 'random',
     name: 'Random',
     icon: 'i-lucide-shuffle',
-    value: (t) => {
-      const stepMs = 350
-
-      return seededRandom(Math.floor(t / stepMs))
-    }
+    // A slow drift with a little faster wobble on top, kept off the extremes, so it wanders instead
+    // of jumping between full random levels.
+    value: (t) => 0.15 + 0.75 * (0.75 * smoothNoise(t, 1200) + 0.25 * smoothNoise(t, 400, 1000))
   }
 ]
 
-export const getPattern = (id: string): IntifacePatternDefinition | undefined =>
-  BUILTIN_PATTERNS.find((pattern) => pattern.id === id)
+// A recording loops its samples, one every PATTERN_SAMPLE_MS.
+export const toDefinition = (pattern: Pick<SavedPattern, 'id' | 'name' | 'icon' | 'samples'>): IntifacePatternDefinition => ({
+  id: pattern.id,
+  name: pattern.name,
+  icon: pattern.icon,
+  durationMs: pattern.samples.length * PATTERN_SAMPLE_MS,
+  value: (t) => (pattern.samples[Math.floor(t / PATTERN_SAMPLE_MS) % pattern.samples.length] ?? 0) / 100
+})
+
+const { savedPatterns, getSavedPattern } = useSavedPatterns()
+
+// Every pattern a control can offer: the host's own first, then the built-in ones.
+export const allPatterns = (): IntifacePatternDefinition[] => [...savedPatterns.value.map(toDefinition), ...BUILTIN_PATTERNS]
+
+export const getPattern = (id: string): IntifacePatternDefinition | undefined => {
+  const saved = getSavedPattern(id)
+
+  return saved ? toDefinition(saved) : BUILTIN_PATTERNS.find((pattern) => pattern.id === id)
+}
+
+// A control's copy of each pattern's name and icon goes stale when the host renames a recording,
+// and points at nothing once it's deleted. This refreshes the copies and drops the missing ones.
+export const resolvePatternRefs = (refs: IntifacePatternRef[]): IntifacePatternRef[] =>
+  refs.flatMap((ref) => {
+    const pattern = getPattern(ref.id)
+
+    return pattern ? [{ id: pattern.id, name: pattern.name, icon: pattern.icon }] : []
+  })
 
 const PLAYBACK_INTERVAL_MS = 50
 
@@ -90,6 +126,8 @@ export function useIntifacePatterns(): {
   // driving a given actuator's value at a time, whether that's another running pattern or this one
   // replacing its own previous pattern.
   playPattern: (controlId: string, patternId: string, actuators: IntifaceActuatorRef[]) => void
+  // Same, for a pattern that isn't in a registry (yet): the Patterns page tries out an unsaved take.
+  playDefinition: (controlId: string, pattern: IntifacePatternDefinition, actuators: IntifaceActuatorRef[]) => void
   stopPattern: (controlId: string) => void
   // Stops any running pattern (other than `exceptControlId`) that owns any of `actuators` - call
   // this whenever something else is about to drive one of these actuators directly (a plain toy
@@ -143,8 +181,11 @@ export function useIntifacePatterns(): {
 
     const pattern = getPattern(patternId)
 
-    if (!pattern) return
+    if (pattern) playDefinition(controlId, pattern, actuators)
+  }
 
+  const playDefinition = (controlId: string, pattern: IntifacePatternDefinition, actuators: IntifaceActuatorRef[]): void => {
+    stopPattern(controlId)
     releaseActuators(actuators, controlId)
 
     const startedAt = Date.now()
@@ -158,7 +199,7 @@ export function useIntifacePatterns(): {
     const timer = setInterval(tick, PLAYBACK_INTERVAL_MS)
 
     runningPatterns.set(controlId, { actuators, startedAt, timer })
-    setPatternValue(controlId, patternId)
+    setPatternValue(controlId, pattern.id)
   }
 
   const stopAllPatterns = (): void => {
@@ -169,5 +210,5 @@ export function useIntifacePatterns(): {
     })
   }
 
-  return { playPattern, stopPattern, releaseActuators, stopAllPatterns }
+  return { playPattern, playDefinition, stopPattern, releaseActuators, stopAllPatterns }
 }

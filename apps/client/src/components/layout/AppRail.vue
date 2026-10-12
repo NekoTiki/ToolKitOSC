@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiSession } from '@renderer/composables/useAiSession'
+import { useIntiface } from '@renderer/composables/useIntiface'
 import { uniqueClientCount } from '@renderer/composables/useWebsocketHost'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -20,10 +21,13 @@ const route = useRoute()
 const router = useRouter()
 const { access: aiAccess } = useAiAccess()
 const { generating: aiGenerating, unseen: aiUnseen } = useAiSession()
+const { enabled: intifaceEnabled } = useIntiface()
 
 const items = computed<RailItem[]>(() => [
   { key: 'controls', label: 'Controls', icon: 'i-lucide-layout-grid', to: '/controls' },
   { key: 'presets', label: 'Presets', icon: 'i-lucide-layers', to: '/presets' },
+  // Toy patterns only matter with Intiface turned on in Settings.
+  ...(intifaceEnabled.value ? [{ key: 'patterns', label: 'Patterns', icon: 'i-lucide-audio-waveform', to: '/patterns' }] : []),
   { key: 'automations', label: 'Automations', icon: 'i-lucide-workflow', to: '/automations' },
   { key: 'profiles', label: 'Profiles', icon: 'i-lucide-lock', to: '/profiles' },
   { key: 'viewers', label: 'Viewers', icon: 'i-lucide-users', to: '/viewers', badge: uniqueClientCount.value },
