@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use super::model::{Action, AppEvent, Automation, Context, ControlRun, Edge, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType};
+use super::model::{Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType};
 use crate::boards::protocol::OutputMessage;
 
 /// How long each hold/follow message keeps the output on, and how often it's renewed.
@@ -40,7 +40,7 @@ struct Runtime {
 
 enum Hold {
     /// On (or dimmed, for a follow) while claimed, renewed by `tick`.
-    Pin { board_id: String, pin: u8, follow: bool, duty: f32, sent_at: Option<Instant>, sent_duty: Option<f32> },
+    Pin { board_id: String, pin: u8, follow: bool, duty: f32, sent_at: Option<Instant>, sent_duty: Option<f32>, chatbox: bool },
     /// Set while claimed; `restore` has what goes back afterwards.
     Parameter { address: String },
     /// Run by the frontend, which gets a `stop` when this goes.
@@ -115,7 +115,9 @@ pub enum Effect {
     Parameter { address: String, value_type: ValueType, value: f64 },
     Activity(Activity),
     /// An automation started (a moment fired, or a state began), for "Last ran".
-    Ran(String)
+    Ran(String),
+    /// An output step with `chatbox` on switched it on or off.
+    Chatbox { board_id: String, pin: u8, note: BoardNote }
 }
 
 #[derive(Default)]
@@ -281,8 +283,9 @@ impl State {
     fn moment(&mut self, automation: &Automation, index: usize, action: &Action, now: Instant, env: &dyn Env, effects: &mut Vec<Effect>) {
         match action {
             action if action.in_app() => effects.push(app(automation, index, action, Phase::Run)),
-            Action::BoardOutput { board_id, pin, output } => {
+            Action::BoardOutput { board_id, pin, output, chatbox } => {
                 let key = (board_id.clone(), *pin);
+                let note = |note: BoardNote| Effect::Chatbox { board_id: board_id.clone(), pin: *pin, note };
                 match output {
                     OutputAction::Pulse { on_ms, off_ms, count } => {
                         let pin_state = self.pins.entry(key).or_default();
@@ -291,6 +294,9 @@ impl State {
                             board_id.clone(),
                             OutputMessage::Pulse { pin: *pin, on_ms: *on_ms, off_ms: *off_ms, count: *count }
                         ));
+                        if *chatbox {
+                            effects.push(note(BoardNote::Pulse { on_ms: *on_ms, count: *count }));
+                        }
                     }
                     OutputAction::Toggle => {
                         let pin_state = self.pins.entry(key).or_default();
@@ -298,6 +304,9 @@ impl State {
                             pin_state.toggled_until = None;
                             pin_state.toggled_by = None;
                             effects.push(Effect::Send(board_id.clone(), OutputMessage::Set { pin: *pin, on: false, ms: 0 }));
+                            if *chatbox {
+                                effects.push(note(BoardNote::Off));
+                            }
                         } else {
                             // On until toggled again, never past the output's max on-time. A
                             // pulse, so reaching that limit doesn't trip the output.
@@ -308,6 +317,9 @@ impl State {
                                 board_id.clone(),
                                 OutputMessage::Pulse { pin: *pin, on_ms: ms, off_ms: 0, count: 1 }
                             ));
+                            if *chatbox {
+                                effects.push(note(BoardNote::On));
+                            }
                         }
                     }
                     OutputAction::Off => {
@@ -316,6 +328,9 @@ impl State {
                         self.claims.retain(|c| !matches!(&c.hold, Hold::Pin { board_id: b, pin: p, .. } if b == board_id && p == pin));
                         self.pins.remove(&key);
                         effects.push(Effect::Send(board_id.clone(), OutputMessage::Set { pin: *pin, on: false, ms: 0 }));
+                        if *chatbox {
+                            effects.push(note(BoardNote::Off));
+                        }
                     }
                     // State and follow actions don't run on moments (validation rules that out).
                     OutputAction::Hold | OutputAction::Follow { .. } => {}
@@ -399,9 +414,10 @@ impl State {
 
     #[allow(clippy::too_many_arguments)]
     fn claim_pin(&mut self, automation: &Automation, index: usize, action: &Action, follow: bool, duty: f32, now: Instant, effects: &mut Vec<Effect>) {
-        let Action::BoardOutput { board_id, pin, .. } = action else {
+        let Action::BoardOutput { board_id, pin, chatbox, .. } = action else {
             return;
         };
+        let chatbox = *chatbox && !follow;
 
         if let Some(claim) = self.claims.iter_mut().find(|c| c.automation_id == automation.id && c.step == index) {
             if let Hold::Pin { duty: claimed, sent_at, sent_duty, .. } = &mut claim.hold {
@@ -417,10 +433,13 @@ impl State {
         }
 
         effects.push(Effect::Send(board_id.clone(), pin_message(*pin, follow, duty)));
+        if chatbox {
+            effects.push(Effect::Chatbox { board_id: board_id.clone(), pin: *pin, note: BoardNote::On });
+        }
         self.claims.push(Claim {
             automation_id: automation.id.clone(),
             step: index,
-            hold: Hold::Pin { board_id: board_id.clone(), pin: *pin, follow, duty, sent_at: Some(now), sent_duty: Some(duty) }
+            hold: Hold::Pin { board_id: board_id.clone(), pin: *pin, follow, duty, sent_at: Some(now), sent_duty: Some(duty), chatbox }
         });
     }
 
@@ -440,7 +459,7 @@ impl State {
 
         for (step, hold) in released {
             match hold {
-                Hold::Pin { board_id, pin, .. } => self.release_pin(&board_id, pin, now, effects),
+                Hold::Pin { board_id, pin, chatbox, .. } => self.release_pin(&board_id, pin, chatbox, now, effects),
                 Hold::Parameter { address } => self.release_parameter(&address, effects),
                 Hold::App { action } => {
                     effects.push(Effect::App(AppRun { automation_id: automation_id.to_string(), step, action, phase: Phase::Stop }));
@@ -449,8 +468,8 @@ impl State {
         }
     }
 
-    /// Switches the output off unless something else still has it on.
-    fn release_pin(&mut self, board_id: &str, pin: u8, now: Instant, effects: &mut Vec<Effect>) {
+    /// Switches the output off unless something else still has it on, and with `chatbox` says so.
+    fn release_pin(&mut self, board_id: &str, pin: u8, chatbox: bool, now: Instant, effects: &mut Vec<Effect>) {
         if self.claims.iter().any(|c| matches!(&c.hold, Hold::Pin { board_id: b, pin: p, .. } if b == board_id && *p == pin)) {
             return;
         }
@@ -460,6 +479,9 @@ impl State {
             }
         }
         effects.push(Effect::Send(board_id.to_string(), OutputMessage::Set { pin, on: false, ms: 0 }));
+        if chatbox {
+            effects.push(Effect::Chatbox { board_id: board_id.to_string(), pin, note: BoardNote::Off });
+        }
     }
 
     /// Sets the parameter back unless another hold still has it.
@@ -497,7 +519,7 @@ impl State {
         }
 
         for claim in &mut self.claims {
-            let Hold::Pin { board_id, pin, follow, duty, sent_at, sent_duty } = &mut claim.hold else {
+            let Hold::Pin { board_id, pin, follow, duty, sent_at, sent_duty, .. } = &mut claim.hold else {
                 continue;
             };
             let renew = sent_at.is_none_or_elapsed(now, RENEW_EVERY);
@@ -642,7 +664,7 @@ mod tests {
     }
 
     fn board(output: OutputAction) -> Step {
-        Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output }, delay_ms: 0 }
+        Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output, chatbox: false }, delay_ms: 0 }
     }
 
     fn parameter(address: &str, value_type: ValueType, set: ParameterAction) -> Step {
@@ -726,6 +748,62 @@ mod tests {
         assert_eq!(sends(&effects), vec![OutputMessage::Pulse { pin: 4, on_ms: 2000, off_ms: 0, count: 1 }]);
         assert_eq!(activity(&effects), vec![("a".to_string(), true)]);
         assert!(change(&mut state, 1.0, 0.0).is_empty());
+    }
+
+    fn notes(effects: &[Effect]) -> Vec<BoardNote> {
+        effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Chatbox { note, .. } => Some(*note),
+                _ => None
+            })
+            .collect()
+    }
+
+    fn with_chatbox(id: &str, condition: Condition, output: OutputAction) -> Automation {
+        let mut a = automation(id, condition, ValueType::Bool, output);
+        if let Action::BoardOutput { chatbox, .. } = &mut a.then[0].action {
+            *chatbox = true;
+        }
+        a
+    }
+
+    #[test]
+    fn chatbox_notes() {
+        let mut state = State::default();
+        state.automations.push(automation("quiet", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle));
+        state.automations.push(with_chatbox("a", Condition::TurnsOn, OutputAction::Pulse { on_ms: 500, off_ms: 200, count: 3 }));
+        assert_eq!(notes(&change_effects(&mut state, 0.0, 1.0)), vec![BoardNote::Pulse { on_ms: 500, count: 3 }]);
+
+        let mut state = State::default();
+        state.automations.push(with_chatbox("a", Condition::TurnsOn, OutputAction::Toggle));
+        assert_eq!(notes(&change_effects(&mut state, 0.0, 1.0)), vec![BoardNote::On]);
+        assert_eq!(notes(&change_effects(&mut state, 0.0, 1.0)), vec![BoardNote::Off]);
+
+        let mut state = State::default();
+        state.automations.push(with_chatbox("a", Condition::TurnsOn, OutputAction::Off));
+        assert_eq!(notes(&change_effects(&mut state, 0.0, 1.0)), vec![BoardNote::Off]);
+    }
+
+    #[test]
+    fn chatbox_hold_says_off_once_the_output_goes_off() {
+        let mut state = State::default();
+        state.automations.push(with_chatbox("a", Condition::IsOn, OutputAction::Hold));
+        assert_eq!(notes(&change_effects(&mut state, 0.0, 1.0)), vec![BoardNote::On]);
+        assert!(notes(&state.tick(&TestEnv)).is_empty(), "renewals stay quiet");
+        assert_eq!(notes(&change_effects(&mut state, 1.0, 0.0)), vec![BoardNote::Off]);
+
+        // Another hold keeps the output on: it isn't off yet.
+        let mut state = State::default();
+        state.automations.push(with_chatbox("a", Condition::IsOn, OutputAction::Hold));
+        let mut b = automation("b", Condition::IsOn, ValueType::Bool, OutputAction::Hold);
+        if let Trigger::AvatarParameter { parameter, .. } = &mut b.when {
+            *parameter = "/avatar/parameters/Q".into();
+        }
+        state.automations.push(b);
+        change_effects(&mut state, 0.0, 1.0);
+        state.on_parameter("avtr_1", "/avatar/parameters/Q", Some(0.0), 1.0, &TestEnv);
+        assert!(notes(&change_effects(&mut state, 1.0, 0.0)).is_empty());
     }
 
     #[test]

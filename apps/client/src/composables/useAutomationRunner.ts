@@ -65,7 +65,10 @@ export function useAutomationRunner(): void {
   // What each running hold changed, keyed by automation and step, to put back on `stop`.
   const held = new Map<string, Value | string | null>()
   const pulses = new Map<string, ReturnType<typeof setTimeout>>()
-  const follows = new Map<string, { sentAt: number; timer?: ReturnType<typeof setTimeout>; value: number }>()
+  const follows = new Map<
+    string,
+    { sentAt: number; timer?: ReturnType<typeof setTimeout>; value: number }
+  >()
 
   // Holds and pulses belong to the old avatar's controls and profiles: forget them.
   useAvatarDetails(() => {
@@ -85,7 +88,10 @@ export function useAutomationRunner(): void {
       case 'enum':
       case 'step-enum': {
         const value = get<Value | null>(control.inputAddress, null)
-        return Math.max(0, control.options.findIndex((option) => option.value === Number(value)))
+        return Math.max(
+          0,
+          control.options.findIndex((option) => option.value === Number(value))
+        )
       }
       case 'slider':
         return Number(get<Value>(control.inputAddress, 0))
@@ -99,7 +105,12 @@ export function useAutomationRunner(): void {
   }
 
   const send = (control: ControlType, value?: Value): void => {
-    handleCommand(control, (value === undefined ? { type: control.type } : { type: control.type, value }) as CommandWithoutIds)
+    handleCommand(
+      control,
+      (value === undefined
+        ? { type: control.type }
+        : { type: control.type, value }) as CommandWithoutIds
+    )
   }
 
   const follow = (key: string, control: ControlType, value: number): void => {
@@ -130,7 +141,8 @@ export function useAutomationRunner(): void {
       const before = held.get(key) as Value
       held.delete(key)
       // Stop everything already switched toys and patterns off; don't start them again.
-      if (paused.value && (control.type === 'intiface-toy' || control.type === 'intiface-pattern')) return
+      if (paused.value && (control.type === 'intiface-toy' || control.type === 'intiface-pattern'))
+        return
       send(control, before)
       return
     }
@@ -173,19 +185,25 @@ export function useAutomationRunner(): void {
 
   const runProfile = (key: string, action: ProfileAction, run: AutomationRun): void => {
     // A profile that was deleted since is skipped.
-    if (action.profileId && !lockedControlGroups.value.some((p) => p.id === action.profileId)) return
+    if (action.profileId && !lockedControlGroups.value.some((p) => p.id === action.profileId))
+      return
 
     if (run.phase === 'stop') {
       if (!held.has(key)) return
       const before = held.get(key) as string | null
       held.delete(key)
       // Only if nothing else switched it in the meantime.
-      if (currentLockedControlsGroup.value === action.profileId) currentLockedControlsGroup.value = before
+      if (currentLockedControlsGroup.value === action.profileId)
+        currentLockedControlsGroup.value = before
       return
     }
     if (run.phase === 'start' && !held.has(key)) held.set(key, currentLockedControlsGroup.value)
     currentLockedControlsGroup.value = action.profileId
   }
+
+  api.onAutomationChatbox((text) => {
+    if (!paused.value) announceNotice(text)
+  })
 
   api.onAutomationRun((run) => {
     const key = `${run.automationId}:${run.step}`

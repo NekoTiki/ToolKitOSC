@@ -90,6 +90,11 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
             Effect::Ran(id) => {
                 let _ = app.emit("automation-ran", id);
             }
+            Effect::Chatbox { board_id, pin, note } => {
+                if let Some(info) = boards::output_info(app, &board_id, pin) {
+                    let _ = app.emit("automation-chatbox", model::chatbox_text(&info.label, note));
+                }
+            }
         }
     }
 }
@@ -109,7 +114,7 @@ pub fn save(app: &AppHandle, automation: Automation) -> Result<(), String> {
     model::validate(&automation)?;
 
     for step in &automation.then {
-        let Action::BoardOutput { board_id, pin, output } = &step.action else {
+        let Action::BoardOutput { board_id, pin, output, .. } = &step.action else {
             continue;
         };
         let info = boards::output_info(app, board_id, *pin).ok_or("Pick an output saved on one of your boards.")?;
@@ -178,7 +183,7 @@ fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result
             model::Runs::State => (run(Phase::Start), Some(run(Phase::Stop))),
             model::Runs::Follow => (run(Phase::Follow { value: 1.0 }), Some(run(Phase::Follow { value: 0.0 })))
         }),
-        Action::BoardOutput { board_id, pin, output } => {
+        Action::BoardOutput { board_id, pin, output, .. } => {
             let info = boards::output_info(app, board_id, *pin).ok_or("Its output isn't saved on the board any more.")?;
             let short = engine::TEST_MS.min(info.max_on_ms);
             let message = match output {
