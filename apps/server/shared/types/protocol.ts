@@ -17,3 +17,6 @@ export { MIN_SUPPORTED_PROTOCOL_VERSION, PROTOCOL_VERSION } from '@toolkitosc/sh
 // Same reasoning: KNOWN_CONTROL_TYPES is derived in controls.ts (also import-free) from a Record
 // literal, not from anything DOM-touching.
 export { KNOWN_CONTROL_TYPES } from '@toolkitosc/shared-ui/types'
+
+// Same: the reserved pattern values for a viewer's own pattern (see VIEWER_PATTERN_ID in controls.ts).
+export { VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '@toolkitosc/shared-ui/types'

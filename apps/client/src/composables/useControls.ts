@@ -1,7 +1,7 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useIntiface } from '@renderer/composables/useIntiface'
-import { resolvePatternRefs, useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
+import { resolvePatternRefs, toDefinition, useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -18,7 +18,14 @@ import type {
   StepEnumControl,
   ViewerGroupRule
 } from '@toolkitosc/shared-ui'
-import { useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
+import {
+  INTIFACE_PATTERN_OFF_ID,
+  useIntifaceControl,
+  useIntifacePatternControl,
+  useOpenShockControl,
+  VIEWER_LIVE_ID,
+  VIEWER_PATTERN_ID
+} from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import type { ComputedRef } from 'vue'
 import { computed, ref, toRaw, watch } from 'vue'
@@ -87,9 +94,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   // (see OpenShockCommandResult) so the caller can log what actually got sent - it isn't known ahead
   // of time, since it's randomized here. undefined for every other command type, or when the
   // command didn't actually fire (OpenShock unavailable, or still on cooldown).
+  // `viewerName`: who sent it, when shown to viewers (a viewer's own pattern says whose it is).
   handleCommand: (
     control: ControlType,
-    command: CommandWithoutIds
+    command: CommandWithoutIds,
+    context?: { viewerName?: string }
   ) => OpenShockCommandResult | undefined
 } {
   const { avatarDetails } = useAvatarDetails(() => loadControls())
@@ -103,7 +112,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     devices: intifaceDevices
   } = useIntiface()
   const { setValue: setIntifaceValue } = useIntifaceControl()
-  const { playPattern, releaseActuators } = useIntifacePatterns()
+  const { controlValue: patternValues, setValue: setPatternValue } = useIntifacePatternControl()
+  const { playPattern, playDefinition, stopPattern, releaseActuators } = useIntifacePatterns()
   const { update } = useOscMessages()
   const { getPreset } = usePresets()
 
@@ -382,7 +392,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
   const handleCommand = (
     control: ControlType,
-    command: CommandWithoutIds
+    command: CommandWithoutIds,
+    context: { viewerName?: string } = {}
   ): OpenShockCommandResult | undefined => {
     if (command.type === 'boolean' && control?.type === 'boolean') {
       update({ address: control.inputAddress, args: [command.value] })
@@ -473,7 +484,21 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       // Same belt-and-suspenders guard as OpenShock above.
       if (!intifaceAvailable.value) return undefined
 
-      playPattern(control.id, command.value, control.actuators)
+      if (command.value === VIEWER_LIVE_ID) {
+        // A viewer is still recording: the toy follows their slider, like a toy slider would, and
+        // whatever this control was playing stops.
+        stopPattern(control.id)
+        if ((patternValues.value.get(control.id) ?? INTIFACE_PATTERN_OFF_ID) !== INTIFACE_PATTERN_OFF_ID) setPatternValue(control.id, INTIFACE_PATTERN_OFF_ID)
+        releaseActuators(control.actuators)
+        setActuatorIntensity(control.actuators, command.level ?? 0)
+      } else if (command.value === VIEWER_PATTERN_ID) {
+        // sanitizeCommand already checked and clamped the samples.
+        const pattern = toDefinition({ id: VIEWER_PATTERN_ID, name: 'Viewer pattern', samples: command.samples ?? [] })
+
+        playDefinition(control.id, pattern, control.actuators, { stopAfterMs: control.viewerPatterns?.stopsAfterMs, by: context.viewerName })
+      } else {
+        playPattern(control.id, command.value, control.actuators)
+      }
     } else if (command.type === 'preset' && control?.type === 'preset') {
       const preset = getPreset(control.presetId)
 

@@ -225,6 +225,41 @@ export interface IntifaceToyControl extends BaseControl {
 // control's configurable `allowedPatterns` (see below), always available regardless of them.
 export const INTIFACE_PATTERN_OFF_ID = 'off'
 
+// Pattern-command values for a viewer's own recorded pattern (see IntifacePatternControl's
+// `viewerPatterns`). 'viewer' carries the whole recording in `samples` and loops it; 'viewer-live'
+// carries one `level` while the viewer is still recording, so the toy follows them live. Neither is
+// ever one of `allowedPatterns`.
+export const VIEWER_PATTERN_ID = 'viewer'
+export const VIEWER_LIVE_ID = 'viewer-live'
+
+// A recorded pattern is a list of intensities (0-100), one every PATTERN_SAMPLE_MS, played in a loop.
+export const PATTERN_SAMPLE_MS = 50
+export const PATTERN_MAX_MS = 30_000
+// Anything shorter is thrown away: it's almost always a slip, not a pattern.
+export const PATTERN_MIN_MS = 1000
+
+// Lets viewers record their own pattern on the share page. It plays right away and isn't saved.
+// Absent (or `enabled: false`): viewers can only pick from `allowedPatterns`.
+export interface ViewerPatternOptions {
+  enabled: boolean
+  // The top of the viewer's slider, 0-1. The active profile's max for the control applies on top.
+  maxIntensity: number
+  // Longest recording, in ms (up to PATTERN_MAX_MS).
+  maxMs: number
+  // How long a viewer's pattern loops before it stops by itself; null: until someone stops it.
+  stopsAfterMs: number | null
+  // Only viewers signed in with Discord can make one.
+  signedInOnly: boolean
+}
+
+export const DEFAULT_VIEWER_PATTERN_OPTIONS: ViewerPatternOptions = {
+  enabled: true,
+  maxIntensity: 0.7,
+  maxMs: 10_000,
+  stopsAfterMs: 5 * 60_000,
+  signedInOnly: true
+}
+
 // One entry per pattern the control's author has chosen to allow, in the order they should be
 // offered. `name`/`icon` are captured at authoring time from whatever pattern registry defines
 // them (currently only apps/client's built-in one - see useIntifacePatterns.ts) rather than
@@ -247,6 +282,7 @@ export interface IntifacePatternControl extends BaseControl {
   type: 'intiface-pattern'
   actuators: IntifaceActuatorRef[]
   allowedPatterns: IntifacePatternRef[]
+  viewerPatterns?: ViewerPatternOptions
 }
 
 // A control that applies a preset's captured parameter values in one activation - shares/exports
@@ -323,10 +359,13 @@ export interface IntifaceToyControlCommand extends BaseControlCommand {
   value: number
 }
 
-// `value` is a pattern id from the control's own `allowedPatterns`, or the implicit 'off'.
+// `value` is a pattern id from the control's own `allowedPatterns`, the implicit 'off', or one of
+// the viewer pattern values (VIEWER_PATTERN_ID with `samples`, VIEWER_LIVE_ID with `level`, 0-1).
 export interface IntifacePatternControlCommand extends BaseControlCommand {
   type: 'intiface-pattern'
   value: string
+  samples?: number[]
+  level?: number
 }
 
 // No `value` - same shape as OpenShockControlCommand, a fire-and-forget activation. Every

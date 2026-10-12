@@ -70,7 +70,9 @@ export function useWebsocketClient(roomId: string) {
       } else if (data.type === 'intiface-value-update') {
         setIntifaceValue(data.message.controlId, data.message.value)
       } else if (data.type === 'intiface-pattern-value-update') {
-        setIntifacePatternValue(data.message.controlId, data.message.value)
+        const { controlId, value, by, endsAt } = data.message
+
+        setIntifacePatternValue(controlId, value, by || endsAt ? { by, endsAt } : undefined)
       } else if (data.type === 'client-invalid') {
         // The wire type is the full ClientType union ('everyone' | 'username' | 'discord'), but
         // checkClient() (see apps/client/src/utils/checkClient.ts) never fails validation when

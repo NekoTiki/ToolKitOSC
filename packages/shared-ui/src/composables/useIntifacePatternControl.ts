@@ -5,23 +5,38 @@ import { ref } from 'vue'
 // the host's own) shows the same choice, synced via 'intiface-pattern-value-update'.
 export type IntifacePatternControlValue = string
 
-const controlValue = ref<Map<string, IntifacePatternControlValue>>(new Map())
+// Set while a viewer's own pattern (VIEWER_PATTERN_ID) plays: who made it and when it stops by
+// itself (ms since epoch; absent: it doesn't).
+export interface ViewerPatternInfo {
+  by?: string
+  endsAt?: number
+}
 
-const lastUpdate = ref<{ controlId: string; value: IntifacePatternControlValue } | null>(null)
+const controlValue = ref<Map<string, IntifacePatternControlValue>>(new Map())
+const viewerPatterns = ref<Map<string, ViewerPatternInfo>>(new Map())
+
+const lastUpdate = ref<({ controlId: string; value: IntifacePatternControlValue } & ViewerPatternInfo) | null>(null)
 
 export function useIntifacePatternControl(): {
   controlValue: typeof controlValue
+  viewerPatterns: typeof viewerPatterns
   lastUpdate: typeof lastUpdate
-  setValue: (controlId: string, value: IntifacePatternControlValue) => void
+  setValue: (controlId: string, value: IntifacePatternControlValue, info?: ViewerPatternInfo) => void
 } {
-  const setValue = (controlId: string, value: IntifacePatternControlValue): void => {
+  const setValue = (controlId: string, value: IntifacePatternControlValue, info?: ViewerPatternInfo): void => {
     const next = new Map(controlValue.value)
 
     next.set(controlId, value)
     controlValue.value = next
 
-    lastUpdate.value = { controlId, value }
+    const nextInfo = new Map(viewerPatterns.value)
+
+    if (info) nextInfo.set(controlId, info)
+    else nextInfo.delete(controlId)
+    viewerPatterns.value = nextInfo
+
+    lastUpdate.value = { controlId, value, ...info }
   }
 
-  return { controlValue, lastUpdate, setValue }
+  return { controlValue, viewerPatterns, lastUpdate, setValue }
 }

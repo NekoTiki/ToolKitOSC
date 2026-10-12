@@ -34,6 +34,10 @@ type Props = {
   lockedIndicator?: boolean
   unavailableIndicator?: boolean
   limitedIndicator?: boolean
+  // Toy Pattern on the share page: whether this viewer can record their own pattern (see
+  // ControlIntifacePattern.vue), and whether the one playing is theirs.
+  patternMaker?: 'allowed' | 'sign-in'
+  minePattern?: boolean
 }
 
 const props = defineProps<Props>()
@@ -42,6 +46,7 @@ defineEmits<{
   (e: 'logs', id: string): void
   (e: 'delete', id: string): void
   (e: 'command', command: CommandWithoutIds): void
+  (e: 'make-pattern'): void
 }>()
 
 // Every control type that can go unavailable has its own reason, shown on the tile itself.
@@ -157,7 +162,10 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :icon="control.icon"
       :patterns="control.allowedPatterns"
       :disabled-options="limits?.disabledOptions"
+      :pattern-maker="control.viewerPatterns?.enabled ? patternMaker : undefined"
+      :mine="minePattern"
       @update:value="$emit('command', { type: 'intiface-pattern', value: $event })"
+      @make="$emit('make-pattern')"
     />
     <control-preset
       v-else-if="control.type === 'preset'"

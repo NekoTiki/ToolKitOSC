@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import type { ControlType } from '@toolkitosc/shared-ui'
-import { Control, controlTileSpan, randomGuestName } from '@toolkitosc/shared-ui'
+import type { ControlType, IntifacePatternControl } from '@toolkitosc/shared-ui'
+import {
+  Control,
+  controlTileSpan,
+  INTIFACE_PATTERN_OFF_ID,
+  randomGuestName,
+  useIntifacePatternControl,
+  VIEWER_LIVE_ID,
+  VIEWER_PATTERN_ID
+} from '@toolkitosc/shared-ui'
 
 import { useClientTheme } from '~/composables/useClientTheme'
 import type { ShareInfo } from '~~/server/api/share/[shareId].get'
@@ -124,6 +132,53 @@ const totalControls = computed(() => controlGroups.value.reduce((n, group) => n 
 const sendCommand = (groupId: string, control: ControlType, command: object): void => {
   sendMessage('command', { groupId, controlId: control.id, controlName: control.name, ...command })
 }
+
+// "Make a pattern" (see ShareRecorder.vue), for a Toy Pattern control that lets viewers record their
+// own. Looked up live, so it closes by itself if the host turns it off or removes the control.
+const { loggedIn, user } = useUserSession()
+const recorderFor = ref<{ groupId: string; controlId: string } | null>(null)
+
+const recorderControl = computed(() => {
+  if (!recorderFor.value) return null
+
+  const control = controlGroups.value.find((group) => group.id === recorderFor.value!.groupId)?.controls.find((c) => c.id === recorderFor.value!.controlId)
+
+  return control?.type === 'intiface-pattern' && control.viewerPatterns?.enabled && !control.locked && !control.unavailable ? control : null
+})
+
+const patternMaker = (control: ControlType): 'allowed' | 'sign-in' | undefined => {
+  if (control.type !== 'intiface-pattern' || !control.viewerPatterns?.enabled) return undefined
+
+  return control.viewerPatterns.signedInOnly && !(loggedIn.value && user.value?.discord) ? 'sign-in' : 'allowed'
+}
+
+// Which controls are playing this viewer's own pattern: the host's next pattern update after a send
+// is theirs, and any later one (someone else's pick or pattern) isn't.
+const awaitingMine = new Set<string>()
+const minePatterns = ref(new Set<string>())
+const { lastUpdate: patternUpdate } = useIntifacePatternControl()
+
+watch(patternUpdate, (update) => {
+  if (!update) return
+
+  const next = new Set(minePatterns.value)
+
+  if (awaitingMine.has(update.controlId) && update.value === VIEWER_PATTERN_ID) next.add(update.controlId)
+  else next.delete(update.controlId)
+  awaitingMine.delete(update.controlId)
+  minePatterns.value = next
+})
+
+const sendPattern = (control: IntifacePatternControl, samples: number[]): void => {
+  awaitingMine.add(control.id)
+  sendCommand(recorderFor.value!.groupId, control, { type: 'intiface-pattern', value: VIEWER_PATTERN_ID, samples })
+}
+
+const sendLive = (control: IntifacePatternControl, level: number): void =>
+  sendCommand(recorderFor.value!.groupId, control, { type: 'intiface-pattern', value: VIEWER_LIVE_ID, level })
+
+const stopPattern = (control: IntifacePatternControl): void =>
+  sendCommand(recorderFor.value!.groupId, control, { type: 'intiface-pattern', value: INTIFACE_PATTERN_OFF_ID })
 
 // Username sign-in: the display name goes to the host over WS and into the session. Pre-filled
 // with a random name (set on mount, not during SSR, so it can't cause a hydration mismatch) - keep
@@ -325,7 +380,10 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
                 :limits="control.limits"
                 :via-group="control.viaGroup"
                 :offline="hostOffline"
+                :pattern-maker="patternMaker(control)"
+                :mine-pattern="minePatterns.has(control.id)"
                 @command="sendCommand(groupId, control, $event)"
+                @make-pattern="recorderFor = { groupId, controlId: control.id }"
               />
             </div>
           </div>
@@ -439,6 +497,20 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
           icon="i-lucide-inbox"
           title="Nothing shared yet"
           :description="`${hostName} is online but hasn't shared any controls. This page updates by itself.`"
+        />
+
+        <!-- Its own page on a phone; a solid panel on the right on a desktop, with the tiles staying
+        where they are behind it. -->
+        <ShareRecorder
+          v-if="!pageState && recorderControl"
+          :control="recorderControl"
+          :host-name="hostName"
+          :mine="minePatterns.has(recorderControl.id)"
+          class="absolute z-20 max-lg:inset-0 lg:top-3.5 lg:right-4 lg:bottom-4 lg:w-108"
+          @live="sendLive(recorderControl, $event)"
+          @send="sendPattern(recorderControl, $event)"
+          @stop="stopPattern(recorderControl)"
+          @close="recorderFor = null"
         />
 
         <!-- Under the tiles on a desktop; a floating pill over them on a phone. -->

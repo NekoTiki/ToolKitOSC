@@ -126,6 +126,10 @@ const allowedPatterns = computed<IntifacePatternControl['allowedPatterns']>({
   get: () => model.value.allowedPatterns ?? [],
   set: (value) => (model.value.allowedPatterns = value)
 })
+const viewerPatterns = computed<IntifacePatternControl['viewerPatterns']>({
+  get: () => model.value.viewerPatterns,
+  set: (value) => (model.value.viewerPatterns = value)
+})
 
 const openShockModes = [
   { label: 'Shock', value: 'Shock' as const },
@@ -378,7 +382,10 @@ onBeforeRouteLeave(async () => {
               v-if="type === 'intiface-pattern'"
               :error="errors.patterns"
             >
-              <IntifacePatternFields v-model:allowed-patterns="allowedPatterns" />
+              <IntifacePatternFields
+                v-model:allowed-patterns="allowedPatterns"
+                v-model:viewer-patterns="viewerPatterns"
+              />
             </UFormField>
           </template>
 

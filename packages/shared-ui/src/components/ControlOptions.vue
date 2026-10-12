@@ -10,6 +10,10 @@ export interface ControlOption {
   selected: boolean
   // Blocked by the host's active profile: shown, but can't be picked.
   disabled?: boolean
+  // Why it can't be picked, when it isn't the profile (replaces "blocked by the streamer").
+  disabledReason?: string
+  // An action rather than a value (e.g. Toy Pattern's "Make one"): a dashed outline.
+  action?: boolean
 }
 
 const props = defineProps<{
@@ -36,21 +40,23 @@ const columns = Math.min(4, Math.max(1, props.options.length))
       role="radio"
       :aria-checked="option.selected"
       :aria-disabled="option.disabled || undefined"
-      :title="option.disabled ? `${option.name} (blocked by the streamer)` : option.name"
+      :title="option.disabled ? `${option.name} (${option.disabledReason ?? 'blocked by the streamer'})` : option.name"
       class="flex h-(--tile-option) min-w-0 items-center justify-center gap-1.5 border px-2 text-[calc(var(--tile-title)*0.82)] transition-colors"
       :class="[
         pill ? 'rounded-full' : 'rounded-field',
         option.selected
           ? 'border-secondary bg-secondary font-semibold text-(--ui-color-secondary-950)'
-          : option.disabled
-            ? 'border-dashed border-default bg-(--aurora-well) text-dimmed'
-            : 'border-default bg-(--aurora-well) text-muted hover:text-default',
+          : option.action
+            ? 'border-dashed border-primary/60 bg-transparent text-primary hover:bg-primary/10'
+            : option.disabled
+              ? 'border-dashed border-default bg-(--aurora-well) text-dimmed'
+              : 'border-default bg-(--aurora-well) text-muted hover:text-default',
         option.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
       ]"
       @click.stop="!option.disabled && emit('select', index)"
     >
       <UIcon
-        v-if="option.disabled"
+        v-if="option.disabled && !option.action"
         name="i-lucide-lock"
         class="size-3.5 shrink-0"
       />

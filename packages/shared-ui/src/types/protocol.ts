@@ -33,6 +33,11 @@ export interface WsEnvelope<Type extends string, Message> {
 // viewer), and the host sends 'viewer-groups'. An older server drops 'viewer-groups' and sends
 // everyone the rules for everyone; the host checks each viewer's groups either way, so groups just
 // don't open anything up until the server is updated.
+//
+// Additive, no bump: Toy Pattern controls may carry `viewerPatterns`, and viewers may send the
+// pattern values 'viewer' (with `samples`) and 'viewer-live' (with `level`). An older server or
+// host drops both as unknown patterns, and 'intiface-pattern-value-update' gains optional `by` and
+// `endsAt`, which an older viewer page ignores.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
@@ -132,6 +137,9 @@ export interface IntifaceValueUpdateMessage {
 export interface IntifacePatternValueUpdateMessage {
   controlId: string
   value: string
+  // Only while a viewer's own pattern plays (value VIEWER_PATTERN_ID): their name and when it stops.
+  by?: string
+  endsAt?: number
 }
 
 // The value a command was run with, as the host logs it: the command's own value, or for a
