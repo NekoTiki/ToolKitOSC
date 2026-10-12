@@ -13,6 +13,29 @@ const automations = ref<Automation[]>([])
 // The backend says when each one starts and stops, pulses and delayed steps included.
 const running = ref<Set<string>>(new Set())
 
+// When each one last ran and how often, kept on this computer only (a convenience, not a log).
+export interface AutomationRuns {
+  at: number
+  count: number
+}
+const RUNS_KEY = 'automations_runs'
+const loadRuns = (): Record<string, AutomationRuns> => {
+  try {
+    return JSON.parse(localStorage.getItem(RUNS_KEY) ?? '{}') as Record<string, AutomationRuns>
+  } catch {
+    return {}
+  }
+}
+const runs = ref<Record<string, AutomationRuns>>(loadRuns())
+
+api.onAutomationRan((id) => {
+  runs.value = { ...runs.value, [id]: { at: Date.now(), count: (runs.value[id]?.count ?? 0) + 1 } }
+  try {
+    localStorage.setItem(RUNS_KEY, JSON.stringify(runs.value))
+  } catch {
+    // Storage full or blocked: the counts just don't survive a restart.
+  }
+})
 // Module scope, like useBoards.ts, so nothing is missed while a page mounts.
 api.onAutomationsChanged((value) => (automations.value = value))
 api.onAutomationActivity(({ id, running: isRunning }) => {
@@ -26,6 +49,7 @@ void api.automationsList().then((value) => (automations.value = value))
 export function useAutomations(): {
   automations: Ref<Automation[]>
   running: Ref<Set<string>>
+  runs: Ref<Record<string, AutomationRuns>>
   // Board, control and profile names for describe(). Controls and profiles are the worn avatar's.
   describeContext: ComputedRef<DescribeContext>
   // Rejects with a message to show.
@@ -48,6 +72,7 @@ export function useAutomations(): {
   return {
     automations,
     running,
+    runs,
     describeContext,
     save: (automation) => api.automationSave(automation),
     remove: (id) => api.automationDelete(id),

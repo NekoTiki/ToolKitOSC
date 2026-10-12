@@ -87,6 +87,9 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
             Effect::Activity(activity) => {
                 let _ = app.emit("automation-activity", activity);
             }
+            Effect::Ran(id) => {
+                let _ = app.emit("automation-ran", id);
+            }
         }
     }
 }
