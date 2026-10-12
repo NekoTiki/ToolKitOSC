@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ParameterValue from '@renderer/components/parameters/ParameterValue.vue'
+import PhysBoneGrid from '@renderer/components/parameters/PhysBoneGrid.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
@@ -14,8 +15,9 @@ import { useRoute, useRouter } from 'vue-router'
 // Every parameter of the loaded avatar with its live value, which controls use it, and whether
 // it's excluded from presets - one table replacing the parameters modal and the excluded
 // parameters modal. Filters live in the sidebar; `?filter=` deep-links one (Presets links to
-// the excluded list).
+// the excluded list). `?filter=physbones` swaps the table for one live card per PhysBone.
 type Filter = 'all' | 'received' | 'missing' | 'used' | 'excluded'
+type View = Filter | 'physbones'
 
 const FILTERS: { value: Filter; label: string; icon: string }[] = [
   { value: 'all', label: 'All parameters', icon: 'i-lucide-list-tree' },
@@ -33,8 +35,9 @@ const { args } = useOscMessages()
 const { controls } = useControls()
 const { isExcluded, setExcluded } = usePresets()
 
-const filter = computed<Filter>({
-  get: () => (FILTERS.some((f) => f.value === route.query.filter) ? (route.query.filter as Filter) : 'all'),
+const filter = computed<View>({
+  get: () =>
+    route.query.filter === 'physbones' || FILTERS.some((f) => f.value === route.query.filter) ? (route.query.filter as View) : 'all',
   set: (value) => void router.replace({ query: value === 'all' ? {} : { filter: value } })
 })
 
@@ -125,7 +128,7 @@ const noisyCount = computed(() => allRows.value.filter((row) => row.noisy).lengt
 const rows = computed(() => {
   const query = search.value.trim().toLowerCase()
   const matches = (row: Row): boolean =>
-    ({ all: true, received: row.received, missing: !row.received, used: row.usedBy.length > 0, excluded: row.excluded })[filter.value]
+    ({ all: true, received: row.received, missing: !row.received, used: row.usedBy.length > 0, excluded: row.excluded, physbones: false })[filter.value]
 
   return visibleRows.value
     .filter((row) => matches(row) && (!query || row.name.toLowerCase().includes(query) || row.address.toLowerCase().includes(query)))
@@ -223,6 +226,26 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
           <small class="col-start-2 text-xs text-muted">Every value as it arrives</small>
         </RouterLink>
 
+        <button
+          type="button"
+          class="grid min-h-14 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 rounded-2xl border px-2.5 py-2 text-left transition-colors"
+          :class="filter === 'physbones' ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
+          :aria-pressed="filter === 'physbones'"
+          @click="filter = 'physbones'"
+        >
+          <span
+            class="row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
+            :class="filter === 'physbones' ? 'text-primary' : 'text-muted'"
+          >
+            <UIcon
+              name="i-lucide-bone"
+              class="size-4.5"
+            />
+          </span>
+          <b class="truncate text-[14.5px] font-semibold text-highlighted">PhysBones</b>
+          <small class="col-start-2 text-xs text-muted">Grabbed, posed, stretched…</small>
+        </button>
+
         <USwitch
           v-model="showNoisy"
           class="mt-1 px-2.5"
@@ -271,6 +294,11 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
       icon="i-lucide-radio-tower"
       title="VRChat not detected"
       description="Parameters show up here once VRChat sends your avatar over OSC."
+    />
+
+    <PhysBoneGrid
+      v-else-if="filter === 'physbones'"
+      :search="search"
     />
 
     <div
