@@ -12,6 +12,10 @@ export interface Command {
   controlName: string
   type: string
   value?: boolean | number | string | OpenShockCommandResult
+  // A Toy Pattern viewer's own recording (value VIEWER_PATTERN_ID): its samples, so Activity can
+  // show it, try it and save it, and when it stopped playing. Not indexed, so no new version.
+  samples?: number[]
+  endedAt?: number
   createdAt: number
 }
 

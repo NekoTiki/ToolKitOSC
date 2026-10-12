@@ -95,10 +95,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   // of time, since it's randomized here. undefined for every other command type, or when the
   // command didn't actually fire (OpenShock unavailable, or still on cooldown).
   // `viewerName`: who sent it, when shown to viewers (a viewer's own pattern says whose it is).
+  // `onPatternEnd`: called when a viewer's own pattern stops playing.
   handleCommand: (
     control: ControlType,
     command: CommandWithoutIds,
-    context?: { viewerName?: string }
+    context?: { viewerName?: string; onPatternEnd?: () => void }
   ) => OpenShockCommandResult | undefined
 } {
   const { avatarDetails } = useAvatarDetails(() => loadControls())
@@ -393,7 +394,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const handleCommand = (
     control: ControlType,
     command: CommandWithoutIds,
-    context: { viewerName?: string } = {}
+    context: { viewerName?: string; onPatternEnd?: () => void } = {}
   ): OpenShockCommandResult | undefined => {
     if (command.type === 'boolean' && control?.type === 'boolean') {
       update({ address: control.inputAddress, args: [command.value] })
@@ -495,7 +496,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         // sanitizeCommand already checked and clamped the samples.
         const pattern = toDefinition({ id: VIEWER_PATTERN_ID, name: 'Viewer pattern', samples: command.samples ?? [] })
 
-        playDefinition(control.id, pattern, control.actuators, { stopAfterMs: control.viewerPatterns?.stopsAfterMs, by: context.viewerName })
+        playDefinition(control.id, pattern, control.actuators, {
+          stopAfterMs: control.viewerPatterns?.stopsAfterMs,
+          by: context.viewerName,
+          onEnd: context.onPatternEnd
+        })
       } else {
         playPattern(control.id, command.value, control.actuators)
       }

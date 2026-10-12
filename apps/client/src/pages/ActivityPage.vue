@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ViewerPatternValue, { stopViewerPatternPreview } from '@renderer/components/patterns/ViewerPatternValue.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import { logRetentionDays } from '@renderer/composables/useCommandsDb'
 import { useControls } from '@renderer/composables/useControls'
@@ -11,7 +12,7 @@ import { ownsCommand, viewerCommands, viewerLookup } from '@renderer/utils/viewe
 import type { ControlTypes } from '@toolkitosc/shared-ui'
 import { formatCommandValue, isOpenShockCommandValue } from '@toolkitosc/shared-ui'
 import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 // Every command viewers sent, newest first, in one log with filters for time, viewer, control
@@ -99,7 +100,12 @@ const controlName = computed(() => {
   return 'Deleted control'
 })
 
-const TYPES: ControlTypes[] = ['boolean', 'slider', 'enum', 'open-shock-shocker', 'intiface-toy', 'preset']
+const TYPES: ControlTypes[] = ['boolean', 'slider', 'enum', 'open-shock-shocker', 'intiface-toy', 'intiface-pattern', 'preset']
+
+// A viewer's own pattern carries its recording (see ViewerPatternValue.vue).
+const withSamples = (command: Command): (Command & { samples: number[] }) | null => (command.samples?.length ? (command as Command & { samples: number[] }) : null)
+
+onBeforeUnmount(stopViewerPatternPreview)
 
 // OpenShock rows name the shockers that actually fired rather than the control.
 const title = (command: Command): string =>
@@ -110,7 +116,7 @@ const title = (command: Command): string =>
 const time = (timestamp: number): string =>
   new Date(timestamp).toLocaleString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', ...(Date.now() - timestamp > 86_400_000 ? { day: 'numeric', month: 'short' } : {}) })
 
-const COLUMNS = 'grid-cols-[6.5rem_minmax(0,11rem)_minmax(0,1fr)_7.5rem_minmax(0,9rem)]'
+const COLUMNS = 'grid-cols-[6.5rem_minmax(0,11rem)_minmax(0,1fr)_7.5rem_minmax(0,17rem)]'
 </script>
 
 <template>
@@ -271,7 +277,15 @@ const COLUMNS = 'grid-cols-[6.5rem_minmax(0,11rem)_minmax(0,1fr)_7.5rem_minmax(0
             >Unknown</span>
             <b class="truncate font-medium text-highlighted">{{ title(command) }}</b>
             <span class="w-fit truncate rounded-full bg-(--aurora-well) px-2 py-0.5 text-xs text-muted">{{ CONTROL_TYPE_LABELS[command.type as ControlTypes] ?? command.type }}</span>
-            <span class="w-fit max-w-full truncate rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs text-secondary">{{ formatCommandValue(command.value) }}</span>
+            <ViewerPatternValue
+              v-if="withSamples(command)"
+              :command="withSamples(command)!"
+              :viewer-name="clientFor(command)?.displayName"
+            />
+            <span
+              v-else
+              class="w-fit max-w-full truncate rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs text-secondary"
+            >{{ formatCommandValue(command.value) }}</span>
           </div>
         </template>
       </UScrollArea>

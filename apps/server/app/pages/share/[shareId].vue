@@ -13,7 +13,9 @@ import {
 import { useClientTheme } from '~/composables/useClientTheme'
 import type { ShareInfo } from '~~/server/api/share/[shareId].get'
 
-const shareId = useRoute().params.shareId as string
+const route = useRoute()
+const router = useRouter()
+const shareId = route.params.shareId as string
 
 // Awaited (not fire-and-forget) so `shareInfo` is already populated when the SEO meta below reads
 // it - this is what Discord's link-preview crawler (which never runs JS) actually sees, not the
@@ -108,7 +110,27 @@ onMounted(() => {
 
 const query = ref('')
 const search = computed(() => query.value.trim().toLowerCase())
-const selectedId = ref<string | null>(null)
+// The selected group is kept in the URL (?group=<id>), so a refresh or a shared link opens it again.
+const selectedId = ref<string | null>(typeof route.query.group === 'string' ? route.query.group : null)
+
+const setGroupQuery = (id: string | null): void => {
+  const { group: _, ...rest } = route.query
+
+  void router.replace({ query: id ? { ...rest, group: id } : rest })
+}
+
+// Once the groups arrive, a group the host no longer shares (hidden or deleted) is
+// dropped from the URL, and the first group shows instead.
+watch(
+  controlGroups,
+  (groups) => {
+    if (groups.length && selectedId.value && !groups.some((group) => group.id === selectedId.value)) {
+      selectedId.value = null
+      setGroupQuery(null)
+    }
+  },
+  { immediate: true }
+)
 
 const selectedGroup = computed(() => controlGroups.value.find((group) => group.id === selectedId.value) ?? controlGroups.value[0] ?? null)
 
@@ -125,6 +147,7 @@ const shown = computed<{ control: ControlType; groupId: string }[]>(() => {
 const selectGroup = (id: string): void => {
   query.value = ''
   selectedId.value = id
+  setGroupQuery(id)
 }
 
 const totalControls = computed(() => controlGroups.value.reduce((n, group) => n + group.controls.length, 0))

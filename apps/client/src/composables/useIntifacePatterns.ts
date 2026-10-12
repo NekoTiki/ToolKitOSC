@@ -112,6 +112,7 @@ interface RunningPattern {
   timer: ReturnType<typeof setInterval>
   // Ends the pattern by itself (see PlayOptions.stopAfterMs).
   stopTimer?: ReturnType<typeof setTimeout>
+  onEnd?: () => void
 }
 
 export interface PlayOptions {
@@ -119,6 +120,8 @@ export interface PlayOptions {
   stopAfterMs?: number | null
   // Who started it, broadcast with the pattern value so the share page can say "Sam's pattern".
   by?: string
+  // Called once when it stops, whatever stops it (its timer, another pattern, Stop everything...).
+  onEnd?: () => void
 }
 
 // Module-scope singleton, same reasoning as useIntiface.ts's own connection state: every control
@@ -157,6 +160,7 @@ export function useIntifacePatterns(): {
     clearInterval(entry.timer)
     clearTimeout(entry.stopTimer)
     runningPatterns.delete(controlId)
+    entry.onEnd?.()
   }
 
   const releaseActuators = (actuators: IntifaceActuatorRef[], exceptControlId?: string): void => {
@@ -212,10 +216,10 @@ export function useIntifacePatterns(): {
     tick()
 
     const timer = setInterval(tick, PLAYBACK_INTERVAL_MS)
-    const { stopAfterMs, by } = options
+    const { stopAfterMs, by, onEnd } = options
     const stopTimer = stopAfterMs ? setTimeout(() => playPattern(controlId, INTIFACE_PATTERN_OFF_ID, actuators), stopAfterMs) : undefined
 
-    runningPatterns.set(controlId, { actuators, startedAt, timer, stopTimer })
+    runningPatterns.set(controlId, { actuators, startedAt, timer, stopTimer, onEnd })
     setPatternValue(controlId, pattern.id, by || stopTimer ? { by, endsAt: stopAfterMs ? startedAt + stopAfterMs : undefined } : undefined)
   }
 

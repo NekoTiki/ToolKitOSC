@@ -6,8 +6,9 @@ import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { BUILTIN_PATTERNS, toDefinition } from '@renderer/composables/useIntifacePatterns'
 import { PATTERN_SAMPLE_MS, useSavedPatterns } from '@renderer/composables/useSavedPatterns'
+import { db as commandsDb } from '@renderer/db/commands.db'
 import { timeAgo } from '@renderer/utils/time'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 // Patterns: toy patterns you record by moving a slider (see PatternRecorder.vue). Yours are listed
@@ -43,8 +44,12 @@ interface Draft {
   samples: number[]
 }
 
+// Save to my patterns, from a viewer's pattern in Activity: /patterns/new?fromCommand=<log id>&by=<name>.
+const fromCommand = isNew && typeof route.query.fromCommand === 'string' ? Number(route.query.fromCommand) : null
+const fromViewer = typeof route.query.by === 'string' ? route.query.by : null
+
 const initial = (): Draft | null => {
-  if (isNew) return { name: '', icon: '', samples: [] }
+  if (isNew) return { name: fromCommand !== null ? `${fromViewer ?? 'A viewer'}'s pattern` : '', icon: '', samples: [] }
   if (!pattern.value) return null
 
   return { name: pattern.value.name, icon: pattern.value.icon, samples: [...pattern.value.samples] }
@@ -54,6 +59,20 @@ const draft = ref<Draft | null>(initial())
 let snapshot = JSON.stringify(draft.value)
 
 const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== snapshot)
+
+// The recording loads after the page opens. It counts as an unsaved change until you save it.
+const loadingFrom = ref(fromCommand !== null)
+const fromError = ref(false)
+
+onMounted(async () => {
+  if (fromCommand === null) return
+
+  const command = await commandsDb.commands.get(fromCommand).catch(() => undefined)
+
+  if (command?.samples?.length && draft.value) draft.value.samples = [...command.samples]
+  else fromError.value = true
+  loadingFrom.value = false
+})
 const nameError = ref<string>()
 const saved = ref(false)
 
@@ -181,7 +200,7 @@ onBeforeRouteLeave(async () => {
     >
       <PageHeader
         :title="isNew ? 'New pattern' : (pattern?.name ?? builtin?.name ?? 'Pattern')"
-        :meta="builtin ? 'Built-in' : pattern ? `Updated ${timeAgo(pattern.updatedAt)}` : undefined"
+        :meta="builtin ? 'Built-in' : pattern ? `Updated ${timeAgo(pattern.updatedAt)}` : fromCommand !== null ? `Recorded by ${fromViewer ?? 'a viewer'}` : undefined"
         :crumbs="[{ label: 'Patterns', to: '/patterns' }, { label: isNew ? 'New' : (pattern?.name ?? builtin?.name ?? '') }]"
       >
         <template
@@ -200,10 +219,25 @@ onBeforeRouteLeave(async () => {
       </PageHeader>
     </template>
 
+    <EmptyState
+      v-if="loadingFrom"
+      icon="i-lucide-loader-circle"
+      title="Loading the recording…"
+      class="[&>span:first-child]:animate-spin"
+    />
+
     <div
-      v-if="draft"
+      v-else-if="draft"
       class="flex min-h-full flex-col gap-3.5"
     >
+      <UAlert
+        v-if="fromError"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-triangle-alert"
+        title="That recording is gone"
+        description="It may have been cleared from Activity. You can still record a pattern here."
+      />
       <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <UFormField
           label="Name"

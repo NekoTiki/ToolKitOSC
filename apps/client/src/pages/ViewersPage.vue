@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ContextMenuItem } from '@nuxt/ui/components/ContextMenu.vue'
+import ViewerPatternValue, { stopViewerPatternPreview } from '@renderer/components/patterns/ViewerPatternValue.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
@@ -15,7 +16,7 @@ import { timeAgo } from '@renderer/utils/time'
 import { countViewerCommands, viewerCommands } from '@renderer/utils/viewers'
 import { formatCommandValue } from '@toolkitosc/shared-ui'
 import { useNow } from '@vueuse/core'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 // Everyone who has ever connected to your share page: online, offline and banned in the sidebar;
@@ -88,6 +89,8 @@ const sections = computed(() => [
 
 const selectedId = computed(() => Number(route.params.clientId) || null)
 const selected = computed(() => clients.value.find((client) => client.id === selectedId.value) ?? null)
+
+onBeforeUnmount(stopViewerPatternPreview)
 
 // /viewers alone opens the first viewer (online ones first). One that a filter hides stays open.
 watch(
@@ -574,7 +577,16 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
               class="flex min-h-13 items-center gap-3 py-1.5"
             >
               <b class="min-w-0 flex-1 truncate font-medium text-highlighted">{{ command.controlName }}</b>
-              <span class="max-w-[45%] truncate rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs text-secondary">{{ formatCommandValue(command.value) }}</span>
+              <ViewerPatternValue
+                v-if="command.samples?.length"
+                :command="command as typeof command & { samples: number[] }"
+                :viewer-name="selected?.displayName"
+                class="max-w-[60%]"
+              />
+              <span
+                v-else
+                class="max-w-[45%] truncate rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs text-secondary"
+              >{{ formatCommandValue(command.value) }}</span>
               <span class="shrink-0 font-mono text-xs text-muted">{{ timeAgo(command.createdAt) }}</span>
             </div>
           </div>
