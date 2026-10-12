@@ -2,6 +2,7 @@
 import ParameterValue from '@renderer/components/parameters/ParameterValue.vue'
 import PhysBoneGrid from '@renderer/components/parameters/PhysBoneGrid.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
+import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
@@ -16,13 +17,13 @@ import { useRoute, useRouter } from 'vue-router'
 // it's excluded from presets - one table replacing the parameters modal and the excluded
 // parameters modal. Filters live in the sidebar; `?filter=` deep-links one (Presets links to
 // the excluded list). `?filter=physbones` swaps the table for one live card per PhysBone.
-type Filter = 'all' | 'received' | 'missing' | 'used' | 'excluded'
+// Whether a value has arrived yet is a separate toggle in the header, on top of any filter.
+type Filter = 'all' | 'used' | 'excluded'
+type Received = 'any' | 'received' | 'missing'
 type View = Filter | 'physbones'
 
 const FILTERS: { value: Filter; label: string; icon: string }[] = [
   { value: 'all', label: 'All parameters', icon: 'i-lucide-list-tree' },
-  { value: 'received', label: 'Received', icon: 'i-lucide-circle-check' },
-  { value: 'missing', label: 'Not received yet', icon: 'i-lucide-clock' },
   { value: 'used', label: 'Used by controls', icon: 'i-lucide-layout-grid' },
   { value: 'excluded', label: 'Excluded from presets', icon: 'i-lucide-eye-off' }
 ]
@@ -41,7 +42,14 @@ const filter = computed<View>({
   set: (value) => void router.replace({ query: value === 'all' ? {} : { filter: value } })
 })
 
+const RECEIVED: { value: Received; label: string; icon?: string }[] = [
+  { value: 'any', label: 'All' },
+  { value: 'received', label: 'Received', icon: 'i-lucide-circle-check' },
+  { value: 'missing', label: 'Not received', icon: 'i-lucide-clock' }
+]
+
 const search = ref('')
+const received = ref<Received>('any')
 const showNoisy = ref(false)
 const sortDesc = ref(false)
 const pulling = ref(false)
@@ -117,18 +125,19 @@ const visibleRows = computed(() => allRows.value.filter((row) => showNoisy.value
 
 const counts = computed<Record<Filter, number>>(() => ({
   all: visibleRows.value.length,
-  received: visibleRows.value.filter((row) => row.received).length,
-  missing: visibleRows.value.filter((row) => !row.received).length,
   used: visibleRows.value.filter((row) => row.usedBy.length).length,
   excluded: visibleRows.value.filter((row) => row.excluded).length
 }))
+
+const receivedCount = computed(() => visibleRows.value.filter((row) => row.received).length)
 
 const noisyCount = computed(() => allRows.value.filter((row) => row.noisy).length)
 
 const rows = computed(() => {
   const query = search.value.trim().toLowerCase()
   const matches = (row: Row): boolean =>
-    ({ all: true, received: row.received, missing: !row.received, used: row.usedBy.length > 0, excluded: row.excluded, physbones: false })[filter.value]
+    ({ all: true, used: row.usedBy.length > 0, excluded: row.excluded, physbones: false })[filter.value] &&
+    ({ any: true, received: row.received, missing: !row.received })[received.value]
 
   return visibleRows.value
     .filter((row) => matches(row) && (!query || row.name.toLowerCase().includes(query) || row.address.toLowerCase().includes(query)))
@@ -285,8 +294,19 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
     <template #header>
       <PageHeader
         title="Parameters"
-        :meta="avatarDetails ? `${counts.received} of ${counts.all} received · live` : undefined"
-      />
+        :meta="avatarDetails ? `${receivedCount} of ${counts.all} received · live` : undefined"
+      >
+        <template
+          v-if="avatarDetails && filter !== 'physbones'"
+          #actions
+        >
+          <SegmentedControl
+            v-model="received"
+            :items="RECEIVED"
+            aria-label="Received values"
+          />
+        </template>
+      </PageHeader>
     </template>
 
     <EmptyState
