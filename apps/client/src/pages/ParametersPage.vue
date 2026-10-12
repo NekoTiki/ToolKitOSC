@@ -17,14 +17,14 @@ import { useRoute, useRouter } from 'vue-router'
 // it's excluded from presets - one table replacing the parameters modal and the excluded
 // parameters modal. Filters live in the sidebar; `?filter=` deep-links one (Presets links to
 // the excluded list). `?filter=physbones` swaps the table for one live card per PhysBone.
-// Whether a value has arrived yet is a separate toggle in the header, on top of any filter.
-type Filter = 'all' | 'used' | 'excluded'
+// Whether a value has arrived and whether a control uses it are toggles in the header, on top
+// of the table's filter.
+type Filter = 'all' | 'physbones' | 'excluded'
 type Received = 'any' | 'received' | 'missing'
-type View = Filter | 'physbones'
 
 const FILTERS: { value: Filter; label: string; icon: string }[] = [
   { value: 'all', label: 'All parameters', icon: 'i-lucide-list-tree' },
-  { value: 'used', label: 'Used by controls', icon: 'i-lucide-layout-grid' },
+  { value: 'physbones', label: 'PhysBones', icon: 'i-lucide-bone' },
   { value: 'excluded', label: 'Excluded from presets', icon: 'i-lucide-eye-off' }
 ]
 
@@ -36,9 +36,8 @@ const { args } = useOscMessages()
 const { controls } = useControls()
 const { isExcluded, setExcluded } = usePresets()
 
-const filter = computed<View>({
-  get: () =>
-    route.query.filter === 'physbones' || FILTERS.some((f) => f.value === route.query.filter) ? (route.query.filter as View) : 'all',
+const filter = computed<Filter>({
+  get: () => (FILTERS.some((f) => f.value === route.query.filter) ? (route.query.filter as Filter) : 'all'),
   set: (value) => void router.replace({ query: value === 'all' ? {} : { filter: value } })
 })
 
@@ -50,6 +49,8 @@ const RECEIVED: { value: Received; label: string; icon?: string }[] = [
 
 const search = ref('')
 const received = ref<Received>('any')
+const usedOnly = ref(false)
+const physBoneGrid = ref<InstanceType<typeof PhysBoneGrid> | null>(null)
 const showNoisy = ref(false)
 const sortDesc = ref(false)
 const pulling = ref(false)
@@ -123,9 +124,8 @@ const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: tr
 
 const visibleRows = computed(() => allRows.value.filter((row) => showNoisy.value || !row.noisy))
 
-const counts = computed<Record<Filter, number>>(() => ({
+const counts = computed(() => ({
   all: visibleRows.value.length,
-  used: visibleRows.value.filter((row) => row.usedBy.length).length,
   excluded: visibleRows.value.filter((row) => row.excluded).length
 }))
 
@@ -136,8 +136,9 @@ const noisyCount = computed(() => allRows.value.filter((row) => row.noisy).lengt
 const rows = computed(() => {
   const query = search.value.trim().toLowerCase()
   const matches = (row: Row): boolean =>
-    ({ all: true, used: row.usedBy.length > 0, excluded: row.excluded, physbones: false })[filter.value] &&
-    ({ any: true, received: row.received, missing: !row.received })[received.value]
+    ({ all: true, excluded: row.excluded, physbones: false })[filter.value] &&
+    ({ any: true, received: row.received, missing: !row.received })[received.value] &&
+    (!usedOnly.value || row.usedBy.length > 0)
 
   return visibleRows.value
     .filter((row) => matches(row) && (!query || row.name.toLowerCase().includes(query) || row.address.toLowerCase().includes(query)))
@@ -218,7 +219,7 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
             />
           </span>
           <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.label }}</b>
-          <small class="col-start-2 text-xs text-muted">{{ counts[item.value] }} parameters</small>
+          <small class="col-start-2 text-xs text-muted">{{ item.value === 'physbones' ? 'Grabbed, posed, stretched…' : `${counts[item.value]} parameters` }}</small>
         </button>
 
         <RouterLink
@@ -234,26 +235,6 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
           <b class="truncate text-[14.5px] font-semibold text-highlighted">Change log</b>
           <small class="col-start-2 text-xs text-muted">Every value as it arrives</small>
         </RouterLink>
-
-        <button
-          type="button"
-          class="grid min-h-14 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 rounded-2xl border px-2.5 py-2 text-left transition-colors"
-          :class="filter === 'physbones' ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
-          :aria-pressed="filter === 'physbones'"
-          @click="filter = 'physbones'"
-        >
-          <span
-            class="row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
-            :class="filter === 'physbones' ? 'text-primary' : 'text-muted'"
-          >
-            <UIcon
-              name="i-lucide-bone"
-              class="size-4.5"
-            />
-          </span>
-          <b class="truncate text-[14.5px] font-semibold text-highlighted">PhysBones</b>
-          <small class="col-start-2 text-xs text-muted">Grabbed, posed, stretched…</small>
-        </button>
 
         <USwitch
           v-model="showNoisy"
@@ -293,13 +274,32 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
 
     <template #header>
       <PageHeader
+        v-if="filter === 'physbones'"
+        title="PhysBones"
+        :meta="avatarDetails ? `${physBoneGrid?.total ?? 0} PhysBones · ${physBoneGrid?.grabbed ?? 0} grabbed · live` : undefined"
+      />
+      <PageHeader
+        v-else
         title="Parameters"
         :meta="avatarDetails ? `${receivedCount} of ${counts.all} received · live` : undefined"
       >
         <template
-          v-if="avatarDetails && filter !== 'physbones'"
+          v-if="avatarDetails"
           #actions
         >
+          <button
+            type="button"
+            class="flex h-12 shrink-0 cursor-pointer items-center gap-1.5 rounded-[calc(var(--ui-radius)*4)] glass px-4 text-sm font-medium transition-colors"
+            :class="usedOnly ? 'text-primary ring-1 ring-primary/50' : 'text-muted hover:text-default'"
+            :aria-pressed="usedOnly"
+            @click="usedOnly = !usedOnly"
+          >
+            <UIcon
+              name="i-lucide-layout-grid"
+              class="size-4"
+            />
+            Used by controls
+          </button>
           <SegmentedControl
             v-model="received"
             :items="RECEIVED"
@@ -318,6 +318,7 @@ const COLUMNS = 'grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_minmax(0,12rem)_7.5rem] 
 
     <PhysBoneGrid
       v-else-if="filter === 'physbones'"
+      ref="physBoneGrid"
       :search="search"
     />
 

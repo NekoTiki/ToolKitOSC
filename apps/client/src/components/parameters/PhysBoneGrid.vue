@@ -79,6 +79,12 @@ const bones = computed(() =>
   })
 )
 
+// For the page header.
+defineExpose({
+  total: computed(() => bones.value.length),
+  grabbed: computed(() => bones.value.filter((bone) => bone.state === 'grabbed' || bone.state === 'pulled').length)
+})
+
 const visible = computed(() => {
   const query = props.search.trim().toLowerCase()
 
