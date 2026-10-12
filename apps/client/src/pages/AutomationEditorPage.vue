@@ -9,7 +9,7 @@ import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
-import type { Automation, AutomationStep, ParameterValueType } from '@renderer/lib/tauri-bridge'
+import type { Automation, AutomationStep, AutomationTrigger, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { ConditionType } from '@renderer/utils/automations'
 import {
@@ -18,14 +18,16 @@ import {
   defaultCondition,
   describe,
   fitStep,
+  formatMs,
+  MAX_HELD_MS,
   MAX_STEPS,
   newAutomation,
   newStep,
   parameterName,
   STEP_KINDS,
   stepFits,
-  stepKindsFor
-} from '@renderer/utils/automations'
+  stepKindsFor,
+  triggerCondition} from '@renderer/utils/automations'
 import { computed, ref, toRaw, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
@@ -71,8 +73,49 @@ watch(
 
 const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== savedJson.value)
 
-// An automation for another avatar keeps its parameter: this avatar's list doesn't have it.
-const otherAvatar = computed(() => !!draft.value && draft.value.when.avatarId !== avatarDetails.value?.id)
+const paramWhen = computed(() => (draft.value?.when.kind === 'avatar-parameter' ? draft.value.when : null))
+const changedWhen = computed(() => (draft.value?.when.kind === 'avatar-changed' ? draft.value.when : null))
+
+// An automation for another avatar keeps its parameter, controls and profiles: this avatar's
+// lists don't have them. One for any avatar uses the worn avatar's.
+const otherAvatar = computed(() => {
+  const avatarId = draft.value?.when.avatarId
+  return !!avatarId && avatarId !== avatarDetails.value?.id
+})
+
+const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
+  if (!draft.value || draft.value.when.kind === kind || !avatarDetails.value) return
+  const { id, name } = avatarDetails.value
+  draft.value.when =
+    kind === 'avatar-changed'
+      ? { kind, avatarId: id, avatarName: name }
+      : newAutomation(id, name).when
+  fitSteps()
+}
+
+// Avatar changed: the worn avatar (or the one it was made for), or any avatar.
+const changedTarget = computed({
+  get: (): string => changedWhen.value?.avatarId ?? 'any',
+  set: (value: string) => {
+    if (!changedWhen.value) return
+    if (value === 'any') {
+      changedWhen.value.avatarId = null
+      changedWhen.value.avatarName = null
+    } else if (avatarDetails.value && value === avatarDetails.value.id) {
+      changedWhen.value.avatarId = avatarDetails.value.id
+      changedWhen.value.avatarName = avatarDetails.value.name
+    }
+  }
+})
+
+const changedItems = computed(() => {
+  const items: { value: string; label: string }[] = []
+  const own = stored.value?.when.kind === 'avatar-changed' ? stored.value.when : null
+  if (own?.avatarId && own.avatarId !== avatarDetails.value?.id) items.push({ value: own.avatarId, label: own.avatarName ?? 'That avatar' })
+  if (avatarDetails.value) items.push({ value: avatarDetails.value.id, label: avatarDetails.value.name })
+  items.push({ value: 'any', label: 'Any avatar' })
+  return items
+})
 
 // ---- When
 
@@ -86,53 +129,60 @@ const parameterItems = computed(() =>
 // Keeps every step valid when the condition changes: a hold can't follow a moment, and so on.
 const fitSteps = (): void => {
   if (!draft.value) return
-  const condition = draft.value.when.condition.type
+  const condition = triggerCondition(draft.value.when)
   draft.value.then = draft.value.then.map((step) => fitStep(step, condition))
 }
 
 const parameter = computed({
-  get: () => draft.value?.when.parameter || undefined,
+  get: () => paramWhen.value?.parameter || undefined,
   set: (address: string | undefined) => {
-    if (!draft.value || !address) return
+    const when = paramWhen.value
+    if (!draft.value || !when || !address) return
     const item = parameterItems.value.find((p) => p.value === address)
     const valueType = (item?.valueType ?? 'Bool') as ParameterValueType
 
-    draft.value.when.parameter = address
-    draft.value.when.valueType = valueType
-    if (CONDITIONS[draft.value.when.condition.type].valueType !== valueType) {
-      draft.value.when.condition = defaultCondition(conditionsFor(valueType)[0]!)
+    when.parameter = address
+    when.valueType = valueType
+    if (CONDITIONS[when.condition.type].valueType !== valueType) {
+      when.condition = defaultCondition(conditionsFor(valueType)[0]!)
+      when.heldMs = 0
     }
     if (!draft.value.name) draft.value.name = parameterName(address)
     fitSteps()
   }
 })
 
+// For an avatar change, the moment it happens.
 const conditionType = computed({
-  get: (): ConditionType => draft.value?.when.condition.type ?? 'turns-on',
+  get: (): ConditionType => (draft.value ? triggerCondition(draft.value.when) : 'turns-on'),
   set: (type: ConditionType) => {
-    if (!draft.value) return
-    draft.value.when.condition = defaultCondition(type)
+    if (!paramWhen.value) return
+    paramWhen.value.condition = defaultCondition(type)
+    // Only a state waits to be held.
+    if (CONDITIONS[type].moment || type === 'any') paramWhen.value.heldMs = 0
     fitSteps()
   }
 })
 
 const conditionItems = computed(() =>
-  draft.value ? conditionsFor(draft.value.when.valueType).map((type) => ({ value: type, label: CONDITIONS[type].label })) : []
+  paramWhen.value ? conditionsFor(paramWhen.value.valueType).map((type) => ({ value: type, label: CONDITIONS[type].label })) : []
 )
 
 const conditionValue = computed({
-  get: () => (draft.value && 'value' in draft.value.when.condition ? draft.value.when.condition.value : 0),
+  get: () => (paramWhen.value && 'value' in paramWhen.value.condition ? paramWhen.value.condition.value : 0),
   set: (value: number) => {
-    if (draft.value && 'value' in draft.value.when.condition) draft.value.when.condition.value = value
+    if (paramWhen.value && 'value' in paramWhen.value.condition) paramWhen.value.condition.value = value
   }
 })
+
+const canHold = computed(() => !CONDITIONS[conditionType.value].moment && conditionType.value !== 'any')
 
 // ---- Do
 
 // A new step is a Control: that's what most automations drive.
 const addStep = (): void => {
   if (!draft.value || draft.value.then.length >= MAX_STEPS) return
-  const condition = draft.value.when.condition.type
+  const condition = conditionType.value
   draft.value.then.push(newStep(stepKindsFor(condition)[0] === 'board-output' ? 'control' : stepKindsFor(condition)[0]!, condition))
 }
 
@@ -142,7 +192,7 @@ const removeStep = (index: number): void => {
 
 // What's missing from one step, or null.
 const stepProblem = (step: AutomationStep): string | null => {
-  const condition = draft.value?.when.condition.type ?? 'turns-on'
+  const condition = conditionType.value
   if (!stepFits(step, condition)) {
     return CONDITIONS[condition].moment
       ? `${STEP_KINDS[step.kind].label} can't hold. Change it, or pick a state like "is on".`
@@ -152,7 +202,7 @@ const stepProblem = (step: AutomationStep): string | null => {
   switch (step.kind) {
     case 'avatar-parameter':
       if (!step.parameter) return 'Pick the parameter each step sets.'
-      return step.parameter === draft.value?.when.parameter ? "A step can't set the parameter that triggers it." : null
+      return step.parameter === paramWhen.value?.parameter ? "A step can't set the parameter that triggers it." : null
     case 'control':
       if (!step.controlId) return 'Pick the control each step runs.'
       if (!otherAvatar.value && !getControl(step.groupId, step.controlId)) return 'One of its controls was deleted. Pick another.'
@@ -184,7 +234,7 @@ const fromSlider = (value: number | number[] | undefined, apply: (value: number)
 const problem = computed((): string | null => {
   if (!draft.value) return null
   if (!draft.value.name.trim()) return 'Give it a name.'
-  if (!draft.value.when.parameter) return 'Pick the parameter that triggers it.'
+  if (paramWhen.value && !paramWhen.value.parameter) return 'Pick the parameter that triggers it.'
   if (!draft.value.then.length) return 'Add something for it to do.'
   for (const step of draft.value.then) {
     const missing = stepProblem(step)
@@ -317,17 +367,40 @@ onBeforeRouteLeave(async () => {
             description="One of your avatar's parameters changes."
             icon="i-lucide-person-standing"
             :selected="draft.when.kind === 'avatar-parameter'"
+            :disabled="!avatarDetails"
+            @click="setTriggerKind('avatar-parameter')"
+          />
+          <ChoiceCard
+            title="Avatar changed"
+            description="You put on an avatar."
+            icon="i-lucide-repeat"
+            :selected="draft.when.kind === 'avatar-changed'"
+            :disabled="!avatarDetails"
+            @click="setTriggerKind('avatar-changed')"
           />
         </div>
 
-        <template v-if="draft.when.kind === 'avatar-parameter'">
+        <UFormField
+          v-if="changedWhen"
+          label="Avatar"
+          description="Also runs when the app starts while you already wear it."
+        >
+          <SegmentedControl
+            v-model="changedTarget"
+            :items="changedItems"
+            aria-label="Avatar"
+            class="w-fit max-w-full flex-wrap"
+          />
+        </UFormField>
+
+        <template v-if="paramWhen">
           <UFormField
             v-if="otherAvatar"
             label="Parameter"
-            :description="`For ${draft.when.avatarName}. Wear that avatar to pick another parameter.`"
+            :description="`For ${paramWhen.avatarName}. Wear that avatar to pick another parameter.`"
           >
             <UInput
-              :model-value="`${parameterName(draft.when.parameter)} · ${draft.when.valueType}`"
+              :model-value="`${parameterName(paramWhen.parameter)} · ${paramWhen.valueType}`"
               class="w-full"
               disabled
             />
@@ -335,7 +408,7 @@ onBeforeRouteLeave(async () => {
           <UFormField
             v-else
             label="Parameter"
-            :description="`On ${draft.when.avatarName}. It only runs while you wear this avatar.`"
+            :description="paramWhen.anyAvatar ? 'On any avatar that has a parameter with this name.' : `On ${paramWhen.avatarName}. It only runs while you wear this avatar.`"
           >
             <div class="grid gap-2">
               <USelectMenu
@@ -353,8 +426,15 @@ onBeforeRouteLeave(async () => {
             </div>
           </UFormField>
 
+          <USwitch
+            v-if="paramWhen.parameter"
+            v-model="paramWhen.anyAvatar"
+            label="Any avatar with this parameter"
+            description="For names that are the same on all your avatars, like VRCFury Haptics (VFH/…), OSC Goes Brrr (OGB/…) or a PhysBone's _IsGrabbed."
+          />
+
           <UFormField
-            v-if="draft.when.parameter"
+            v-if="paramWhen.parameter"
             label="Condition"
           >
             <div class="grid gap-3">
@@ -365,7 +445,7 @@ onBeforeRouteLeave(async () => {
                 class="w-fit max-w-full flex-wrap"
               />
               <div
-                v-if="CONDITIONS[conditionType].needsValue && draft.when.valueType === 'Int'"
+                v-if="CONDITIONS[conditionType].needsValue && paramWhen.valueType === 'Int'"
                 class="max-w-40"
               >
                 <UInput
@@ -390,6 +470,23 @@ onBeforeRouteLeave(async () => {
               </div>
             </div>
           </UFormField>
+
+          <UFormField
+            v-if="paramWhen.parameter && canHold"
+            label="Held for"
+            :description="`Milliseconds it has to stay true first, so a quick brush doesn't count. 0 for at once, up to ${formatMs(MAX_HELD_MS)}.`"
+            class="max-w-72"
+          >
+            <UInput
+              :model-value="paramWhen.heldMs"
+              type="number"
+              min="0"
+              :max="MAX_HELD_MS"
+              step="100"
+              class="w-full"
+              @update:model-value="paramWhen && (paramWhen.heldMs = Math.min(MAX_HELD_MS, toMs($event)))"
+            />
+          </UFormField>
         </template>
       </FormSection>
 
@@ -404,7 +501,7 @@ onBeforeRouteLeave(async () => {
             v-model="draft.then[index]!"
             :index="index"
             :condition="conditionType"
-            :trigger="draft.when.parameter"
+            :trigger="paramWhen?.parameter ?? ''"
             :other-avatar="otherAvatar"
             :can-remove="draft.then.length > 1"
             @remove="removeStep(index)"

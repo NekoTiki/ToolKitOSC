@@ -44,7 +44,30 @@ pub enum Trigger {
         /// Full OSC address, e.g. `/avatar/parameters/Boop`.
         parameter: String,
         value_type: ValueType,
-        condition: Condition
+        condition: Condition,
+        /// Runs on any avatar with a parameter of this name, not only `avatar_id`. Handy for
+        /// standard names (VRCFury Haptics, OSC Goes Brrr, PhysBones).
+        #[serde(default)]
+        any_avatar: bool,
+        /// A state only counts once it has held this long, 0 = at once.
+        #[serde(default)]
+        held_ms: u32
+    },
+    /// You start wearing an avatar: this one, or any (None). Also when the app first sees it.
+    #[serde(rename_all = "camelCase")]
+    AvatarChanged { avatar_id: Option<String>, avatar_name: Option<String> }
+}
+
+/// Longest "held for" on a state.
+pub const MAX_HELD_MS: u32 = 60_000;
+
+impl Trigger {
+    /// What kind of steps it can run.
+    pub fn runs(&self) -> Runs {
+        match self {
+            Trigger::AvatarParameter { condition, .. } => condition.runs(),
+            Trigger::AvatarChanged { .. } => Runs::Moment
+        }
     }
 }
 
@@ -217,6 +240,14 @@ impl Condition {
         matches!(self, Condition::TurnsOn | Condition::TurnsOff | Condition::Becomes { .. } | Condition::RisesAbove { .. })
     }
 
+    pub fn runs(&self) -> Runs {
+        match self {
+            c if c.is_moment() => Runs::Moment,
+            Condition::Any => Runs::Follow,
+            _ => Runs::State
+        }
+    }
+
     pub fn fits(&self, value_type: ValueType) -> bool {
         match self {
             Condition::TurnsOn | Condition::TurnsOff | Condition::IsOn => value_type == ValueType::Bool,
@@ -279,14 +310,31 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
         return Err("Give the automation a name.".into());
     }
 
-    let Trigger::AvatarParameter { parameter, value_type, condition, avatar_id, .. } = &automation.when;
-    let parameter = parameter.as_str();
-    if avatar_id.is_empty() || parameter.is_empty() {
-        return Err("Pick the avatar parameter that triggers it.".into());
+    // A step can't set the parameter that triggers it, or it would set itself off.
+    let mut trigger = None;
+    match &automation.when {
+        Trigger::AvatarParameter { parameter, value_type, condition, avatar_id, held_ms, .. } => {
+            if avatar_id.is_empty() || parameter.is_empty() {
+                return Err("Pick the avatar parameter that triggers it.".into());
+            }
+            if !condition.fits(*value_type) {
+                return Err("That condition doesn't fit this parameter's type.".into());
+            }
+            if *held_ms > 0 && condition.runs() != Runs::State {
+                return Err("Only a state, like \"is on\", can wait to be held.".into());
+            }
+            if *held_ms > MAX_HELD_MS {
+                return Err(format!("It can wait up to {} s to be held.", MAX_HELD_MS / 1000));
+            }
+            trigger = Some(parameter.as_str());
+        }
+        Trigger::AvatarChanged { avatar_id, .. } => {
+            if avatar_id.as_deref() == Some("") {
+                return Err("Pick the avatar, or any avatar.".into());
+            }
+        }
     }
-    if !condition.fits(*value_type) {
-        return Err("That condition doesn't fit this parameter's type.".into());
-    }
+    let runs = automation.when.runs();
 
     if automation.then.is_empty() {
         return Err("Add something for it to do.".into());
@@ -295,7 +343,7 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
         return Err(format!("An automation can do up to {MAX_STEPS} things."));
     }
     for step in &automation.then {
-        validate_step(step, condition, parameter)?;
+        validate_step(step, runs, trigger)?;
     }
 
     Ok(())
@@ -346,12 +394,14 @@ fn fits_type(value: f64, value_type: ValueType) -> bool {
     }
 }
 
-fn validate_step(step: &Step, condition: &Condition, trigger: &str) -> Result<(), String> {
-    match (step.action.runs(), condition) {
-        (Runs::Moment, c) if !c.is_moment() => return Err("This action needs a moment, like \"turns on\".".into()),
-        (Runs::State, c) if c.is_moment() || *c == Condition::Any => return Err("Hold needs a state, like \"is on\".".into()),
-        (Runs::Follow, c) if *c != Condition::Any => return Err("Follow needs \"any change\" of a Float.".into()),
-        _ => {}
+fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), String> {
+    if step.action.runs() != runs {
+        return Err(match step.action.runs() {
+            Runs::Moment => "This action needs a moment, like \"turns on\".",
+            Runs::State => "Hold needs a state, like \"is on\".",
+            Runs::Follow => "Follow needs \"any change\" of a Float."
+        }
+        .into());
     }
     if step.delay_ms > MAX_DELAY_MS {
         return Err(format!("A step can wait up to {} s.", MAX_DELAY_MS / 1000));
@@ -379,7 +429,7 @@ fn validate_step(step: &Step, condition: &Condition, trigger: &str) -> Result<()
                 return Err("Pick the parameter it sets.".into());
             }
             // It would set off its own trigger.
-            if parameter == trigger {
+            if Some(parameter.as_str()) == trigger {
                 return Err("It can't set the parameter that triggers it.".into());
             }
             match set {
@@ -451,7 +501,9 @@ mod tests {
                 avatar_name: "Avatar".into(),
                 parameter: "/avatar/parameters/Boop".into(),
                 value_type,
-                condition
+                condition,
+                any_avatar: false,
+                held_ms: 0
             },
             then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output }, delay_ms: 0 }],
             cooldown_ms: 0,
@@ -606,6 +658,27 @@ mod tests {
         assert!(validate(&held).is_ok());
         held.then.push(Step { action: Action::StopEverything, delay_ms: 0 });
         assert!(validate(&held).is_err(), "stop everything on a state");
+    }
+
+    #[test]
+    fn triggers() {
+        let mut held = sample(Condition::IsOn, ValueType::Bool, OutputAction::Hold);
+        if let Trigger::AvatarParameter { held_ms, .. } = &mut held.when {
+            *held_ms = 2000;
+        }
+        assert!(validate(&held).is_ok());
+
+        let mut moment = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        if let Trigger::AvatarParameter { held_ms, .. } = &mut moment.when {
+            *held_ms = 2000;
+        }
+        assert!(validate(&moment).is_err(), "a moment can't be held");
+
+        let mut changed = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        changed.when = Trigger::AvatarChanged { avatar_id: None, avatar_name: None };
+        assert!(validate(&changed).is_ok());
+        changed.then[0] = Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output: OutputAction::Hold }, delay_ms: 0 };
+        assert!(validate(&changed).is_err(), "an avatar change is a moment");
     }
 
     #[test]

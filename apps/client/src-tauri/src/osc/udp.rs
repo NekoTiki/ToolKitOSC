@@ -151,6 +151,10 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
         }
     );
 
+    // After the details and saved values, so the frontend has this avatar's controls and
+    // profiles by the time an "avatar changed" automation asks for them.
+    crate::automations::avatar_worn(app, &details.id);
+
     // The saved values above show instantly; the avatar's real current values replace them a
     // moment later.
     tauri::async_runtime::spawn(super::oscquery::pull_on_avatar_load(app.clone(), details.id.clone()));

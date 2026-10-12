@@ -12,19 +12,25 @@ import { computed } from 'vue'
 const { automations, running, setEnabled, describeContext } = useAutomations()
 const { avatarDetails } = useAvatarDetails()
 
-const forThisAvatar = computed(() =>
-  automations.value.filter((a) => a.when.avatarId === avatarDetails.value?.id)
-)
+// Whose an automation is, or null when it runs on any avatar.
+const avatarOf = (automation: Automation): { id: string; name: string } | null => {
+  const { when } = automation
+  if (when.kind === 'avatar-changed') return when.avatarId ? { id: when.avatarId, name: when.avatarName ?? 'Avatar' } : null
+  return when.anyAvatar ? null : { id: when.avatarId, name: when.avatarName }
+}
+
+const forThisAvatar = computed(() => automations.value.filter((a) => avatarOf(a)?.id === avatarDetails.value?.id))
+const forAnyAvatar = computed(() => automations.value.filter((a) => !avatarOf(a)))
 
 // Grouped by avatar, so the list says whose they are.
 const otherAvatars = computed(() => {
   const byAvatar = new Map<string, { id: string; name: string; automations: Automation[] }>()
   for (const automation of automations.value) {
-    if (automation.when.avatarId === avatarDetails.value?.id) continue
-    const id = automation.when.avatarId
-    const group = byAvatar.get(id) ?? { id, name: automation.when.avatarName, automations: [] }
+    const avatar = avatarOf(automation)
+    if (!avatar || avatar.id === avatarDetails.value?.id) continue
+    const group = byAvatar.get(avatar.id) ?? { ...avatar, automations: [] }
     group.automations.push(automation)
-    byAvatar.set(id, group)
+    byAvatar.set(avatar.id, group)
   }
   return Array.from(byAvatar.values())
 })
@@ -38,6 +44,16 @@ const groups = computed(() => [
           title: avatarDetails.value.name,
           description: 'The avatar you are wearing.',
           automations: forThisAvatar.value
+        }
+      ]
+    : []),
+  ...(forAnyAvatar.value.length
+    ? [
+        {
+          key: 'any',
+          title: 'Any avatar',
+          description: 'Runs on whichever avatar you wear.',
+          automations: forAnyAvatar.value
         }
       ]
     : []),
