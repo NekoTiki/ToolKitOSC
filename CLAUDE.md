@@ -54,6 +54,7 @@ Rules:
 
 - The title emoji matches the release's theme (🎉 first stable, 🐧 Linux, and so on).
 - Every bullet starts with one emoji that fits it, then a bold label ending in a colon (`**Label:**`), then plain sentences.
+- Group related bullets so each top-level bullet is one feature or area someone would look for. When several bullets are about the same thing (e.g. the Stop button, its hotkey and `TKOSC/Panic`; or every new automation step and trigger), make one top-level bullet with a short intro (or just the label) and put the details in indented sub-bullets, in the same emoji + `**Label:**` style. Aim for roughly 4 to 7 top-level bullets per section; a bullet that stands alone stays as it is. Fixes follow the same rule.
 - Use the app's current UI labels in bold (e.g. **Launch with SteamVR**, **Launch with VRChat**, Settings > Startup). File names, commands, addresses and env vars go in backticks.
 - Keep the sentences short and plain, with no marketing tone. Address the reader as "you" ("shows which avatar you're wearing").
 - When a fix or feature is server-side, add a line before the Full Changelog for self-hosters: `🐳 Running your own server? ... pull ghcr.io/nekotiki/toolkitosc-server:X.Y.Z (or latest).`
