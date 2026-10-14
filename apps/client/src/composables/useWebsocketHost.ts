@@ -93,7 +93,7 @@ export function useWebsocketHost(): {
     useControls(() => sendControls())
 
 
-  const { token, user, setToken } = useAuth()
+  const { user } = useAuth()
   const { avatarDetails } = useAvatarDetails()
 
   const addressList = computed<Set<string>>(() => {
@@ -167,12 +167,13 @@ export function useWebsocketHost(): {
     serverStatus.value === 'open' ? 'OPEN' : serverStatus.value === 'connecting' ? 'CONNECTING' : 'CLOSED'
   )
   // From StatusBar's mount to its unmount. Rust retries a dropped link by itself, signs in with the
-  // token and pings. A new server URL or token connects again from here.
+  // token it keeps for that server, and connects again when that token changes. A new server URL
+  // connects again from here.
   let active = false
 
   const connect = async (): Promise<void> => {
     await listening
-    if (active) await api.serverConnect(serverWsUrl.value, token.value, PROTOCOL_VERSION)
+    if (active) await api.serverConnect(serverWsUrl.value, PROTOCOL_VERSION)
   }
 
   const open = (): void => {
@@ -185,7 +186,7 @@ export function useWebsocketHost(): {
     void api.serverDisconnect()
   }
 
-  watch([serverWsUrl, token], () => void connect())
+  watch(serverWsUrl, () => void connect())
 
   onServerDebug = (text) => logMessage('⇧', JSON.parse(text))
 
@@ -205,9 +206,8 @@ export function useWebsocketHost(): {
       sendMessage('pause-state', { paused: paused.value })
       sendMessage('viewer-groups', viewerGroupsMessage.value)
     } else if (data.type === 'auth-error') {
-      // Rust stops retrying with this token. Clearing it connects again, signed out.
+      // Rust forgets this token and connects again, signed out.
       console.error('Authentication failed:', data.message)
-      setToken(undefined)
     } else if (data.type === 'protocol-mismatch') {
       console.error('Protocol mismatch:', data.message.reason)
       serverProtocolVersion.value = data.message.serverVersion

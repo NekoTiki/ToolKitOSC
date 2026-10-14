@@ -41,6 +41,8 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 # The TLS crypto that reqwest's rustls-no-provider expects installed (see lib.rs). ring is the one
 # tokio-tungstenite already brings.
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# Reads the signed-in user out of the share server's JWT (see src/server/auth.rs).
+base64 = "0.22"
 # Tokens in the system's password store (see src/secrets.rs): Windows Credential Manager, or the
 # Secret Service on Linux over zbus, so there's no libdbus to build against.
 keyring = { version = "3", features = ["apple-native", "windows-native", "async-secret-service", "tokio", "crypto-rust"] }

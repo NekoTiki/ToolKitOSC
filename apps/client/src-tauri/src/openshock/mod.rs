@@ -214,7 +214,6 @@ fn save_settings(app: &AppHandle, settings: &Settings) {
 /// slow to answer, so this runs off the main thread.
 pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn_blocking(move || {
-        secrets::init(&app);
         load(&app);
         recheck(&app);
     });

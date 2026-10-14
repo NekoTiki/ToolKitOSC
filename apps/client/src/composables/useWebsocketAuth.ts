@@ -1,44 +1,31 @@
 import { useAuth } from '@renderer/composables/useAuth'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
-import { useWebSocket } from '@vueuse/core'
-import { onMounted, ref } from 'vue'
+import { api } from '@renderer/lib/tauri-bridge'
+import { ref, watch } from 'vue'
 
-const authUrl = ref<string | null>()
+// The link to open in the browser to sign in, while signed out. Rust runs the server's sign-in
+// socket (see src-tauri/src/server/auth.rs) and keeps the token it ends with.
+const authUrl = ref<string | null>(null)
+
+api.onAuthUri((uri) => (authUrl.value = uri))
+
+const { ready, loggedIn } = useAuth()
+
+// Signed out: ask the current server for a sign-in link, again after a server switch. Rust keeps
+// one sign-in at a time, so a repeat just sends the link it has. Module scope, so it keeps running
+// whichever page is open.
+watch(
+  [ready, loggedIn, serverWsUrl],
+  ([known, signedIn, url]) => {
+    if (!known) return
+    if (signedIn) void api.authSignInCancel()
+    else void api.authSignIn(url)
+  },
+  { immediate: true }
+)
 
 export function useWebsocketAuth(): {
   authUrl: typeof authUrl
 } {
-  const { loggedIn, setToken } = useAuth()
-
-  const { open, close } = useWebSocket(() => `${serverWsUrl.value}/auth/desktop/ws`, {
-    heartbeat: {
-      message: 'ping',
-      interval: 5000,
-      pongTimeout: 5000
-    },
-    immediate: false,
-    onMessage: (_ws, ev) => {
-      if (ev.data === 'pong') return
-
-      const data = JSON.parse(ev.data)
-
-      if (data.type === 'auth-uri') {
-        authUrl.value = data.message.authUrl
-      } else if (data.type === 'auth-token') {
-        setToken(data.message.token)
-        close()
-      }
-
-      console.log(
-        `%c[⇩ WS Auth]%c[${data.type}] %c${JSON.stringify(data.message)}`,
-        'color: #42b983; font-weight: bold;',
-        'color: #ba43ba; font-weight: bold;',
-        'color: #ffffff;'
-      )
-    }
-  })
-
-  onMounted(() => !loggedIn.value && open())
-
   return { authUrl }
 }

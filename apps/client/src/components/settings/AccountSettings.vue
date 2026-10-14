@@ -13,7 +13,7 @@ import _ from 'lodash'
 import { computed, ref, watch } from 'vue'
 
 const { serverWsUrl, defaultServerWsUrl, isCustom, setServerWsUrl } = useWebsocketSettings()
-const { knownServers, hasToken, loggedIn, user, setToken, forgetServer } = useAuth()
+const { knownServers, hasToken, loggedIn, user, secretStore, signOut: forgetToken, forgetServer } = useAuth()
 const { authUrl } = useWebsocketAuth()
 const { openModal: confirm } = useAreYouSureModal()
 
@@ -25,7 +25,7 @@ const signOut = async (): Promise<void> => {
     confirmText: 'Sign out'
   })
 
-  if (ok) setToken(undefined)
+  if (ok) await forgetToken()
 }
 
 const draft = ref(serverWsUrl.value)
@@ -134,6 +134,10 @@ const status = computed<StatusInfo>(() => {
       <div class="grid min-w-0 flex-1">
         <b class="truncate text-[15px] font-semibold text-highlighted">{{ user.discord.name }}</b>
         <small class="text-[13px] text-muted">Signed in with Discord</small>
+        <small
+          v-if="secretStore === 'file'"
+          class="text-[13px] text-muted"
+        >Saved in a file, no password store found</small>
       </div>
       <UButton
         icon="i-lucide-log-out"
