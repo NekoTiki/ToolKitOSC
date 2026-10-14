@@ -10,6 +10,7 @@ use vrchat_osc::VRChatOSC;
 use crate::automations::Automations;
 use crate::boards::Boards;
 use crate::osc::cache::CacheThrottle;
+use crate::openshock::OpenShock;
 use crate::server::Server;
 use crate::types::{AvatarDetails, OscMessage};
 
@@ -53,7 +54,9 @@ pub struct AppState {
     /// Every automation, and what they're currently running (see `automations`).
     pub automations: Automations,
     /// The link to the share server (see `server`).
-    pub server: Server
+    pub server: Server,
+    /// OpenShock's token check, live hub and pending shocks (see `openshock`).
+    pub openshock: OpenShock
 }
 
 impl Default for AppState {
@@ -72,7 +75,8 @@ impl Default for AppState {
             tray_icon: Mutex::new(None),
             boards: Boards::default(),
             automations: Automations::default(),
-            server: Server::default()
+            server: Server::default(),
+            openshock: OpenShock::default()
         }
     }
 }

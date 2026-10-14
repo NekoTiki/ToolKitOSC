@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::automations::{self, model::Automation};
 use crate::boards::{self, BoardView, BoardsSnapshot, OutputConfig, Target};
+use crate::openshock;
 use crate::osc::oscquery;
 use crate::presets::{self, PresetStore};
 use crate::server;
@@ -362,4 +363,51 @@ pub fn server_send(app: AppHandle, text: String) {
 #[tauri::command]
 pub fn server_set_forwarded_addresses(app: AppHandle, addresses: Vec<String>) {
     server::set_forwarded(&app, addresses);
+}
+
+#[tauri::command]
+pub fn openshock_state(app: AppHandle) -> openshock::View {
+    openshock::view(&app)
+}
+
+/// Once, from the webview's old localStorage values (see `openshock::migrate`).
+#[tauri::command]
+pub async fn openshock_migrate(app: AppHandle, token: Option<String>, enabled: Option<bool>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || openshock::migrate(&app, token, enabled))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// An empty token removes it.
+#[tauri::command]
+pub async fn openshock_set_token(app: AppHandle, token: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || openshock::set_token(&app, token))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn openshock_set_enabled(app: AppHandle, enabled: bool) {
+    openshock::set_enabled(&app, enabled);
+}
+
+#[tauri::command]
+pub fn openshock_recheck(app: AppHandle) {
+    openshock::recheck(&app);
+}
+
+#[tauri::command]
+pub async fn openshock_shockers(app: AppHandle) -> Result<Vec<openshock::Hub>, String> {
+    openshock::shockers(&app).await
+}
+
+/// Rejects when OpenShock isn't available. Failures while sending arrive as `openshock-error`.
+#[tauri::command]
+pub fn openshock_fire(app: AppHandle, fire: openshock::Fire) -> Result<(), String> {
+    openshock::fire(&app, fire)
+}
+
+#[tauri::command]
+pub async fn openshock_stop_all(app: AppHandle) -> Result<(), String> {
+    openshock::stop_all(&app).await
 }

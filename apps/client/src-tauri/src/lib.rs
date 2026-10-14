@@ -4,8 +4,10 @@ mod boards;
 mod commands;
 mod logging;
 mod net;
+mod openshock;
 mod osc;
 mod presets;
+mod secrets;
 mod server;
 mod state;
 mod steam;
@@ -67,6 +69,8 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<tauri::tray::TrayIcon> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     logging::init();
+    // Before any HTTPS client is built (OpenShock's is, with the app state).
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     let builder = tauri::Builder::default();
 
@@ -123,7 +127,15 @@ pub fn run() {
             commands::server_connect,
             commands::server_disconnect,
             commands::server_send,
-            commands::server_set_forwarded_addresses
+            commands::server_set_forwarded_addresses,
+            commands::openshock_state,
+            commands::openshock_migrate,
+            commands::openshock_set_token,
+            commands::openshock_set_enabled,
+            commands::openshock_recheck,
+            commands::openshock_shockers,
+            commands::openshock_fire,
+            commands::openshock_stop_all
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
@@ -172,6 +184,7 @@ pub fn run() {
             // ESP32 boards: reconnects the added ones and browses for new ones over mDNS.
             boards::start(app.handle().clone());
             automations::start(app.handle().clone());
+            openshock::start(app.handle().clone());
 
             Ok(())
         })

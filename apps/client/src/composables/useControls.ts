@@ -32,8 +32,6 @@ import { computed, ref, toRaw, watch } from 'vue'
 
 const controlsList = ref<ControlGroup[]>([])
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
-// Shocks waiting for their reel animation to end before they're sent to OpenShock.
-const pendingShocks = new Set<ReturnType<typeof setTimeout>>()
 
 // One-off migration: 'intiface-vibrator' (with a `vibrators` field) was renamed to 'intiface-toy'
 // (with `actuators`) - a control saved locally under the old shape doesn't just look different,
@@ -52,12 +50,6 @@ const migrateControlGroups = (groups: ControlGroup[]): ControlGroup[] => {
       return { ...rest, type: 'intiface-toy', actuators: vibrators } as ControlType
     })
   }))
-}
-
-// Drops every shock that hasn't reached OpenShock yet (see useStopEverything.ts).
-export const cancelPendingShocks = (): void => {
-  pendingShocks.forEach((timer) => clearTimeout(timer))
-  pendingShocks.clear()
 }
 
 export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) => void): {
@@ -105,7 +97,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { avatarDetails } = useAvatarDetails(() => loadControls())
   const { lockedControls, controlLimits, groupOverrides } = useLockedControls()
   const { viewerGroups } = useViewerGroups()
-  const { command: osCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
+  const { fire: openShockFire, isAvailable: openShockAvailable, shockerNames, hubsOffline } = useOpenShock()
   const { controlValue, setValue } = useOpenShockControl()
   const {
     setActuatorIntensity,
@@ -149,9 +141,13 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         // there's nothing left for it to actuate; a control spanning several toys stays available
         // as long as at least one of them is still present. Other control types never depend on an
         // external service, so they're always available.
+        // A shocker control whose hubs are all offline is unavailable too, with its own reason.
+        ...(control.type === 'open-shock-shocker' && openShockAvailable.value && hubsOffline(control.shockers)
+          ? { unavailableReason: 'Hub offline' }
+          : {}),
         unavailable:
           control.type === 'open-shock-shocker'
-            ? !openShockAvailable.value
+            ? !openShockAvailable.value || hubsOffline(control.shockers)
             : control.type === 'intiface-toy' || control.type === 'intiface-pattern'
               ? !intifaceAvailable.value ||
                 control.actuators.every(
@@ -445,20 +441,16 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         animationDuration: control.animationDuration
       })
 
-      const timer = setTimeout(() => {
-        pendingShocks.delete(timer)
-
-        const cmd = control.shockers.map((shocker) => ({
-          id: shocker,
-          type: control.mode,
-          duration: Number(duration),
-          intensity: Number(intensity)
-        }))
-
-        void osCommand(cmd)
-      }, control.animationDuration)
-
-      pendingShocks.add(timer)
+      // Rust waits for the reel animation, checks again that OpenShock may still be used, then
+      // sends it. Stop everything drops it there if it comes first.
+      openShockFire({
+        shockers: control.shockers,
+        mode: control.mode,
+        intensity: Number(intensity),
+        duration: Number(duration),
+        delayMs: control.animationDuration,
+        viewerName: context.viewerName ?? null
+      }).catch((error) => console.error('OpenShock refused the shock:', error))
 
       return {
         intensity: Number(intensity),

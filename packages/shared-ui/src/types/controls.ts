@@ -78,6 +78,9 @@ export interface BaseControl {
   // usable regardless of any lock group. Computed client-side (see useControls.ts) and enforced
   // host-side the same way `locked` is (see useWebsocketHost.ts).
   unavailable?: boolean
+  // Why, when it's more specific than the control type's usual reason (see Control.vue), e.g. an
+  // OpenShock control whose shocker hubs are all offline. Computed client-side like `unavailable`.
+  unavailableReason?: string
   // Set by the host's active profile, like `locked`: narrows what viewers may do with a control
   // that is still usable. Computed client-side (see useControls.ts), never saved, and enforced by
   // sanitizeCommand (utils/controlLimits.ts) on the host and the relay.

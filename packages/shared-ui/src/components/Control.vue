@@ -57,7 +57,9 @@ const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
   preset: 'This preset no longer exists'
 }
 
-const unavailableReason = computed(() => UNAVAILABLE_REASON[props.control.type] ?? 'Not available right now')
+const unavailableReason = computed(
+  () => props.control.unavailableReason ?? UNAVAILABLE_REASON[props.control.type] ?? 'Not available right now'
+)
 
 provide(
   TILE_BADGES,

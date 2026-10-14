@@ -36,6 +36,14 @@ sysinfo = { version = "0.36.1", default-features = false, features = ["system"] 
 mdns-sd = "0.21"
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# OpenShock's REST API (see src/openshock). Same reqwest and TLS setup the updater already pulls in.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+# The TLS crypto that reqwest's rustls-no-provider expects installed (see lib.rs). ring is the one
+# tokio-tungstenite already brings.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# Tokens in the system's password store (see src/secrets.rs): Windows Credential Manager, or the
+# Secret Service on Linux over zbus, so there's no libdbus to build against.
+keyring = { version = "3", features = ["apple-native", "windows-native", "async-secret-service", "tokio", "crypto-rust"] }
 
 # The Stop everything hotkey (see src/composables/useStopEverything.ts), registered from the UI.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
