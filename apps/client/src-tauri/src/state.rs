@@ -10,8 +10,10 @@ use vrchat_osc::VRChatOSC;
 use crate::automations::Automations;
 use crate::boards::Boards;
 use crate::osc::cache::CacheThrottle;
+use crate::intiface::Intiface;
 use crate::openshock::OpenShock;
 use crate::server::Server;
+use crate::toys::Toys;
 use crate::types::{AvatarDetails, OscMessage};
 
 pub struct AppState {
@@ -56,7 +58,11 @@ pub struct AppState {
     /// The link to the share server (see `server`).
     pub server: Server,
     /// OpenShock's token check, live hub and pending shocks (see `openshock`).
-    pub openshock: OpenShock
+    pub openshock: OpenShock,
+    /// The Intiface connection and its devices (see `intiface`).
+    pub intiface: Intiface,
+    /// What was last sent to each toy (see `toys`).
+    pub toys: Toys
 }
 
 impl Default for AppState {
@@ -76,7 +82,9 @@ impl Default for AppState {
             boards: Boards::default(),
             automations: Automations::default(),
             server: Server::default(),
-            openshock: OpenShock::default()
+            openshock: OpenShock::default(),
+            intiface: Intiface::default(),
+            toys: Toys::default()
         }
     }
 }

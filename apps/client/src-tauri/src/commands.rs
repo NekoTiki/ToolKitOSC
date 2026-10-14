@@ -1,7 +1,6 @@
 //! Tauri commands — the `invoke()`-callable surface the frontend's TS bridge
 //! (src/lib/tauri-bridge.ts) wraps, matching the shape of the old Electron `window.api`.
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::Ordering;
 
 use serde::Serialize;
@@ -10,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::automations::{self, model::Automation};
 use crate::boards::{self, BoardView, BoardsSnapshot, OutputConfig, Target};
 use crate::openshock;
+use crate::{intiface, toys};
 use crate::osc::oscquery;
 use crate::presets::{self, PresetStore};
 use crate::server;
@@ -28,124 +28,6 @@ pub fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
-}
-
-/// Best-effort lookup for a local Intiface Central install, so Settings can offer to launch it
-/// instead of just reporting a failed connection. Intiface Central doesn't register itself
-/// anywhere queryable (no protocol handler, no registry key we can rely on), so this only checks
-/// the well-known per-OS install locations from its own installer/packaging — a custom install
-/// directory won't be found. One path (or bundle/app id) per OS, so unlike Windows/macOS this
-/// doesn't need `find` — a single tail expression per `#[cfg]` block is the whole function body.
-fn find_intiface_central() -> Option<PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        // The installer runs per-user (unprivileged) by default, installing under %APPDATA%; an
-        // admin/all-users install instead lands under %ProgramFiles%. Check both.
-        [
-            std::env::var("ProgramFiles").ok(),
-            std::env::var("APPDATA").ok(),
-        ]
-        .into_iter()
-        .flatten()
-        .map(|dir| {
-            PathBuf::from(dir)
-                .join("IntifaceCentral")
-                .join("intiface_central.exe")
-        })
-        .find(|path| path.is_file())
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let path = PathBuf::from("/Applications/Intiface Central.app");
-        path.is_dir().then_some(path)
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // The Flathub package (com.nonpolynomial.intiface_central) is the officially distributed
-        // build - other install methods (AUR, manual builds) aren't detected.
-        let user_install = std::env::var("HOME").ok().map(|home| {
-            PathBuf::from(home).join(".local/share/flatpak/app/com.nonpolynomial.intiface_central")
-        });
-
-        [
-            user_install,
-            Some(PathBuf::from(
-                "/var/lib/flatpak/app/com.nonpolynomial.intiface_central",
-            )),
-        ]
-        .into_iter()
-        .flatten()
-        .find(|path| path.is_dir())
-    }
-}
-
-#[tauri::command]
-pub fn intiface_central_available() -> bool {
-    find_intiface_central().is_some()
-}
-
-#[tauri::command]
-pub fn start_intiface_central() -> Result<(), String> {
-    let path = find_intiface_central()
-        .ok_or_else(|| "Intiface Central was not found on this system".to_string())?;
-
-    #[cfg(target_os = "windows")]
-    {
-        Command::new(&path).spawn().map_err(|e| e.to_string())?;
-    }
-
-    // .app bundles are launched through `open`, not by executing a binary inside them directly -
-    // it's the standard way to start a macOS application and avoids having to know/guess the
-    // bundle's internal executable name.
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg("-a")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        Command::new("flatpak")
-            .args(["run", "com.nonpolynomial.intiface_central"])
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
-}
-
-/// Whether anything is listening on Intiface's address. The webview's WebSocket reports "nothing
-/// there" and "there, but closed on us" the same way (an error, then a close before it ever
-/// opened), so the frontend asks this to tell "it's running but refused us" apart from the rest.
-/// A closed port doesn't mean Intiface Central isn't running, though: it stops listening while a
-/// client is connected (confirmed live) - see `intiface_central_running` for that.
-#[tauri::command]
-pub async fn intiface_port_open(host: String, port: u16) -> bool {
-    let connect = tokio::net::TcpStream::connect((host.as_str(), port));
-    matches!(tokio::time::timeout(std::time::Duration::from_secs(1), connect).await, Ok(Ok(_)))
-}
-
-/// Whether an Intiface Central process is running on this machine, so auto-launch never opens a
-/// second copy - whether its server is busy with another client, stopped, or still starting up.
-/// Matches the process name rather than the path found by `find_intiface_central`, so a copy
-/// installed somewhere else still counts: `intiface_central.exe` on Windows, `intiface_central`
-/// in the Flatpak, `Intiface Central` on macOS.
-#[tauri::command]
-pub fn intiface_central_running() -> bool {
-    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
-
-    let mut system = System::new();
-    system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
-
-    system.processes().values().any(|process| {
-        let name = process.name().to_string_lossy().to_lowercase();
-        name.starts_with("intiface_central") || name.starts_with("intiface central")
-    })
 }
 
 fn steamvr_manifest_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -453,4 +335,49 @@ pub fn openshock_fire(app: AppHandle, fire: openshock::Fire) -> Result<(), Strin
 #[tauri::command]
 pub async fn openshock_stop_all(app: AppHandle) -> Result<(), String> {
     openshock::stop_all(&app).await
+}
+
+#[tauri::command]
+pub fn intiface_state(app: AppHandle) -> intiface::View {
+    intiface::view(&app)
+}
+
+/// Once, from the settings the webview used to keep in localStorage.
+#[tauri::command]
+pub fn intiface_migrate(app: AppHandle, url: Option<String>, enabled: Option<bool>, auto_launch: Option<bool>) {
+    intiface::migrate(&app, url, enabled, auto_launch);
+}
+
+/// Empty or missing goes back to the default URL.
+#[tauri::command]
+pub fn intiface_set_url(app: AppHandle, url: Option<String>) {
+    intiface::set_url(&app, url);
+}
+
+#[tauri::command]
+pub fn intiface_set_enabled(app: AppHandle, enabled: bool) {
+    intiface::set_enabled(&app, enabled);
+}
+
+#[tauri::command]
+pub fn intiface_set_auto_launch(app: AppHandle, auto_launch: bool) {
+    intiface::set_auto_launch(&app, auto_launch);
+}
+
+/// Opens the local Intiface Central install.
+#[tauri::command]
+pub fn intiface_launch() -> Result<(), String> {
+    intiface::launch_now()
+}
+
+/// Sets these actuators to `level` (0–1).
+#[tauri::command]
+pub fn toys_set(app: AppHandle, actuators: Vec<toys::ActuatorRef>, level: f64) {
+    toys::set(&app, &actuators, level);
+}
+
+/// Stops every connected toy.
+#[tauri::command]
+pub fn toys_stop_all(app: AppHandle) {
+    toys::stop_all(&app);
 }
