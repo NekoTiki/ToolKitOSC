@@ -165,6 +165,27 @@ export interface ToyActuatorRef {
   actuatorType: string
 }
 
+// What a pattern plays: a built-in or saved pattern by id, or samples the caller holds.
+export interface PatternSource {
+  id: string
+  // Intensities 0-100, one per 50 ms. When set, played instead of looking the id up.
+  samples?: number[]
+}
+
+export interface SavedPatternData {
+  id: string
+  name: string
+  icon?: string
+  samples: number[]
+  updatedAt: number
+}
+
+export interface PatternValueEvent {
+  controlId: string
+  value: string
+  info: { by?: string; endsAt?: number } | null
+}
+
 export interface FoundBoard {
   id: string
   name: string
@@ -374,6 +395,39 @@ export const api = {
   toysSet: (actuators: ToyActuatorRef[], level: number): Promise<void> => invoke('toys_set', { actuators, level }),
   // Stops every connected toy, not only the ones a control drives.
   toysStopAll: (): Promise<void> => invoke('toys_stop_all'),
+  // Plays a pattern for this control after taking its actuators from any other pattern. Resolves
+  // to the run's number (onPatternEnded carries it), or null for an unknown pattern.
+  patternsPlay: (
+    controlId: string,
+    source: PatternSource,
+    actuators: ToyActuatorRef[],
+    stopAfterMs?: number | null,
+    by?: string
+  ): Promise<number | null> => invoke('patterns_play', { controlId, source, actuators, stopAfterMs: stopAfterMs ?? null, by: by ?? null }),
+  // Stops this control's pattern and zeroes its toys.
+  patternsOff: (controlId: string, actuators: ToyActuatorRef[]): Promise<void> => invoke('patterns_off', { controlId, actuators }),
+  // Stops this control's pattern without touching its toys.
+  patternsStop: (controlId: string): Promise<void> => invoke('patterns_stop', { controlId }),
+  // Stops every other pattern on these actuators, before something else drives them.
+  patternsRelease: (actuators: ToyActuatorRef[], except?: string): Promise<void> =>
+    invoke('patterns_release', { actuators, except: except ?? null }),
+  patternsStopAll: (): Promise<void> => invoke('patterns_stop_all'),
+  patternsSavedList: (): Promise<SavedPatternData[]> => invoke('patterns_saved_list'),
+  // Adds a recorded pattern, or replaces the one with its id.
+  patternsSave: (pattern: SavedPatternData): Promise<void> => invoke('patterns_save', { pattern }),
+  patternsDelete: (id: string): Promise<void> => invoke('patterns_delete', { id }),
+  // Once, from the recordings the webview used to keep in localStorage.
+  patternsMigrate: (patterns: SavedPatternData[]): Promise<void> => invoke('patterns_migrate', { patterns }),
+  onSavedPatterns: (callback: (patterns: SavedPatternData[]) => void): void => {
+    void listen<SavedPatternData[]>('saved-patterns', (event) => callback(event.payload))
+  },
+  // A control's pattern changed in Rust (started, stopped, taken over by another, timed out).
+  onPatternValue: (callback: (value: PatternValueEvent) => void): void => {
+    void listen<PatternValueEvent>('pattern-value', (event) => callback(event.payload))
+  },
+  onPatternEnded: (callback: (ended: { controlId: string; run: number }) => void): void => {
+    void listen<{ controlId: string; run: number }>('pattern-ended', (event) => callback(event.payload))
+  },
   steamVrAvailable: (): Promise<IntegrationAvailability> => invoke('steamvr_available'),
   steamVrSetAutoLaunch: (enable: boolean): Promise<void> =>
     invoke('steamvr_set_auto_launch', { enable }),
