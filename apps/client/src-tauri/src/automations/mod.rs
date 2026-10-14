@@ -7,6 +7,7 @@
 //! The list is global. An avatar-parameter trigger carries its avatar, so it only runs while that
 //! avatar is worn. Only live changes count: values read when an avatar loads never reach here
 //! (see `osc::udp::handle_message`).
+mod control_runs;
 mod engine;
 pub mod model;
 mod store;
@@ -82,7 +83,10 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 }
             }
             Effect::App(run) => {
-                let _ = app.emit("automation-run", run);
+                // Control steps run here; profiles, the chatbox and Stop everything in the webview.
+                if !control_runs::run(app, &run) {
+                    let _ = app.emit("automation-run", run);
+                }
             }
             Effect::Activity(activity) => {
                 let _ = app.emit("automation-activity", activity);
@@ -305,6 +309,8 @@ pub fn avatar_worn(app: &AppHandle, avatar_id: &str) {
 
 /// The avatar changed: everything the old one was holding lets go.
 pub fn avatar_changed(app: &AppHandle) {
+    // Control holds and pulses belonged to the old avatar's controls: forgotten, not put back.
+    control_runs::forget();
     let effects = automations(app).state.lock().unwrap().release_all();
     apply(app, effects);
 }

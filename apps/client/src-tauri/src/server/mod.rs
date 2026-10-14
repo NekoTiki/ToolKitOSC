@@ -154,9 +154,17 @@ pub fn send(app: &AppHandle, text: String) {
     }
 }
 
-/// The webview's controls and rules, for checking viewer commands.
+/// The webview's controls and rules, for checking viewer commands. When a profile's limits on a
+/// toy change, running toys are brought within them (see `policy::clamp_running`).
 pub fn set_policy(app: &AppHandle, policy: policy::Policy) {
-    server(app).inner.lock().unwrap().policy = Some(policy);
+    let previous = server(app).inner.lock().unwrap().policy.replace(policy.clone());
+    policy::clamp_running(app, previous.as_ref(), &policy);
+}
+
+/// A control of the avatar you're wearing, as the webview last pushed it.
+pub fn find_control(app: &AppHandle, group_id: &str, control_id: &str) -> Option<serde_json::Value> {
+    let inner = server(app).inner.lock().unwrap();
+    inner.policy.as_ref()?.control(group_id, control_id).map(|(control, _)| control.clone())
 }
 
 /// The rules, and the connected viewer with this session id.
