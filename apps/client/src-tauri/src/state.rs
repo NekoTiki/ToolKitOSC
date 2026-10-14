@@ -28,15 +28,15 @@ pub struct AppState {
     pub unresolved_avatar: Mutex<Option<String>>,
     pub cache_throttle: CacheThrottle,
     /// The socket already `.connect()`-ed to VRChat's inbound OSC port (127.0.0.1:9000). Set
-    /// once at startup by `osc::udp::run`; `commands::send_osc_message` sends directly on it.
+    /// once at startup by `osc::udp::run`; `osc::send` sends directly on it.
     pub sender_socket: Mutex<Option<Arc<UdpSocket>>>,
     /// VRChat's real OSC address, once `osc::oscquery` discovers it via mDNS - overrides the fixed
-    /// send port 9000 in `commands::send_osc_message` when present. `None` until discovery
+    /// send port 9000 in `osc::send` when present. `None` until discovery
     /// succeeds (or forever, on a network where mDNS doesn't work), in which case sending falls
     /// back to the fixed port unchanged.
     pub oscquery_target: Mutex<Option<SocketAddr>>,
     /// VRChat's OSCQuery HTTP address (distinct from `oscquery_target`, which is the OSC UDP
-    /// address) - lets `commands::force_pull_parameters` issue an on-demand GET without waiting
+    /// address) - lets `osc::commands::force_pull_parameters` issue an on-demand GET without waiting
     /// for a new discovery event.
     pub oscquery_http_target: Mutex<Option<SocketAddr>>,
     /// Kept alive for the app's lifetime once `osc::oscquery::run` creates it - see that module.
@@ -47,9 +47,9 @@ pub struct AppState {
     pub avatar_poll_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// Mirrors the frontend's "keep running in the tray" setting (persisted in the webview's own
     /// localStorage, out of reach of the window's native close handler) - kept in sync via
-    /// `commands::set_minimize_to_tray`, which the frontend calls on load and on every toggle.
+    /// `app::set_minimize_to_tray`, which the frontend calls on load and on every toggle.
     pub minimize_to_tray: AtomicBool,
-    /// The tray icon built once in `lib.rs::setup_tray`. Kept here so `commands::set_minimize_to_tray`
+    /// The tray icon built once in `lib.rs::setup_tray`. Kept here so `app::set_minimize_to_tray`
     /// can show/hide it in step with the setting - the icon only earns its keep as a way back into
     /// a window that's hidden rather than closed, so it has no reason to exist while the setting is off.
     pub tray_icon: Mutex<Option<TrayIcon>>,

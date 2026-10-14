@@ -11,6 +11,7 @@ mod control_runs;
 mod engine;
 pub mod model;
 mod store;
+pub mod commands;
 
 use std::sync::Mutex;
 use std::time::Duration;

@@ -77,3 +77,13 @@ pub fn save(app: &AppHandle, avatar_id: &str, store: &PresetStore) -> Result<(),
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn load_presets(app: AppHandle, avatar_id: String) -> Result<PresetStore, String> {
+    load(&app, &avatar_id)
+}
+
+#[tauri::command]
+pub fn save_presets(app: AppHandle, avatar_id: String, store: PresetStore) -> Result<(), String> {
+    save(&app, &avatar_id, &store)
+}

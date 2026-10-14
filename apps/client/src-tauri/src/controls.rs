@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -172,4 +173,25 @@ fn run_preset(app: &AppHandle, preset_id: &str) {
             tracing::warn!("Couldn't send {}: {err}", parameter.address);
         }
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlRunResult {
+    /// What a shock rolled, when one went out.
+    shock: Option<serde_json::Value>,
+    /// The run number of a pattern it started.
+    pattern_run: Option<u64>
+}
+
+/// Runs a command on a control as you: your own clicks, previews and automations. No limits apply.
+#[tauri::command]
+pub fn control_run(
+    app: AppHandle,
+    control: serde_json::Value,
+    command: serde_json::Value,
+    viewer_name: Option<String>
+) -> ControlRunResult {
+    let outcome = run(&app, &control, &command, viewer_name);
+    ControlRunResult { shock: outcome.shock, pattern_run: outcome.pattern_run }
 }

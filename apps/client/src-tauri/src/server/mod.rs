@@ -6,11 +6,12 @@
 //! server (see `on_parameter`), for the parameters the webview asked for. The token it signs in
 //! with stays here too (see `auth`).
 pub mod auth;
-mod commands;
+mod viewer_commands;
 pub mod limits;
 mod link;
 pub mod policy;
 pub mod viewer;
+pub mod commands;
 
 use std::collections::HashSet;
 use std::sync::Mutex;
@@ -302,7 +303,7 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
     }
 
     if kind.as_deref() == Some("command") {
-        commands::handle(app, &value);
+        viewer_commands::handle(app, &value);
         return After::Continue;
     }
 

@@ -2,6 +2,7 @@ pub mod cache;
 pub mod codec;
 pub mod oscquery;
 pub mod udp;
+pub mod commands;
 
 use crate::state::AppState;
 use crate::types::OscCommand;

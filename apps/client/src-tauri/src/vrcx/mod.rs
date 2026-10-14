@@ -11,6 +11,8 @@
 //! `Dotnet/AutoAppLaunchManager.cs` and `Program.cs` in VRCX).
 use std::path::PathBuf;
 
+pub mod commands;
+
 #[cfg(target_os = "windows")]
 mod windows;
 #[cfg(target_os = "windows")]

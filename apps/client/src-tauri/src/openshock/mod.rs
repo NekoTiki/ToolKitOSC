@@ -9,6 +9,7 @@
 //! animation and the activity log need them straight away. Rust waits, checks and sends.
 mod hub;
 mod rest;
+pub mod commands;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

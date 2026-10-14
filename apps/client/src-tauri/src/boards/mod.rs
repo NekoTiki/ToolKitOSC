@@ -9,6 +9,7 @@ mod link;
 mod pairing;
 pub mod protocol;
 mod store;
+pub mod commands;
 
 use std::collections::HashMap;
 use std::sync::Mutex;

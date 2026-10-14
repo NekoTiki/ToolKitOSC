@@ -18,7 +18,7 @@
 //! trade-off. This module also discovers VRChat's real OSC address instead of assuming the fixed
 //! send port 9000, which matters for multiple VRChat instances or a VRChat launched with custom
 //! `--osc` args (`osc::udp` still owns that fixed-port *sender*, which this supplements rather
-//! than replaces via `commands::send_osc_message`'s automatic fallback).
+//! than replaces via `osc::commands::send_osc_message`'s automatic fallback).
 //!
 //! `VRChatOSC::new(None)` lets the crate auto-pick a non-loopback interface for its own mDNS
 //! multicast join, rather than forcing loopback: VRChat's OSCQuery HTTP tree is loopback-only, but
