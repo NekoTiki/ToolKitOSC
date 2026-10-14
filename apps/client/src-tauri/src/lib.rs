@@ -3,8 +3,10 @@ mod avatar;
 mod boards;
 mod commands;
 mod logging;
+mod net;
 mod osc;
 mod presets;
+mod server;
 mod state;
 mod steam;
 mod steamvr;
@@ -117,7 +119,11 @@ pub fn run() {
             commands::automation_test,
             commands::automations_set_paused,
             commands::automation_event,
-            commands::automations_set_context
+            commands::automations_set_context,
+            commands::server_connect,
+            commands::server_disconnect,
+            commands::server_send,
+            commands::server_set_forwarded_addresses
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

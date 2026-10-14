@@ -55,6 +55,10 @@ export interface Board {
   offlineSince: number | null
 }
 
+// The share server link - mirrors `Status` in src-tauri/src/server/mod.rs. 'rejected': the server
+// refused the token (auth-error). 'mismatch': it speaks another protocol version. Neither retries.
+export type ServerStatus = 'closed' | 'connecting' | 'open' | 'rejected' | 'mismatch'
+
 export interface FoundBoard {
   id: string
   name: string
@@ -339,7 +343,26 @@ export const api = {
   },
   onBoardPairing: (callback: (event: BoardPairingEvent) => void): void => {
     void listen<BoardPairingEvent>('board-pairing', (event) => callback(event.payload))
-  }
+  },
+  // Asking again for the link that's already up keeps it and replays its status, auth-success and
+  // client-list, which is how a reloaded webview catches up.
+  serverConnect: (url: string, token: string | undefined, protocolVersion: number): Promise<void> =>
+    invoke('server_connect', { url, token: token ?? null, protocolVersion }),
+  serverDisconnect: (): Promise<void> => invoke('server_disconnect'),
+  // One `{type, message}` envelope as JSON text. Dropped while the link is down.
+  serverSend: (text: string): Promise<void> => invoke('server_send', { text }),
+  // The avatar parameters the share page shows. Rust sends their values itself, now and on change.
+  serverSetForwardedAddresses: (addresses: string[]): Promise<void> =>
+    invoke('server_set_forwarded_addresses', { addresses }),
+  // These three resolve once the listener is registered.
+  onServerStatus: (callback: (status: ServerStatus) => void): Promise<unknown> =>
+    listen<ServerStatus>('server-status', (event) => callback(event.payload)),
+  // A message from the server, as JSON text.
+  onServerMessage: (callback: (text: string) => void): Promise<unknown> =>
+    listen<string>('server-message', (event) => callback(event.payload)),
+  // Dev builds: a message Rust sent by itself (auth-token with the token blanked, args-update).
+  onServerDebug: (callback: (text: string) => void): Promise<unknown> =>
+    listen<string>('server-debug', (event) => callback(event.payload))
 }
 
 export type TauriApiType = typeof api

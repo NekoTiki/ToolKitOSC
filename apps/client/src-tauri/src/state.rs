@@ -10,6 +10,7 @@ use vrchat_osc::VRChatOSC;
 use crate::automations::Automations;
 use crate::boards::Boards;
 use crate::osc::cache::CacheThrottle;
+use crate::server::Server;
 use crate::types::{AvatarDetails, OscMessage};
 
 pub struct AppState {
@@ -50,7 +51,9 @@ pub struct AppState {
     /// Added and found ESP32 boards (see `boards`).
     pub boards: Boards,
     /// Every automation, and what they're currently running (see `automations`).
-    pub automations: Automations
+    pub automations: Automations,
+    /// The link to the share server (see `server`).
+    pub server: Server
 }
 
 impl Default for AppState {
@@ -68,7 +71,8 @@ impl Default for AppState {
             minimize_to_tray: AtomicBool::new(false),
             tray_icon: Mutex::new(None),
             boards: Boards::default(),
-            automations: Automations::default()
+            automations: Automations::default(),
+            server: Server::default()
         }
     }
 }

@@ -11,6 +11,7 @@ use crate::automations::{self, model::Automation};
 use crate::boards::{self, BoardView, BoardsSnapshot, OutputConfig, Target};
 use crate::osc::oscquery;
 use crate::presets::{self, PresetStore};
+use crate::server;
 use crate::state::AppState;
 use crate::types::OscCommand;
 use crate::{steamvr, vrcx};
@@ -337,4 +338,28 @@ pub fn automation_event(app: AppHandle, event: automations::model::AppEvent) {
 #[tauri::command]
 pub fn automations_set_context(app: AppHandle, context: automations::model::Context) {
     automations::set_context(&app, context);
+}
+
+/// Connects to the share server's `/host` socket, or keeps the link that's already up to the same
+/// server with the same token (a webview reload) and replays its state.
+#[tauri::command]
+pub fn server_connect(app: AppHandle, url: String, token: Option<String>, protocol_version: u32) {
+    server::connect(&app, url, token, protocol_version);
+}
+
+#[tauri::command]
+pub fn server_disconnect(app: AppHandle) {
+    server::disconnect(&app);
+}
+
+/// One `{type, message}` envelope, as JSON text.
+#[tauri::command]
+pub fn server_send(app: AppHandle, text: String) {
+    server::send(&app, text);
+}
+
+/// The avatar parameters the share page shows (see `server::set_forwarded`).
+#[tauri::command]
+pub fn server_set_forwarded_addresses(app: AppHandle, addresses: Vec<String>) {
+    server::set_forwarded(&app, addresses);
 }

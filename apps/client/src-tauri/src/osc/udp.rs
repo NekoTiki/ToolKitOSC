@@ -95,6 +95,7 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Ori
     }
 
     let _ = app.emit("vrc-osc-message", &osc_msg);
+    crate::server::on_parameter(app, &osc_msg);
 
     if origin == Origin::Live && osc_msg.address.starts_with("/avatar/parameters/") {
         crate::automations::on_parameter(app, &osc_msg, previous.as_ref());
