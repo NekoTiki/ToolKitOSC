@@ -138,6 +138,12 @@ api.onPatternEnded(({ run }) => {
   else endedRuns.add(run)
 })
 
+// Calls `onEnd` once pattern run `run` stops, even if it already has.
+export const onPatternRunEnd = (run: number, onEnd: () => void): void => {
+  if (endedRuns.delete(run)) onEnd()
+  else endCallbacks.set(run, onEnd)
+}
+
 export function useIntifacePatterns(): {
   // Starts (or stops, for INTIFACE_PATTERN_OFF_ID) the given pattern against `actuators` for this
   // control. Claims those actuators first (see releaseActuators) - only one thing should ever be
@@ -165,9 +171,7 @@ export function useIntifacePatterns(): {
     { stopAfterMs, by, onEnd }: PlayOptions = {}
   ): void => {
     void api.patternsPlay(controlId, { id: pattern.id, samples: pattern.samples }, toRefs(actuators), stopAfterMs, by).then((run) => {
-      if (run === null || !onEnd) return
-      if (endedRuns.delete(run)) onEnd()
-      else endCallbacks.set(run, onEnd)
+      if (run !== null && onEnd) onPatternRunEnd(run, onEnd)
     })
   }
 

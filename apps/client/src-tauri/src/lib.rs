@@ -2,6 +2,7 @@ mod automations;
 mod avatar;
 mod boards;
 mod commands;
+mod controls;
 mod intiface;
 mod logging;
 mod net;
@@ -144,6 +145,8 @@ pub fn run() {
             commands::server_send,
             commands::server_set_forwarded_addresses,
             commands::server_request,
+            commands::server_set_policy,
+            commands::control_run,
             commands::auth_state,
             commands::auth_migrate,
             commands::auth_sign_out,

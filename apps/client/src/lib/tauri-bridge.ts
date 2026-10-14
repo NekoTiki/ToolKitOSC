@@ -4,7 +4,15 @@
 // apps/client's entry in the monorepo plan for the reasoning.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AvatarDetails, OscCommand, OSCMessage, PresetStore } from '@toolkitosc/shared-ui'
+import type {
+  AvatarDetails,
+  CommandValue,
+  ControlGroup,
+  OpenShockControlValue,
+  OscCommand,
+  OSCMessage,
+  PresetStore
+} from '@toolkitosc/shared-ui'
 
 // Whether an optional integration (SteamVR, VRCX) can be offered here - mirrors `Availability` in
 // src-tauri/src/commands.rs. 'unsupported' means it can't work on this OS at all, 'not-installed'
@@ -184,6 +192,29 @@ export interface PatternValueEvent {
   controlId: string
   value: string
   info: { by?: string; endsAt?: number } | null
+}
+
+// What Rust checks viewer commands against - mirrors src-tauri/src/server/policy.rs.
+export interface ServerPolicy {
+  // The worn avatar's groups, hidden ones included, with the profile's locks, limits and group rules.
+  groups: ControlGroup[]
+  // Viewer key -> the groups they're in right now.
+  memberships: Record<string, string[]>
+  bans: { scope: 'ip' | 'discord'; value: string; reason?: string }[]
+  clientType: string
+  showViewers: boolean
+}
+
+export interface CommandExecuted {
+  peerId: string
+  groupId: string
+  controlId: string
+  controlName: string
+  type: string
+  value?: CommandValue
+  // A viewer's own pattern: its samples, and the run that plays it (onPatternEnded carries it).
+  samples?: number[]
+  patternRun?: number | null
 }
 
 export interface FoundBoard {
@@ -427,6 +458,21 @@ export const api = {
   },
   onPatternEnded: (callback: (ended: { controlId: string; run: number }) => void): void => {
     void listen<{ controlId: string; run: number }>('pattern-ended', (event) => callback(event.payload))
+  },
+  // The controls and rules viewer commands are checked against, in Rust.
+  serverSetPolicy: (policy: ServerPolicy): Promise<void> => invoke('server_set_policy', { policy }),
+  // Runs a command on a control as you, without limits.
+  controlRun: (control: unknown, command: unknown, viewerName?: string): Promise<{ shock: unknown; patternRun: number | null }> =>
+    invoke('control_run', { control, command, viewerName: viewerName ?? null }),
+  // A viewer's command Rust checked and ran (or accepted without a control to run), to log.
+  onCommandExecuted: (callback: (executed: CommandExecuted) => void): void => {
+    void listen<CommandExecuted>('command-executed', (event) => callback(event.payload))
+  },
+  onToyValue: (callback: (value: { controlId: string; value: number }) => void): void => {
+    void listen<{ controlId: string; value: number }>('toy-value', (event) => callback(event.payload))
+  },
+  onShockValue: (callback: (value: { controlId: string; value: OpenShockControlValue }) => void): void => {
+    void listen<{ controlId: string; value: OpenShockControlValue }>('shock-value', (event) => callback(event.payload))
   },
   steamVrAvailable: (): Promise<IntegrationAvailability> => invoke('steamvr_available'),
   steamVrSetAutoLaunch: (enable: boolean): Promise<void> =>

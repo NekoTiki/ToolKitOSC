@@ -9,15 +9,14 @@ import { describeViewer, useClientsDb } from '@renderer/composables/useClientsDb
 import { useClientType } from '@renderer/composables/useClientType'
 import { useCommandsDb } from '@renderer/composables/useCommandsDb'
 import { useControls } from '@renderer/composables/useControls'
+import { onPatternRunEnd } from '@renderer/composables/useIntifacePatterns'
 import { useShareSettings } from '@renderer/composables/useShareSettings'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
-import type { ServerStatus } from '@renderer/lib/tauri-bridge'
+import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
-import { checkClient } from '@renderer/utils/checkClient'
-import { AUTHENTICATED_MAX_PER_WINDOW, isRateLimited } from '@renderer/utils/rateLimit'
 import type { ClientListEntry, ControlTypes, ViewerGroupsMessage } from '@toolkitosc/shared-ui'
 import {
   INTIFACE_PATTERN_OFF_ID,
@@ -25,11 +24,9 @@ import {
   limitRange,
   PROTOCOL_VERSION,
   resolveControlForViewer,
-  sanitizeCommand,
   useIntifaceControl,
   useIntifacePatternControl,
   useOpenShockControl,
-  VIEWER_LIVE_ID,
   VIEWER_PATTERN_ID
 } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
@@ -89,7 +86,7 @@ export function useWebsocketHost(): {
   open: () => void
   close: () => void
 } {
-  const { controls, visibleControls, setControlLastUser, getControl, isGroupHidden, handleCommand } =
+  const { controls, visibleControls, setControlLastUser, getControl, handleCommand } =
     useControls(() => sendControls())
 
 
@@ -151,7 +148,7 @@ export function useWebsocketHost(): {
   )
 
   const { onlineClients, upsertViewers } = useClientsDb()
-  const { isBanned } = useBannedClientsDb()
+  const { bannedClients } = useBannedClientsDb()
   const { add: addCommandToDb, update: updateCommandInDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
   const { lastUpdate: intifaceLastUpdate, controlValue: intifaceValues } = useIntifaceControl()
@@ -160,8 +157,62 @@ export function useWebsocketHost(): {
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
   const { paused } = useStopEverything()
-  const { viewerGroups, activeGroupIds } = useViewerGroups()
+  const { viewerGroups, activeGroupIds, activeMemberships } = useViewerGroups()
   const { selectedPrimary, selectedSecondary } = useTheme()
+
+  // A viewer's command Rust checked and ran (src-tauri/src/server/commands.rs), or accepted
+  // without a control to run: log it, note who used the control last, and post it to VRChat's
+  // chatbox if the host turned that on. Rust already replied to the viewer and started automations.
+  api.onCommandExecuted((executed) => {
+    const client = clientsMap.value[executed.peerId]
+
+    if (!client) return
+
+    const viewer = describeViewer(client)
+    const control = getControl(executed.groupId, executed.controlId)
+    const accepted = {
+      groupId: executed.groupId,
+      controlId: executed.controlId,
+      controlName: executed.controlName,
+      type: executed.type as ControlTypes,
+      value: executed.value
+    }
+
+    if (control) {
+      setControlLastUser(executed.groupId, executed.controlId, {
+        avatar: viewer.avatar,
+        displayName: viewer.displayName,
+        discordId: viewer.discordId ?? undefined,
+        ip: viewer.ip
+      })
+    }
+
+    // A viewer's own pattern is logged with its samples, and its row gets the time it stopped.
+    const logged = addCommandToDb({ ...accepted, samples: executed.samples, discordId: viewer.discordId ?? undefined, peerId: client.peerId, ip: viewer.ip })
+
+    if (executed.patternRun !== undefined && executed.patternRun !== null) {
+      onPatternRunEnd(executed.patternRun, () => {
+        const endedAt = Date.now()
+
+        void logged.then((id) => id !== undefined && updateCommandInDb(id, { endedAt }))
+      })
+    }
+
+    // Names follow the share page's own setting.
+    announceAction({ ...accepted, viewerKey: viewer.key, viewerName: showViewers.value ? viewer.displayName : null, control })
+  })
+
+  // What Rust checks viewer commands against: every group with the active profile's locks,
+  // limits and group rules, who's in which group, the bans and who may use controls at all.
+  const policy = computed<ServerPolicy>(() => ({
+    groups: controls.value,
+    memberships: activeMemberships.value,
+    bans: bannedClients.value.map(({ scope, value, reason }) => ({ scope, value, reason })),
+    clientType: clientType.value,
+    showViewers: showViewers.value
+  }))
+
+  watch(policy, (value) => void api.serverSetPolicy(JSON.parse(JSON.stringify(value))), { deep: true, immediate: true })
 
   const status = computed<WebSocketStatus>(() =>
     serverStatus.value === 'open' ? 'OPEN' : serverStatus.value === 'connecting' ? 'CONNECTING' : 'CLOSED'
@@ -230,126 +281,6 @@ export function useWebsocketHost(): {
         } else client.user.userDefinedDisplayName = data.message.displayName
 
         void upsertViewers([describeViewer(client)])
-      }
-    } else if (data.type === 'command' && paused.value) {
-      // Stop everything: viewer commands are dropped, not logged, until the host resumes. The
-      // relay drops them too, and the share page shows a paused card.
-    } else if (data.type === 'command') {
-      const client = clientsMap.value[data.from]
-
-      if (client && data.message.groupId && data.message.controlId) {
-        // Controls are avatar-specific, so a control may legitimately fail to resolve here -
-        // e.g. the host hasn't loaded that avatar's controls yet, or the client is a step behind
-        // after an avatar switch. Still log the attempt (using the info the message itself
-        // carries) so it shows up in the client's history; only skip execution, which does need
-        // a resolved control to know the OSC address/type. A control that *does* resolve but is
-        // explicitly locked - or marked unavailable, e.g. an OpenShock control while no valid
-        // API key is configured (see useControls.ts) - is still ignored entirely, same as before.
-        // Same for a control whose group has been hidden client-side: `sendControls` already
-        // keeps the server/viewers from ever learning it exists, but a viewer that cached an
-        // older `controls-update` (or a hand-crafted command) could still send one, so this is
-        // enforced host-side too rather than trusted to never arrive.
-        // sanitizeCommand also applies the active profile's limits: a blocked option or a value
-        // of the wrong type is dropped the same way, and slider/toy values are clamped to the
-        // allowed range. The relay already did this, but the host has the final say.
-        // The viewer's groups can give them more than the profile gives everyone.
-        const viewer = describeViewer(client)
-        const control = getControl(data.message.groupId, data.message.controlId)
-        const command = control ? sanitizeCommand(resolveControlForViewer(control, activeGroupIds(viewer.key)), data.message) : undefined
-        const { ip } = viewer
-        // A viewer's own pattern, or the live value while they record it (see viewerPatterns on
-        // the control). The host can keep it to viewers signed in with Discord.
-        const viewerPattern = command?.type === 'intiface-pattern' && (command.value === VIEWER_PATTERN_ID || command.value === VIEWER_LIVE_ID)
-        const viewerPatternBlocked =
-          viewerPattern && control?.type === 'intiface-pattern' && !!control.viewerPatterns?.signedInOnly && !client.user?.discord?.id
-
-        if (command !== null && !viewerPatternBlocked && !isGroupHidden(data.message.groupId)) {
-          const banned = isBanned(ip, viewer.discordId)
-          const clientValid = checkClient(clientType.value, client)
-
-          if (banned) {
-            sendMessage('client-banned', {
-              peerId: client.peerId,
-              scope: banned.scope,
-              reason: banned.reason
-            })
-          } else if (!clientValid) {
-            sendMessage('client-invalid', {
-              peerId: client.peerId,
-              reason: 'Client failed validation',
-              type: clientType.value
-            })
-          } else if (
-            isRateLimited(
-              client.peerId,
-              client.user?.discord?.id ? AUTHENTICATED_MAX_PER_WINDOW : undefined
-            )
-          ) {
-            // Deliberately no added delay/throttle before this check - a dragged slider's own
-            // displayed position depends on this exact round trip (see ControlSlider.vue's
-            // `get()`), so anything that buffers a command before executing it makes dragging
-            // feel laggy for whoever's holding it. The slider's outgoing rate is instead kept
-            // low at the true source (see that component's own debounce), not sampled down
-            // again here.
-            sendMessage('rate-limited', {
-              peerId: client.peerId,
-              reason: 'You are sending commands too quickly - slow down.'
-            })
-          } else if (command?.type === 'intiface-pattern' && command.value === VIEWER_LIVE_ID) {
-            // Live values while recording only move the toy: nothing to log, announce or show.
-            if (control) handleCommand(control, command)
-          } else {
-            if (control) {
-              setControlLastUser(data.message.groupId, data.message.controlId, {
-                avatar: viewer.avatar,
-                displayName: viewer.displayName,
-                discordId: viewer.discordId ?? undefined,
-                ip
-              })
-            }
-
-            // For an open-shock-shocker command, the intensity/duration/shockers actually applied
-            // are randomized inside handleCommand and weren't known yet when this message arrived
-            // - run it first and log its result instead of the (always absent) message value.
-            // A viewer's own pattern is logged with its samples, and its row gets the time it stopped.
-            const samples = command?.type === 'intiface-pattern' && command.value === VIEWER_PATTERN_ID ? command.samples : undefined
-            // Filled in once the row is written, which is after the pattern starts.
-            const logged: { id?: Promise<number | undefined> } = {}
-            const onPatternEnd = (): void => {
-              const endedAt = Date.now()
-
-              void logged.id?.then((id) => id !== undefined && updateCommandInDb(id, { endedAt }))
-            }
-            const openShockResult =
-              control && command
-                ? handleCommand(control, command, { viewerName: showViewers.value ? viewer.displayName : undefined, onPatternEnd: samples ? onPatternEnd : undefined })
-                : undefined
-            const sent = command ?? data.message
-            const accepted = {
-              groupId: data.message.groupId,
-              controlId: data.message.controlId,
-              controlName: control?.name || data.message.controlName || data.message.controlId,
-              type: data.message.type,
-              value: openShockResult ?? ('value' in sent ? sent.value : undefined)
-            }
-
-            logged.id = addCommandToDb({ ...accepted, samples, discordId: viewer.discordId ?? undefined, peerId: client.peerId, ip })
-            // Shown to every viewer as the share page's last action (see the server's host.ts).
-            sendMessage('command-accepted', { ...accepted, peerId: client.peerId })
-            // And to the instance, in VRChat's chatbox, if the host turned it on. Names follow
-            // the share page's own setting.
-            announceAction({
-              ...accepted,
-              viewerKey: viewer.key,
-              viewerName: showViewers.value ? viewer.displayName : null,
-              control
-            })
-            // Automations can start from it. A shock that didn't go out (cooldown) doesn't count.
-            if (control && (control.type !== 'open-shock-shocker' || openShockResult)) {
-              void api.automationEvent({ type: 'viewer-command', controlId: control.id, controlType: control.type })
-            }
-          }
-        }
       }
     } else if (data.type === 'client-list') {
       clients.value = data.message

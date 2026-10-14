@@ -1,11 +1,16 @@
 //! The host's link to the share server (`/host`). Rust owns the socket so it stays up while the
-//! webview reloads, sits hidden in the tray or is busy. The webview still decides what every
-//! message means: incoming ones go to it as `server-message` events, and it sends its own through
-//! `server_send`. Avatar parameter values are the exception: they go straight from the OSC
-//! receive path to the server (see `on_parameter`), for the parameters the webview asked for.
-//! The token it signs in with stays here too (see `auth`).
+//! webview reloads, sits hidden in the tray or is busy. Viewer commands are checked and run here
+//! (see `commands`), against a copy of the controls and rules the webview pushes (`policy`).
+//! Other incoming messages go to the webview as `server-message` events, and it sends its own
+//! through `server_send`. Avatar parameter values go straight from the OSC receive path to the
+//! server (see `on_parameter`), for the parameters the webview asked for. The token it signs in
+//! with stays here too (see `auth`).
 pub mod auth;
+mod commands;
+pub mod limits;
 mod link;
+pub mod policy;
+pub mod viewer;
 
 use std::collections::HashSet;
 use std::sync::Mutex;
@@ -55,7 +60,12 @@ struct Inner {
     /// The last `auth-success` and `client-list`, replayed to a webview that comes back to a link
     /// that's already up (a reload), so it learns what it missed.
     auth_success: Option<String>,
-    client_list: Option<String>
+    client_list: Option<String>,
+    /// The viewers connected now, from the last `client-list`, with names kept up to date.
+    clients: Vec<serde_json::Value>,
+    /// The controls and rules viewer commands are checked against (see `policy`). Kept across
+    /// reconnects and webview reloads.
+    policy: Option<policy::Policy>
 }
 
 #[derive(Default)]
@@ -86,6 +96,7 @@ pub fn connect(app: &AppHandle, url: String, protocol_version: u32) {
             inner.authed = false;
             inner.auth_success = None;
             inner.client_list = None;
+            inner.clients.clear();
 
             let id = inner.next_id;
             let auth = token.as_deref().map(|token| auth_message(token, protocol_version));
@@ -125,6 +136,7 @@ pub fn disconnect(app: &AppHandle) {
         inner.authed = false;
         inner.auth_success = None;
         inner.client_list = None;
+        inner.clients.clear();
         inner.link.take()
     };
 
@@ -140,6 +152,29 @@ pub fn send(app: &AppHandle, text: String) {
     if let Some(link) = server(app).inner.lock().unwrap().link.as_ref() {
         let _ = link.tx.send(LinkCommand::Send(text));
     }
+}
+
+/// The webview's controls and rules, for checking viewer commands.
+pub fn set_policy(app: &AppHandle, policy: policy::Policy) {
+    server(app).inner.lock().unwrap().policy = Some(policy);
+}
+
+/// The rules, and the connected viewer with this session id.
+fn policy_and_client(app: &AppHandle, peer_id: &str) -> Option<(policy::Policy, serde_json::Value)> {
+    let inner = server(app).inner.lock().unwrap();
+    let client = inner
+        .clients
+        .iter()
+        .find(|client| client.get("peerId").and_then(serde_json::Value::as_str) == Some(peer_id))?
+        .clone();
+    Some((inner.policy.clone()?, client))
+}
+
+/// Sends a `{type, message}` envelope Rust built itself.
+fn send_message(app: &AppHandle, kind: &str, message: serde_json::Value) {
+    let text = serde_json::json!({ "type": kind, "message": message }).to_string();
+    debug_out(app, &text);
+    send(app, text);
 }
 
 /// The avatar parameters the visible controls use. Their values go to the server as they change,
@@ -206,6 +241,7 @@ fn set_status(app: &AppHandle, id: u64, status: Status) {
             inner.authed = false;
             inner.auth_success = None;
             inner.client_list = None;
+            inner.clients.clear();
         }
         if inner.status == Some(status) {
             return;
@@ -225,9 +261,8 @@ enum After {
 
 /// A message from the server, from link task `id`: noted here, then handed to the webview.
 fn on_message(app: &AppHandle, id: u64, text: String) -> After {
-    let kind = serde_json::from_str::<serde_json::Value>(&text)
-        .ok()
-        .and_then(|value| value.get("type")?.as_str().map(str::to_owned));
+    let value = serde_json::from_str::<serde_json::Value>(&text).unwrap_or_default();
+    let kind = value.get("type").and_then(serde_json::Value::as_str).map(str::to_owned);
 
     {
         let mut inner = server(app).inner.lock().unwrap();
@@ -239,9 +274,28 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
                 inner.authed = true;
                 inner.auth_success = Some(text.clone());
             }
-            Some("client-list") => inner.client_list = Some(text.clone()),
+            Some("client-list") => {
+                inner.client_list = Some(text.clone());
+                inner.clients = value.get("message").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
+            }
+            Some("update-username") => {
+                let from = value.get("from").and_then(serde_json::Value::as_str);
+                let name = value.pointer("/message/displayName").cloned();
+                let client = inner.clients.iter_mut().find(|client| client.get("peerId").and_then(serde_json::Value::as_str) == from);
+                if let (Some(client), Some(name)) = (client, name) {
+                    if !client.get("user").is_some_and(serde_json::Value::is_object) {
+                        client["user"] = serde_json::json!({});
+                    }
+                    client["user"]["userDefinedDisplayName"] = name;
+                }
+            }
             _ => {}
         }
+    }
+
+    if kind.as_deref() == Some("command") {
+        commands::handle(app, &value);
+        return After::Continue;
     }
 
     let _ = app.emit("server-message", text);

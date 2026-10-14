@@ -110,6 +110,8 @@ struct Runner {
 #[derive(Default)]
 pub struct Patterns {
     runners: Mutex<HashMap<String, Runner>>,
+    /// Each control's pattern value as last reported, so "off" isn't reported again and again.
+    values: Mutex<HashMap<String, String>>,
     next_run: Mutex<u64>
 }
 
@@ -121,7 +123,18 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or_default()
 }
 
+/// A control's pattern now, `off` when nothing was reported.
+pub fn value(app: &AppHandle, control_id: &str) -> String {
+    patterns(app).values.lock().unwrap().get(control_id).cloned().unwrap_or_else(|| OFF_ID.to_owned())
+}
+
+/// Reports a control's pattern value without playing anything, e.g. "off" while a viewer records.
+pub fn report(app: &AppHandle, control_id: &str, value: &str) {
+    emit_value(app, control_id, value, None);
+}
+
 fn emit_value(app: &AppHandle, control_id: &str, value: &str, info: Option<Info>) {
+    patterns(app).values.lock().unwrap().insert(control_id.to_owned(), value.to_owned());
     let _ = app.emit("pattern-value", PatternValue { control_id: control_id.to_owned(), value: value.to_owned(), info });
 }
 
