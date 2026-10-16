@@ -8,6 +8,7 @@ import { automationsApi } from './tauri/automations'
 import { boardsApi } from './tauri/boards'
 import { controlsApi } from './tauri/controls'
 import { hapticsApi } from './tauri/haptics'
+import { leashApi } from './tauri/leash'
 import { openshockApi } from './tauri/openshock'
 import { oscApi } from './tauri/osc'
 import { serverApi } from './tauri/server'
@@ -19,6 +20,7 @@ export type * from './tauri/automations'
 export type * from './tauri/boards'
 export type * from './tauri/controls'
 export type * from './tauri/haptics'
+export type * from './tauri/leash'
 export type * from './tauri/openshock'
 export type * from './tauri/osc'
 export type * from './tauri/server'
@@ -34,7 +36,8 @@ export const api = {
   ...serverApi,
   ...openshockApi,
   ...toysApi,
-  ...hapticsApi
+  ...hapticsApi,
+  ...leashApi
 }
 
 export type TauriApiType = typeof api

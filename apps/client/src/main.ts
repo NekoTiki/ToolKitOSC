@@ -1,4 +1,5 @@
 import './assets/main.css'
+import './icons'
 
 import ui from '@nuxt/ui/vue-plugin'
 import { createApp } from 'vue'
