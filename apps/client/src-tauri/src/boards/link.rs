@@ -5,17 +5,14 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tauri::AppHandle;
-use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep, timeout, MissedTickBehavior};
-use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use super::protocol::{self, Incoming, Outgoing};
 use super::{LinkCommand, LinkStatus};
-
-pub type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+pub use crate::net::close_code;
+pub use crate::net::Socket;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const WELCOME_TIMEOUT: Duration = Duration::from_secs(5);
@@ -43,20 +40,11 @@ pub fn ws_url(host: &str, port: u16) -> String {
 }
 
 pub async fn connect(host: &str, port: u16) -> Result<Socket, String> {
-    match timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(ws_url(host, port))).await {
-        Ok(Ok((socket, _))) => Ok(socket),
-        Ok(Err(err)) => Err(err.to_string()),
-        Err(_) => Err("timed out".into())
-    }
+    crate::net::connect(&ws_url(host, port), CONNECT_TIMEOUT).await
 }
 
 pub async fn send(socket: &mut Socket, message: &Outgoing<'_>) -> Result<(), String> {
     socket.send(Message::text(protocol::encode(message))).await.map_err(|e| e.to_string())
-}
-
-/// The close code of a close frame, if it has one.
-pub fn close_code(frame: &Option<CloseFrame>) -> Option<u16> {
-    frame.as_ref().map(|f| u16::from(f.code))
 }
 
 pub fn spawn(app: AppHandle, id: String) -> mpsc::UnboundedSender<LinkCommand> {

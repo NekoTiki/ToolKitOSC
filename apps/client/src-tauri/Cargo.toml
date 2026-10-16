@@ -32,8 +32,9 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 libloading = "0.9"
 sysinfo = { version = "0.36.1", default-features = false, features = ["system"] }
 # ESP32 boards (see src/boards): mDNS browsing for _tkosc._tcp, and the plain ws:// link to each.
+# TLS is for the share server's wss:// link (see src/server), on rustls so Linux needs no OpenSSL.
 mdns-sd = "0.21"
-tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 
 # The Stop everything hotkey (see src/composables/useStopEverything.ts), registered from the UI.
