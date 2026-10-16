@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Addon, AddonState } from '@renderer/composables/useAddons'
 import { ADDON_SECTION, useAddons } from '@renderer/composables/useAddons'
+import { useAddonSwitch } from '@renderer/composables/useAddonSwitch'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
@@ -9,12 +10,12 @@ import { useRouter } from 'vue-router'
 
 // Settings > Add-ons: one card per add-on, grouped by what they're for. An add-on that's off opens
 // no connection and adds nothing to the app; turning one on starts it right away.
-const { addons, state, setEnabled, finishSetup } = useAddons()
+const { addons, state, finishSetup } = useAddons()
+const { setAddon } = useAddonSwitch()
 const { hasToken } = useOpenShock()
 const { boards } = useBoards()
 const { installed: intifaceInstalled, launch: launchIntiface } = useIntiface()
 const router = useRouter()
-const toast = useToast()
 
 const GROUPS: Record<string, string> = { toys: 'Toys and shockers' }
 
@@ -59,10 +60,7 @@ const switching = ref<string | null>(null)
 const toggle = async (addon: Addon, enabled: boolean): Promise<void> => {
   switching.value = addon.id
   try {
-    await setEnabled(addon.id, enabled)
-    if (enabled && needsSetup(addon)) void router.push(`/settings/${ADDON_SECTION[addon.id]}`)
-  } catch (error) {
-    toast.add({ title: `Could not turn ${enabled ? 'on' : 'off'} ${addon.name}`, description: String(error), color: 'error' })
+    if ((await setAddon(addon, enabled)) && enabled && needsSetup(addon)) void router.push(`/settings/${ADDON_SECTION[addon.id]}`)
   } finally {
     switching.value = null
   }

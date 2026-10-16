@@ -2,6 +2,7 @@
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
+import { useAddonSwitch } from '@renderer/composables/useAddonSwitch'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useChatbox } from '@renderer/composables/useChatbox'
@@ -59,7 +60,8 @@ const showAllParameters = ref(false)
 const { controls } = useControls()
 const { lockedControlGroups } = useLockedControls()
 const { enabled: chatboxEnabled } = useChatbox()
-const { offAddonForAutomationKind, offAddonForControlType, setEnabled: setAddonEnabled } = useAddons()
+const { offAddonForAutomationKind, offAddonForControlType } = useAddons()
+const { setAddon } = useAddonSwitch()
 
 // The kinds that can run on this condition, plus the current one so a step that no longer fits
 // still shows what it is.
@@ -442,7 +444,7 @@ const toInt = (value: number | string): number =>
       variant="subtle"
       icon="i-lucide-puzzle"
       :title="`${stepAddonOff.name} is off · this step is skipped`"
-      :actions="[{ label: `Turn on ${stepAddonOff.name}`, icon: 'i-lucide-power', color: 'neutral', variant: 'subtle', onClick: () => void setAddonEnabled(stepAddonOff!.id, true) }]"
+      :actions="[{ label: `Turn on ${stepAddonOff.name}`, icon: 'i-lucide-power', color: 'neutral', variant: 'subtle', onClick: () => void setAddon(stepAddonOff!, true) }]"
     />
 
     <div class="grid gap-1.5">
