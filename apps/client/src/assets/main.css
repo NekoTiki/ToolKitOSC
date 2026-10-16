@@ -51,3 +51,13 @@ body {
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Scrolls without showing a scrollbar, for narrow strips like the app rail where one would eat
+   most of the width. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

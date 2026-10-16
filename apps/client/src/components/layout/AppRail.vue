@@ -52,28 +52,31 @@ const select = (item: RailItem): void => void router.push(item.to)
 <template>
   <nav
     aria-label="Pages"
-    class="flex min-h-0 w-17 shrink-0 flex-col gap-1 overflow-y-auto border-r border-default p-2"
+    class="flex min-h-0 w-17 shrink-0 flex-col border-r border-default"
   >
-    <RailButton
-      v-for="item in items"
-      :key="item.key"
-      :icon="item.icon"
-      :label="item.label"
-      :active="isActive(item)"
-      :badge="item.badge"
-      :busy="item.busy"
-      :alert="item.alert"
-      :addon="item.addon"
-      @click="select(item)"
-    />
+    <!-- The pages scroll when they don't fit, without a scrollbar; Settings stays at the bottom. -->
+    <div class="no-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+      <RailButton
+        v-for="item in items"
+        :key="item.key"
+        :icon="item.icon"
+        :label="item.label"
+        :active="isActive(item)"
+        :badge="item.badge"
+        :busy="item.busy"
+        :alert="item.alert"
+        :addon="item.addon"
+        @click="select(item)"
+      />
+    </div>
 
-    <div class="flex-1" />
-
-    <RailButton
-      :icon="settings.icon"
-      :label="settings.label"
-      :active="isActive(settings)"
-      @click="select(settings)"
-    />
+    <div class="shrink-0 p-2 pt-1">
+      <RailButton
+        :icon="settings.icon"
+        :label="settings.label"
+        :active="isActive(settings)"
+        @click="select(settings)"
+      />
+    </div>
   </nav>
 </template>
