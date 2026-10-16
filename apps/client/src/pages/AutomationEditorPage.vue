@@ -13,7 +13,7 @@ import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
-import type { Automation, AutomationStep, AutomationTrigger, ParameterValueType } from '@renderer/lib/tauri-bridge'
+import type { Automation, AutomationStep, AutomationTrigger, LeashEvent, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { AppEventType, ConditionType } from '@renderer/utils/automations'
 import {
@@ -25,6 +25,7 @@ import {
   describe,
   fitStep,
   formatMs,
+  LEASH_EVENTS,
   MAX_GUARDS,
   MAX_HELD_MS,
   MAX_STEPS,
@@ -95,6 +96,9 @@ const eventType = computed({
 
 const eventItems = (Object.keys(APP_EVENTS) as AppEventType[]).map((type) => ({ value: type, label: APP_EVENTS[type].label }))
 
+const leashWhen = computed(() => (draft.value?.when.kind === 'leash' ? draft.value.when : null))
+const leashEventItems = (Object.keys(LEASH_EVENTS) as LeashEvent[]).map((event) => ({ value: event, label: LEASH_EVENTS[event].label }))
+
 // Which viewer commands count: any, any shock, or one control (by id; the worn avatar's controls).
 const SHOCK = 'open-shock-shocker'
 const eventControl = computed({
@@ -147,7 +151,9 @@ const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
       ? { kind, avatarId: id, avatarName: name }
       : kind === 'app-event'
         ? { kind, event: { type: 'viewer-command', controlId: null, controlType: null } }
-        : newAutomation(id, name).when
+        : kind === 'leash'
+          ? { kind, event: 'grabbed' }
+          : newAutomation(id, name).when
   fitSteps()
 }
 
@@ -158,14 +164,20 @@ const TRIGGER_KINDS: Record<AutomationTrigger['kind'], { label: string; descript
     label: 'Share page',
     description: 'A viewer uses a control, joins or leaves, or controls resume.',
     icon: 'i-lucide-users'
+  },
+  leash: {
+    label: 'Leash',
+    description: 'Someone grabs your avatar leash, pulls you to running or lets go.',
+    icon: 'i-tkosc-collar'
   }
 }
 
-const triggerKindItems = (Object.keys(TRIGGER_KINDS) as AutomationTrigger['kind'][]).map((kind) => ({
-  value: kind,
-  label: TRIGGER_KINDS[kind].label,
-  icon: TRIGGER_KINDS[kind].icon
-}))
+// An add-on's kinds show while it's on, or while this automation already uses one.
+const triggerKindItems = computed(() =>
+  (Object.keys(TRIGGER_KINDS) as AutomationTrigger['kind'][])
+    .filter((kind) => !offAddonForAutomationKind(kind) || kind === draft.value?.when.kind)
+    .map((kind) => ({ value: kind, label: TRIGGER_KINDS[kind].label, icon: TRIGGER_KINDS[kind].icon }))
+)
 
 const triggerKind = computed({
   get: (): AutomationTrigger['kind'] => draft.value?.when.kind ?? 'avatar-parameter',
@@ -501,6 +513,19 @@ onBeforeRouteLeave(async () => {
               />
             </UFormField>
           </template>
+
+          <UFormField
+            v-if="leashWhen"
+            label="Event"
+            :description="LEASH_EVENTS[leashWhen.event].description"
+          >
+            <OptionGrid
+              v-model="leashWhen.event"
+              min-width="12rem"
+              :items="leashEventItems"
+              aria-label="Leash event"
+            />
+          </UFormField>
 
           <UFormField
             v-if="changedWhen"

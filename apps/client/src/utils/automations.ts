@@ -9,6 +9,7 @@ import type {
   Board,
   BoardOutputAction,
   ControlRun,
+  LeashEvent,
   OutputAction,
   ParameterAction,
   ParameterCondition,
@@ -322,6 +323,12 @@ export const STEP_KINDS: Record<
     description: 'Same as the button in the top bar.',
     icon: 'i-lucide-octagon-x',
     runs: ['moment']
+  },
+  'leash-enabled': {
+    label: 'Leash',
+    description: 'Turn Leash moves me on or off.',
+    icon: 'i-tkosc-collar',
+    runs: ['moment']
   }
 }
 
@@ -441,6 +448,8 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
       return { kind, profileId: null, whileHeld: runsFor(condition) === 'state', delayMs: 0 }
     case 'chatbox':
       return { kind, text: '', delayMs: 0 }
+    case 'leash-enabled':
+      return { kind, enabled: false, delayMs: 0 }
     default:
       return { kind, delayMs: 0 }
   }
@@ -544,6 +553,12 @@ export const APP_EVENTS: Record<AppEventType, { label: string; description: stri
   resumed: { label: 'Controls resume', description: 'You turn Stop everything off again.' }
 }
 
+export const LEASH_EVENTS: Record<LeashEvent, { label: string; description: string }> = {
+  grabbed: { label: 'Grabbed', description: 'Someone grabs a leash that moves you.' },
+  running: { label: 'Pulled to running', description: 'The leash is pulled past the run point.' },
+  released: { label: 'Let go', description: 'Nobody holds the leash any more.' }
+}
+
 const describeEvent = (event: AppEvent, context?: DescribeContext): string => {
   if (event.type !== 'viewer-command') return APP_EVENTS[event.type].label.toLowerCase()
   if (event.controlType === 'open-shock-shocker' && !event.controlId)
@@ -554,6 +569,7 @@ const describeEvent = (event: AppEvent, context?: DescribeContext): string => {
 
 export const describeWhen = (when: AutomationTrigger, context?: DescribeContext): string => {
   if (when.kind === 'app-event') return describeEvent(when.event, context)
+  if (when.kind === 'leash') return `the leash is ${when.event === 'running' ? 'pulled to running' : when.event === 'released' ? 'let go' : 'grabbed'}`
   if (when.kind === 'avatar-changed')
     return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
@@ -644,6 +660,9 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
     }
     case 'chatbox':
       what = `chatbox "${step.text}"`
+      break
+    case 'leash-enabled':
+      what = step.enabled ? 'turn the leash on' : 'turn the leash off'
       break
     default:
       what = 'stop everything'

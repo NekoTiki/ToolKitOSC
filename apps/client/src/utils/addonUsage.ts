@@ -36,6 +36,7 @@ export const addonUsage = (addon: AddonManifest, controlTypes: string[], automat
       automation.then.some(
         (step) => addon.automationKinds.includes(step.kind) || (step.kind === 'control' && addon.controlTypes.includes(step.controlType))
       ) ||
+      addon.automationKinds.includes(automation.when.kind) ||
       (automation.when.kind === 'app-event' &&
         automation.when.event.type === 'viewer-command' &&
         !!automation.when.event.controlType &&

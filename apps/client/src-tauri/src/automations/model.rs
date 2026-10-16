@@ -61,7 +61,9 @@ pub enum Trigger {
     AvatarChanged { avatar_id: Option<String>, avatar_name: Option<String> },
     /// Something happens in the app: viewers, Stop everything. The frontend reports these
     /// (`automation_event`).
-    AppEvent { event: AppEvent }
+    AppEvent { event: AppEvent },
+    /// Something happens to the avatar leash. Its add-on reports these.
+    Leash { event: LeashEvent }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -81,6 +83,18 @@ pub enum AppEvent {
     LastViewerLeft,
     /// Stop everything is turned off.
     Resumed
+}
+
+/// What happens to the avatar leash (see `crate::leash`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LeashEvent {
+    /// Someone grabs a leash that moves you.
+    Grabbed,
+    /// The leash is pulled past the run point.
+    Running,
+    /// The leash is let go.
+    Released
 }
 
 impl AppEvent {
@@ -150,7 +164,7 @@ impl Trigger {
     pub fn runs(&self) -> Runs {
         match self {
             Trigger::AvatarParameter { condition, .. } => condition.runs(),
-            Trigger::AvatarChanged { .. } | Trigger::AppEvent { .. } => Runs::Moment
+            Trigger::AvatarChanged { .. } | Trigger::AppEvent { .. } | Trigger::Leash { .. } => Runs::Moment
         }
     }
 }
@@ -238,7 +252,9 @@ pub enum Action {
     },
     /// Posts to the VRChat chatbox, when the chatbox is turned on in Settings.
     Chatbox { text: String },
-    StopEverything
+    StopEverything,
+    /// Turns "Leash moves me" on or off, like `TKOSC/Leash`.
+    LeashEnabled { enabled: bool }
 }
 
 /// How a step runs a control. Values are what the control's command takes (see shared-ui
@@ -460,7 +476,7 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                 return Err("Pick the avatar, or any avatar.".into());
             }
         }
-        Trigger::AppEvent { .. } => {}
+        Trigger::AppEvent { .. } | Trigger::Leash { .. } => {}
     }
 
     if automation.only_if.len() > MAX_GUARDS {
@@ -619,7 +635,7 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
                 _ => {}
             }
         }
-        Action::Profile { .. } | Action::StopEverything => {}
+        Action::Profile { .. } | Action::StopEverything | Action::LeashEnabled { .. } => {}
         Action::Chatbox { text } => {
             if text.trim().is_empty() {
                 return Err("Write the chatbox message.".into());
@@ -870,5 +886,18 @@ mod tests {
         assert_eq!(chatbox_text("Lamp", BoardNote::On), "Lamp activated");
         assert_eq!(chatbox_text("Lamp", BoardNote::Off), "Lamp turned off");
         assert_eq!(chatbox_text(&"x".repeat(200), BoardNote::On).chars().count(), CHATBOX_MAX);
+    }
+
+    #[test]
+    fn leash_events_and_step_read_as_the_webview_writes_them() {
+        let when: Trigger = serde_json::from_str(r#"{"kind":"leash","event":"running"}"#).unwrap();
+        assert_eq!(when, Trigger::Leash { event: LeashEvent::Running });
+        assert_eq!(when.runs(), Runs::Moment);
+
+        let step: Step = serde_json::from_str(r#"{"kind":"leash-enabled","enabled":false}"#).unwrap();
+        assert_eq!(step.action, Action::LeashEnabled { enabled: false });
+        assert_eq!(step.action.runs(), Runs::Moment);
+        assert!(!step.action.in_app());
+        assert!(validate_step(&step, Runs::Moment, None).is_ok());
     }
 }

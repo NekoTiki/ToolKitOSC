@@ -17,6 +17,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
 
+use crate::automations::model::LeashEvent;
 use crate::state::AppState;
 use crate::types::{OscArg, OscMessage};
 use engine::{Checks, Detected, Directions, Engine, Frame, Motion, Output};
@@ -64,6 +65,8 @@ struct Run {
     release: u8,
     test_until: Option<Instant>,
     frame: Frame,
+    /// Whether you were running last tick, for the automation events.
+    running: bool,
     blocked: Option<Blocked>,
     status: String
 }
@@ -168,14 +171,7 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
     };
 
     match name {
-        SWITCH_PARAMETER => {
-            store::with(app, |settings| {
-                let changed = settings.enabled != on;
-                settings.enabled = on;
-                ((), changed)
-            });
-            leash(app).wake.notify_one();
-        }
+        SWITCH_PARAMETER => set_enabled(app, on),
         // The webview's Stop everything follows and keeps it paused; this lets go even before.
         PANIC_PARAMETER if on => let_go(app),
         _ => {
@@ -184,6 +180,16 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
             }
         }
     }
+}
+
+/// "Leash moves me": from the page, `TKOSC/Leash` or an automation.
+pub fn set_enabled(app: &AppHandle, on: bool) {
+    store::with(app, |settings| {
+        let changed = settings.enabled != on;
+        settings.enabled = on;
+        ((), changed)
+    });
+    leash(app).wake.notify_one();
 }
 
 /// Another avatar: its leashes are found once its details are in.
@@ -293,6 +299,13 @@ fn tick(app: &AppHandle) -> bool {
         false
     };
 
+    let running = output.motion == Motion::Running;
+    let events = [
+        (run.frame.active.is_none() && frame.active.is_some(), LeashEvent::Grabbed),
+        (!run.running && running, LeashEvent::Running),
+        (run.frame.active.is_some() && frame.active.is_none(), LeashEvent::Released)
+    ];
+    run.running = running;
     run.frame = frame;
     run.blocked = blocked;
     let status = status_text(app, &run, &settings);
@@ -304,6 +317,11 @@ fn tick(app: &AppHandle) -> bool {
 
     if status_changed {
         crate::addons::changed(app);
+    }
+    for (happened, event) in events {
+        if happened {
+            crate::automations::leash_event(app, event);
+        }
     }
     emit_view(app, false);
     busy
@@ -415,7 +433,8 @@ impl crate::addons::Addon for Addon {
             badge: None,
             needs: &[],
             control_types: &[],
-            automation_kinds: &[],
+            // Its step, and its When.
+            automation_kinds: &["leash-enabled", "leash"],
             pages: &["leash"]
         }
     }

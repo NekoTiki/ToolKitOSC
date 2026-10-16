@@ -49,7 +49,11 @@ export type AppEvent =
 
 export type AppEventTrigger = { kind: 'app-event'; event: AppEvent }
 
-export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger | AppEventTrigger
+// The avatar leash (its add-on): grabbed, pulled past the run point, let go.
+export type LeashEvent = 'grabbed' | 'running' | 'released'
+export type LeashTrigger = { kind: 'leash'; event: LeashEvent }
+
+export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger | AppEventTrigger | LeashTrigger
 
 // Has to be true for an automation to start; checked when it starts, not while it runs.
 export type AutomationGuard =
@@ -125,6 +129,8 @@ export type ControlAction = {
 export type ProfileAction = { kind: 'profile'; profileId: string | null; whileHeld: boolean }
 export type ChatboxStepAction = { kind: 'chatbox'; text: string }
 export type StopEverythingAction = { kind: 'stop-everything' }
+// Turns "Leash moves me" on or off (the avatar leash add-on).
+export type LeashEnabledAction = { kind: 'leash-enabled'; enabled: boolean }
 
 export type AutomationAction =
   | BoardOutputAction
@@ -133,6 +139,7 @@ export type AutomationAction =
   | ProfileAction
   | ChatboxStepAction
   | StopEverythingAction
+  | LeashEnabledAction
 
 // The backend asking the app to carry out a step (see useAutomationRunner.ts). `start` and `stop`
 // bracket a hold; `follow` carries the trigger's value, 0-1.
