@@ -222,7 +222,36 @@ impl Default for Shape {
     }
 }
 
+impl HapticsOutput {
+    /// A toy seen for the first time: a socket, a plug and a touch zone, each on every zone, like
+    /// OscGoesBrrr gives a new toy.
+    pub fn with_defaults(actuator: Actuator) -> Self {
+        Self {
+            actuator,
+            sources: vec![
+                HapticsSource::SpsSocket(SocketSource::default()),
+                HapticsSource::SpsPlug(PlugSource::default()),
+                HapticsSource::SpsTouch(TouchSource::default())
+            ],
+            max_strength: 1.0
+        }
+    }
+}
+
 impl HapticsSettings {
+    /// Gives every actuator that has no global output yet the default sources. One whose sources
+    /// you deleted keeps none. Returns whether any was added.
+    pub fn add_missing(&mut self, actuators: impl IntoIterator<Item = Actuator>) -> bool {
+        let mut added = false;
+        for actuator in actuators {
+            if !self.outputs.iter().any(|output| output.actuator.key() == actuator.key()) {
+                self.outputs.push(HapticsOutput::with_defaults(actuator));
+                added = true;
+            }
+        }
+        added
+    }
+
     /// The outputs that apply while wearing `avatar_id`: the avatar's own for each actuator it
     /// overrides, the global ones for the rest. None at all while haptics are off, globally or for
     /// this avatar.
@@ -290,6 +319,19 @@ mod tests {
         assert!(some.matches("Vagina") && !some.matches("Mouth"));
         let but = ZoneFilter { include: vec![" ".into()], exclude: vec!["Mouth".into()] };
         assert!(but.matches("Vagina") && !but.matches("Mouth"));
+    }
+
+    #[test]
+    fn new_toys_get_the_three_default_sources() {
+        let mut settings = HapticsSettings { outputs: vec![HapticsOutput { sources: vec![], ..output(0, 1.0) }], ..Default::default() };
+        let lush = Actuator { device_index: 0, ..Default::default() };
+        let edge = Actuator { device_index: 1, ..Default::default() };
+        assert!(settings.add_missing([lush.clone(), edge.clone()]));
+        assert!(settings.outputs[0].sources.is_empty(), "deleted sources stay deleted");
+        let kinds: Vec<_> = settings.outputs[1].sources.iter().map(|s| serde_json::to_value(s).unwrap()["kind"].clone()).collect();
+        assert_eq!(kinds, ["sps-socket", "sps-plug", "sps-touch"]);
+        assert!(settings.outputs[1].sources.iter().all(|s| s.zones().include.is_empty()));
+        assert!(!settings.add_missing([lush, edge]));
     }
 
     #[test]

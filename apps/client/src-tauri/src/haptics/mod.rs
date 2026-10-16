@@ -80,6 +80,26 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
     }
 }
 
+/// Intiface's toys changed: a toy seen for the first time gets the default sources.
+pub fn devices_changed(app: &AppHandle) {
+    if haptics(app).task.lock().unwrap().is_none() {
+        return;
+    }
+    let actuators: Vec<model::Actuator> = crate::intiface::devices(app)
+        .into_iter()
+        .flat_map(|device| {
+            device.actuators.into_iter().map(move |actuator| model::Actuator {
+                device_index: device.index,
+                actuator_index: actuator.index,
+                actuator_type: actuator.actuator_type,
+                device_name: device.name.clone(),
+                actuator_description: actuator.description
+            })
+        })
+        .collect();
+    store::with(app, |settings| ((), settings.add_missing(actuators)));
+}
+
 /// Another avatar: its zones start from nothing.
 pub fn avatar_changed(app: &AppHandle) {
     haptics(app).engine.lock().unwrap().clear();
@@ -106,19 +126,23 @@ fn emit_view(app: &AppHandle, now: bool) {
 }
 
 fn start(app: &AppHandle) {
-    let mut task = haptics(app).task.lock().unwrap();
-    if task.is_some() {
-        return;
-    }
-    let app = app.clone();
-    *task = Some(tauri::async_runtime::spawn(async move {
-        let mut ticker = interval(TICK);
-        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        loop {
-            ticker.tick().await;
-            tick(&app);
+    {
+        let mut task = haptics(app).task.lock().unwrap();
+        if task.is_some() {
+            return;
         }
-    }));
+        let app = app.clone();
+        *task = Some(tauri::async_runtime::spawn(async move {
+            let mut ticker = interval(TICK);
+            ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                tick(&app);
+            }
+        }));
+    }
+    // Toys already connected before haptics were turned on.
+    devices_changed(app);
 }
 
 fn stop(app: &AppHandle) {

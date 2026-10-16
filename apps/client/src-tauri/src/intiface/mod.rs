@@ -344,10 +344,11 @@ fn set_devices(app: &AppHandle, id: u64, change: impl FnOnce(&mut BTreeMap<u32, 
         change(&mut inner.devices);
     }
     crate::toys::devices_changed(app);
+    crate::haptics::devices_changed(app);
     emit_state(app);
 }
 
-fn devices(app: &AppHandle) -> Vec<Device> {
+pub(crate) fn devices(app: &AppHandle) -> Vec<Device> {
     intiface(app).inner.lock().unwrap().devices.values().cloned().collect()
 }
 
