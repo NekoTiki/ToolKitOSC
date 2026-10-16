@@ -86,7 +86,7 @@ pub trait Addon: Sync {
 }
 
 /// Every add-on, in the order the Add-ons page lists them.
-static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::boards::Addon];
+static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::boards::Addon];
 
 fn find(id: &str) -> Option<&'static dyn Addon> {
     ADDONS.iter().copied().find(|addon| addon.manifest().id == id)
@@ -395,6 +395,7 @@ mod tests {
             Addon::manifest(&crate::openshock::Addon),
             Addon::manifest(&crate::intiface::Addon),
             Addon::manifest(&crate::haptics::Addon),
+            Addon::manifest(&crate::leash::Addon),
             Addon::manifest(&crate::boards::Addon)
         ]
     }

@@ -13,6 +13,7 @@ use crate::boards::Boards;
 use crate::haptics::Haptics;
 use crate::osc::cache::CacheThrottle;
 use crate::intiface::Intiface;
+use crate::leash::Leash;
 use crate::openshock::OpenShock;
 use crate::server::Server;
 use crate::toys::patterns::Patterns;
@@ -74,7 +75,9 @@ pub struct AppState {
     /// The host's recorded patterns (see `toys::saved`).
     pub saved_patterns: Saved,
     /// Avatar contacts and the toys they drive (see `haptics`).
-    pub haptics: Haptics
+    pub haptics: Haptics,
+    /// Avatar leash pulls and the movement they send (see `leash`).
+    pub leash: Leash
 }
 
 impl Default for AppState {
@@ -100,7 +103,8 @@ impl Default for AppState {
             toys: Toys::default(),
             patterns: Patterns::default(),
             saved_patterns: Saved::default(),
-            haptics: Haptics::default()
+            haptics: Haptics::default(),
+            leash: Leash::default()
         }
     }
 }

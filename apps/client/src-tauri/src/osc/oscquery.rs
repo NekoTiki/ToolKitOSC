@@ -119,6 +119,7 @@ pub async fn run(app: AppHandle) -> anyhow::Result<()> {
     let root_node = OscRootNode::new().with_avatar();
     vrchat_osc
         .register(SERVICE_NAME, root_node, move |packet| {
+            crate::leash::packet_received(&handler_app);
             for message in flatten_packet(packet) {
                 handle_message(&handler_app, message, Origin::Live);
             }

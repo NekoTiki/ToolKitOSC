@@ -9,13 +9,19 @@ use crate::types::OscCommand;
 
 /// Sends one message to VRChat, typed by the worn avatar's parameters when it's one of them.
 pub fn send(state: &AppState, msg: &OscCommand) -> Result<(), String> {
+    let avatar_details = state.avatar_details.lock().unwrap().clone();
+    send_message(state, codec::encode_command(msg, avatar_details.as_ref()))
+}
+
+/// Sends a message already typed by the caller, e.g. `/input/Vertical`, which must be a Float even
+/// at exactly 0 or 1 (`send` would guess Int there).
+pub fn send_message(state: &AppState, message: rosc::OscMessage) -> Result<(), String> {
     let socket = state.sender_socket.lock().unwrap().clone();
     let Some(socket) = socket else {
         return Err("OSC sender not ready yet".into());
     };
 
-    let avatar_details = state.avatar_details.lock().unwrap().clone();
-    let packet = rosc::OscPacket::Message(codec::encode_command(msg, avatar_details.as_ref()));
+    let packet = rosc::OscPacket::Message(message);
     let bytes = rosc::encoder::encode(&packet).map_err(|e| e.to_string())?;
 
     // OSCQuery discovery (osc::oscquery) may know VRChat's real address, which can differ from
