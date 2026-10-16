@@ -1,10 +1,6 @@
 <script setup lang="ts">
+import AddonsStatusChip from '@renderer/components/AddonsStatusChip.vue'
 import type { StatusTone } from '@renderer/components/layout/StatusChip.vue'
-import { useAddons } from '@renderer/composables/useAddons'
-import type { IntifaceStatus } from '@renderer/composables/useIntiface'
-import { useIntiface } from '@renderer/composables/useIntiface'
-import type { OpenShockStatus } from '@renderer/composables/useOpenShock'
-import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
 import { uniqueClientCount, unsupportedControlTypes, useWebsocketHost } from '@renderer/composables/useWebsocketHost'
 import { api } from '@renderer/lib/tauri-bridge'
@@ -12,35 +8,15 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 // The top bar's connection chips. Each one opens the page where that connection is configured and
-// its details live (no popovers - one tap, VR-friendly), as in the redesign.
+// its details live (no popovers - one tap, VR-friendly), as in the redesign. The exception is
+// Add-ons, which groups every add-on that's on into one chip with a popover (opened by a tap).
 const { status, open, close } = useWebsocketHost()
 const { connected: oscConnected } = useOscConnection()
-const { status: openShockStatus } = useOpenShock()
-const { status: intifaceStatus } = useIntiface()
-const { isOn } = useAddons()
 const router = useRouter()
 
 const serverTone = computed<StatusTone>(() =>
   status.value === 'OPEN' ? 'success' : status.value === 'CONNECTING' ? 'warning' : 'error'
 )
-
-const OPENSHOCK_TONE: Record<OpenShockStatus, StatusTone> = {
-  valid: 'success',
-  checking: 'warning',
-  invalid: 'error',
-  disabled: 'muted',
-  unconfigured: 'muted'
-}
-
-const INTIFACE_TONE: Record<IntifaceStatus, StatusTone> = {
-  connected: 'success',
-  connecting: 'warning',
-  launching: 'warning',
-  error: 'error',
-  refused: 'error',
-  busy: 'error',
-  disabled: 'muted'
-}
 
 const go = (to: string): void => void router.push(to)
 
@@ -67,19 +43,8 @@ onBeforeUnmount(close)
       :tone="oscConnected ? 'success' : 'error'"
       @click="go('/parameters')"
     />
-    <!-- Add-on chips only while the add-on is on. -->
-    <StatusChip
-      v-if="isOn('openshock')"
-      label="OpenShock"
-      :tone="OPENSHOCK_TONE[openShockStatus]"
-      @click="go('/settings/openshock')"
-    />
-    <StatusChip
-      v-if="isOn('intiface')"
-      label="Intiface"
-      :tone="INTIFACE_TONE[intifaceStatus]"
-      @click="go('/settings/intiface')"
-    />
+    <!-- Only while at least one add-on is on. -->
+    <AddonsStatusChip />
     <StatusChip
       icon="i-lucide-users"
       :tone="uniqueClientCount ? 'success' : 'muted'"
