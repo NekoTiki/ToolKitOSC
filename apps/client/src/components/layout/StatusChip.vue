@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // A top-bar chip: a click target (never hover-only - VR pointers can't hover reliably) showing a
 // state dot or icon plus a label. The label drops below `lg` so the bar still fits an overlay-sized
-// window; `title` keeps it discoverable there.
+// window; `title` keeps it discoverable there. With both an icon and `statusDot`, the icon leads
+// and the state dot follows the label (Server, VRChat, and Add-ons with one dot per add-on).
 export type StatusTone = 'success' | 'warning' | 'error' | 'muted'
 
 withDefaults(
@@ -12,6 +13,8 @@ withDefaults(
     // Degraded but not down (e.g. the server can't show some control types) - a small corner dot
     // rather than recoloring the whole chip.
     warning?: boolean
+    // The state dot after the label, next to a leading icon.
+    statusDot?: boolean
   }>(),
   { tone: 'muted', label: undefined, icon: undefined }
 )
@@ -54,6 +57,11 @@ defineSlots<{ default?(): unknown }>()
       v-if="label"
       class="max-w-40 truncate max-lg:hidden"
     >{{ label }}</span>
+    <span
+      v-if="icon && statusDot"
+      class="size-2 rounded-full"
+      :class="DOT[tone]"
+    />
     <slot />
     <span
       v-if="warning"

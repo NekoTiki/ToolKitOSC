@@ -33,13 +33,19 @@ onBeforeUnmount(close)
 <template>
   <div class="flex items-center gap-2.5">
     <StatusChip
+      icon="i-lucide-globe"
       label="Server"
+      status-dot
       :tone="serverTone"
       :warning="unsupportedControlTypes.length > 0"
       @click="go('/settings/account')"
     />
+    <!-- The OSC link to VRChat, named after the game so it's clear what it's about. -->
     <StatusChip
-      label="OSC"
+      icon="i-lucide-gamepad-2"
+      label="VRChat"
+      status-dot
+      :title="oscConnected ? 'Connected to VRChat over OSC' : 'Not connected to VRChat. Is the game running with OSC on?'"
       :tone="oscConnected ? 'success' : 'error'"
       @click="go('/parameters')"
     />
