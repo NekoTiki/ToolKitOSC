@@ -124,6 +124,47 @@ export interface AuthUser {
   email: string
 }
 
+// Intiface - mirrors src-tauri/src/intiface. See useIntiface.ts for what each status means.
+export type IntifaceStatus = 'disabled' | 'connecting' | 'connected' | 'error' | 'refused' | 'busy' | 'launching'
+
+export interface IntifaceActuator {
+  // Its position in the device's ScalarCmd list.
+  index: number
+  description: string
+  actuatorType: string
+}
+
+export interface IntifaceDevice {
+  index: number
+  name: string
+  actuators: IntifaceActuator[]
+  batterySensorIndex: number | null
+  // Once a reading came back.
+  battery: number | null
+}
+
+export interface IntifaceState {
+  // Empty for the default.
+  url: string
+  defaultUrl: string
+  enabled: boolean
+  autoLaunch: boolean
+  status: IntifaceStatus
+  devices: IntifaceDevice[]
+  // Whether a local Intiface Central install was found.
+  installed: boolean
+  launchAttempts: number
+  maxLaunchAttempts: number
+  // Intiface's own message when it refused the handshake.
+  refusedReason: string
+}
+
+export interface ToyActuatorRef {
+  deviceIndex: number
+  actuatorIndex: number
+  actuatorType: string
+}
+
 export interface FoundBoard {
   id: string
   name: string
@@ -316,11 +357,23 @@ export const api = {
   openUrl: (url: string): void => {
     void invoke('open_url', { url })
   },
-  intifaceCentralAvailable: (): Promise<boolean> => invoke('intiface_central_available'),
-  startIntifaceCentral: (): Promise<void> => invoke('start_intiface_central'),
-  intifacePortOpen: (host: string, port: number): Promise<boolean> =>
-    invoke('intiface_port_open', { host, port }),
-  intifaceCentralRunning: (): Promise<boolean> => invoke('intiface_central_running'),
+  intifaceState: (): Promise<IntifaceState> => invoke('intiface_state'),
+  // Once, from the settings the webview used to keep in localStorage.
+  intifaceMigrate: (url: string | null, enabled: boolean | null, autoLaunch: boolean | null): Promise<void> =>
+    invoke('intiface_migrate', { url, enabled, autoLaunch }),
+  // Empty goes back to the default URL. Reconnects right away.
+  intifaceSetUrl: (url: string | null): Promise<void> => invoke('intiface_set_url', { url }),
+  intifaceSetEnabled: (enabled: boolean): Promise<void> => invoke('intiface_set_enabled', { enabled }),
+  intifaceSetAutoLaunch: (autoLaunch: boolean): Promise<void> => invoke('intiface_set_auto_launch', { autoLaunch }),
+  // Opens the local Intiface Central install. Rejects with a message when it isn't found.
+  intifaceLaunch: (): Promise<void> => invoke('intiface_launch'),
+  onIntifaceState: (callback: (state: IntifaceState) => void): void => {
+    void listen<IntifaceState>('intiface-state', (event) => callback(event.payload))
+  },
+  // Sets these actuators to `level` (0-1). Only toys Intiface has now are sent to.
+  toysSet: (actuators: ToyActuatorRef[], level: number): Promise<void> => invoke('toys_set', { actuators, level }),
+  // Stops every connected toy, not only the ones a control drives.
+  toysStopAll: (): Promise<void> => invoke('toys_stop_all'),
   steamVrAvailable: (): Promise<IntegrationAvailability> => invoke('steamvr_available'),
   steamVrSetAutoLaunch: (enable: boolean): Promise<void> =>
     invoke('steamvr_set_auto_launch', { enable }),

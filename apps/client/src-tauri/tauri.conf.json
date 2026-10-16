@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' https://api.iconify.design; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://ui-avatars.com https://cdn.discordapp.com; connect-src 'self' https://api.iconify.design https://api.github.com ws:"
+      "csp": "default-src 'self' https://api.iconify.design; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://ui-avatars.com https://cdn.discordapp.com; connect-src 'self' https://api.iconify.design https://api.github.com"
     }
   },
   "bundle": {

@@ -2,6 +2,7 @@ mod automations;
 mod avatar;
 mod boards;
 mod commands;
+mod intiface;
 mod logging;
 mod net;
 mod openshock;
@@ -12,6 +13,7 @@ mod server;
 mod state;
 mod steam;
 mod steamvr;
+mod toys;
 mod types;
 mod vrcx;
 
@@ -94,10 +96,14 @@ pub fn run() {
             commands::send_osc_message,
             commands::open_url,
             commands::ready,
-            commands::intiface_central_available,
-            commands::start_intiface_central,
-            commands::intiface_port_open,
-            commands::intiface_central_running,
+            commands::intiface_state,
+            commands::intiface_migrate,
+            commands::intiface_set_url,
+            commands::intiface_set_enabled,
+            commands::intiface_set_auto_launch,
+            commands::intiface_launch,
+            commands::toys_set,
+            commands::toys_stop_all,
             commands::steamvr_available,
             commands::steamvr_set_auto_launch,
             commands::steamvr_get_auto_launch,
@@ -190,6 +196,7 @@ pub fn run() {
             // ESP32 boards: reconnects the added ones and browses for new ones over mDNS.
             boards::start(app.handle().clone());
             automations::start(app.handle().clone());
+            intiface::start(app.handle().clone());
             // Tokens a launch with no password store had to put in a file go to the store first,
             // if there's one now, before anything reads them.
             let handle = app.handle().clone();
