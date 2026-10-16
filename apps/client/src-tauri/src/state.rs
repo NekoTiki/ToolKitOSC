@@ -7,6 +7,7 @@ use tauri::tray::TrayIcon;
 use tokio::net::UdpSocket;
 use vrchat_osc::VRChatOSC;
 
+use crate::addons::Addons;
 use crate::automations::Automations;
 use crate::boards::Boards;
 use crate::osc::cache::CacheThrottle;
@@ -53,6 +54,8 @@ pub struct AppState {
     /// can show/hide it in step with the setting - the icon only earns its keep as a way back into
     /// a window that's hidden rather than closed, so it has no reason to exist while the setting is off.
     pub tray_icon: Mutex<Option<TrayIcon>>,
+    /// Which add-ons are on (see `addons`).
+    pub addons: Addons,
     /// Added and found ESP32 boards (see `boards`).
     pub boards: Boards,
     /// Every automation, and what they're currently running (see `automations`).
@@ -85,6 +88,7 @@ impl Default for AppState {
             avatar_poll_task: Mutex::new(None),
             minimize_to_tray: AtomicBool::new(false),
             tray_icon: Mutex::new(None),
+            addons: Addons::default(),
             boards: Boards::default(),
             automations: Automations::default(),
             server: Server::default(),

@@ -4,6 +4,9 @@
 //!
 //! Everything the UI shows comes from `Boards::snapshot`, re-emitted as `boards-changed` after
 //! every change, so the frontend never has to merge partial updates.
+//!
+//! It's an add-on (see `addons`): the added boards are always loaded, so automations and settings
+//! still know them, but links and the mDNS browse only run while it's on.
 mod discovery;
 mod link;
 mod pairing;
@@ -108,7 +111,9 @@ struct Inner {
     status: HashMap<String, (LinkStatus, Option<i64>)>,
     found: HashMap<String, FoundBoard>,
     links: HashMap<String, mpsc::UnboundedSender<LinkCommand>>,
-    pairing: Option<oneshot::Sender<()>>
+    pairing: Option<oneshot::Sender<()>>,
+    /// The mDNS browse, while the add-on is on.
+    daemon: Option<mdns_sd::ServiceDaemon>
 }
 
 #[derive(Default)]
@@ -124,19 +129,45 @@ fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-/// Loads the added boards, connects to each, and starts browsing for boards on the network.
-pub fn start(app: AppHandle) {
-    let records = store::load(&app);
+/// At launch, whether the add-on is on or not: loads the added boards.
+pub fn load(app: &AppHandle) {
+    let records = store::load(app);
     tracing::info!("{} ESP32 board(s) added", records.len());
+    boards(app).inner.lock().unwrap().records = records;
+}
 
-    let ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
-    boards(&app).inner.lock().unwrap().records = records;
-
+/// The add-on was turned on (or is on at launch): connects to each added board and starts browsing
+/// for boards on the network.
+fn start(app: &AppHandle) {
+    let ids: Vec<String> = boards(app).inner.lock().unwrap().records.iter().map(|r| r.id.clone()).collect();
     for id in ids {
-        start_link(&app, &id);
+        start_link(app, &id);
     }
 
-    discovery::start(app);
+    let daemon = discovery::start(app.clone());
+    boards(app).inner.lock().unwrap().daemon = daemon;
+    emit(app);
+}
+
+/// The add-on was turned off: every output off, then the links close and the browse stops.
+fn stop(app: &AppHandle) {
+    stop_all(app);
+    cancel_pairing(app);
+    let (links, daemon) = {
+        let mut inner = boards(app).inner.lock().unwrap();
+        inner.status.clear();
+        inner.found.clear();
+        (std::mem::take(&mut inner.links), inner.daemon.take())
+    };
+    for link in links.into_values() {
+        let _ = link.send(LinkCommand::Shutdown);
+    }
+    if let Some(daemon) = daemon {
+        if let Err(err) = daemon.shutdown() {
+            tracing::debug!("mDNS for ESP32 boards didn't shut down cleanly: {err}");
+        }
+    }
+    emit(app);
 }
 
 pub fn snapshot(app: &AppHandle) -> BoardsSnapshot {
@@ -175,6 +206,7 @@ pub fn snapshot(app: &AppHandle) -> BoardsSnapshot {
 
 fn emit(app: &AppHandle) {
     let _ = app.emit("boards-changed", snapshot(app));
+    crate::addons::changed(app);
 }
 
 fn start_link(app: &AppHandle, id: &str) {
@@ -187,6 +219,10 @@ fn start_link(app: &AppHandle, id: &str) {
 fn set_status(app: &AppHandle, id: &str, status: LinkStatus) {
     {
         let mut inner = boards(app).inner.lock().unwrap();
+        // A link that was shut down (the add-on was turned off) has nothing to report.
+        if !inner.links.contains_key(id) {
+            return;
+        }
         let previous = inner.status.get(id).copied();
         if previous.map(|(s, _)| s) == Some(status) {
             return;
@@ -436,4 +472,56 @@ pub fn send_output(app: &AppHandle, board_id: &str, message: protocol::OutputMes
         return false;
     }
     link(app, board_id).is_some_and(|link| link.send(LinkCommand::Output(message)).is_ok())
+}
+
+/// ESP32 boards as an add-on (see `crate::addons`).
+pub struct Addon;
+
+impl crate::addons::Addon for Addon {
+    fn manifest(&self) -> crate::addons::Manifest {
+        crate::addons::Manifest {
+            id: "boards",
+            name: "ESP32 boards",
+            group: "toys",
+            pitch: "Your own boards driving lights, motors and outputs from your avatar",
+            platforms: &["windows", "linux"],
+            badge: None,
+            needs: &[],
+            control_types: &[],
+            automation_kinds: &["board-output"],
+            pages: &[]
+        }
+    }
+
+    fn start(&self, app: &AppHandle) {
+        start(app);
+    }
+
+    fn stop(&self, app: &AppHandle) {
+        stop(app);
+    }
+
+    fn status(&self, app: &AppHandle) -> crate::addons::Status {
+        use crate::addons::{State, Status};
+        let inner = boards(app).inner.lock().unwrap();
+        let total = inner.records.len();
+        let online = inner.records.iter().filter(|r| inner.status.get(&r.id).map(|(s, _)| *s) == Some(LinkStatus::Online)).count();
+        match (total, online) {
+            (0, _) => Status::new(State::Warn, "No boards added yet"),
+            (1, 1) => Status::new(State::Ok, "Your board is online"),
+            (1, _) => Status::new(State::Warn, "Your board is offline"),
+            (_, 0) => Status::new(State::Warn, format!("All {total} boards are offline")),
+            (_, _) if online == total => Status::new(State::Ok, format!("All {total} boards online")),
+            (_, _) => Status::new(State::Warn, format!("{online} of {total} boards online"))
+        }
+    }
+
+    fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
+        stop_all(app);
+        Box::pin(async { Ok(()) })
+    }
+
+    fn was_in_use(&self, app: &AppHandle) -> bool {
+        !store::load(app).is_empty()
+    }
 }

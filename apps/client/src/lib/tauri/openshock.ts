@@ -52,7 +52,6 @@ export const openshockApi = {
     invoke('openshock_migrate', { token, enabled }),
   // An empty token removes it. Rejects with a message when the password store refuses it.
   openShockSetToken: (token: string): Promise<void> => invoke('openshock_set_token', { token }),
-  openShockSetEnabled: (enabled: boolean): Promise<void> => invoke('openshock_set_enabled', { enabled }),
   openShockRecheck: (): Promise<void> => invoke('openshock_recheck'),
   openShockShockers: (): Promise<OpenShockHub[]> => invoke('openshock_shockers'),
   // Rejects when OpenShock isn't available. A failure while sending arrives as onOpenShockError.

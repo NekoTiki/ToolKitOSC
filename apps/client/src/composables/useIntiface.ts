@@ -94,7 +94,8 @@ export function useIntiface(): {
     // Reconnects against the new URL right away.
     setUrl: (value) => void api.intifaceSetUrl(value?.trim() || null),
     enabled,
-    setEnabled: (value) => void api.intifaceSetEnabled(value),
+    // Intiface toys is an add-on: the registry turns it on and off (see src-tauri/src/addons).
+    setEnabled: (value) => void api.addonsSetEnabled('intiface', value),
     status,
     isAvailable,
     devices,

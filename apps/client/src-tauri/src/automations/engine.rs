@@ -29,6 +29,9 @@ pub trait Env {
     fn max_on_ms(&self, board_id: &str, pin: u8) -> Option<u32>;
     /// A parameter's value as last read from VRChat, e.g. when the avatar loaded.
     fn value(&self, address: &str) -> Option<f64>;
+    /// Whether the add-on this step needs is on (see `crate::addons`). Steps of an add-on that's
+    /// off are skipped.
+    fn live(&self, action: &Action) -> bool;
 }
 
 #[derive(Default)]
@@ -117,7 +120,9 @@ pub enum Effect {
     /// An automation started (a moment fired, or a state began), for "Last ran".
     Ran(String),
     /// An output step with `chatbox` on switched it on or off.
-    Chatbox { board_id: String, pin: u8, note: BoardNote }
+    Chatbox { board_id: String, pin: u8, note: BoardNote },
+    /// A step was skipped because its add-on is off.
+    Skipped { automation_id: String, action: Action }
 }
 
 #[derive(Default)]
@@ -191,7 +196,7 @@ impl State {
                     self.pending.retain(|p| p.automation_id != automation.id);
                     self.unclaim(&automation.id, None, now, &mut effects);
                 }
-                Edge::Follow(value) if self.guards_hold(&automation, env) => self.follow(&automation, value, now, &mut effects),
+                Edge::Follow(value) if self.guards_hold(&automation, env) => self.follow(&automation, value, now, env, &mut effects),
                 Edge::Follow(_) | Edge::None => {}
             }
         }
@@ -271,6 +276,10 @@ impl State {
         let Some(step) = automation.then.get(index) else {
             return;
         };
+        if !env.live(&step.action) {
+            effects.push(Effect::Skipped { automation_id: automation.id.clone(), action: step.action.clone() });
+            return;
+        }
         match step.action.runs() {
             Runs::Moment => self.moment(automation, index, &step.action, now, env, effects),
             Runs::State => self.claim(automation, index, &step.action, 1.0, now, env, effects),
@@ -357,8 +366,12 @@ impl State {
         effects.push(Effect::Parameter { address: address.to_string(), value_type, value });
     }
 
-    fn follow(&mut self, automation: &Automation, value: f32, now: Instant, effects: &mut Vec<Effect>) {
+    fn follow(&mut self, automation: &Automation, value: f32, now: Instant, env: &dyn Env, effects: &mut Vec<Effect>) {
         for (index, step) in automation.then.iter().enumerate() {
+            if step.action.runs() == Runs::Follow && !env.live(&step.action) {
+                effects.push(Effect::Skipped { automation_id: automation.id.clone(), action: step.action.clone() });
+                continue;
+            }
             match &step.action {
                 Action::BoardOutput { output: OutputAction::Follow { min, max }, .. } => {
                     let duty = min + value * (max - min);
@@ -661,6 +674,9 @@ mod tests {
         fn value(&self, _: &str) -> Option<f64> {
             None
         }
+        fn live(&self, action: &Action) -> bool {
+            !matches!(action, Action::BoardOutput { board_id, .. } if board_id == "off")
+        }
     }
 
     fn board(output: OutputAction) -> Step {
@@ -732,6 +748,22 @@ mod tests {
 
     fn change(state: &mut State, previous: f64, current: f64) -> Vec<OutputMessage> {
         sends(&change_effects(state, previous, current))
+    }
+
+    #[test]
+    fn steps_of_an_add_on_that_is_off_are_skipped() {
+        let mut state = State::default();
+        let off = Step {
+            action: Action::BoardOutput { board_id: "off".into(), pin: 4, output: OutputAction::Pulse { on_ms: 500, off_ms: 0, count: 1 }, chatbox: false },
+            delay_ms: 0
+        };
+        let set = parameter("/avatar/parameters/Ears", ValueType::Bool, ParameterAction::Set { value: 1.0 });
+        state.automations.push(automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![off, set]));
+
+        let effects = change_effects(&mut state, 0.0, 1.0);
+        assert!(sends(&effects).is_empty());
+        assert_eq!(parameters(&effects), [("/avatar/parameters/Ears".to_string(), 1.0)]);
+        assert!(effects.iter().any(|e| matches!(e, Effect::Skipped { automation_id, .. } if automation_id == "a")));
     }
 
     #[test]

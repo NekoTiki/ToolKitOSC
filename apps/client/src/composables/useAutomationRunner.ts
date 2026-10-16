@@ -24,6 +24,10 @@ export function useAutomationRunner(): void {
   const { announceNotice } = useChatbox()
   const { paused, stop: stopEverything } = useStopEverything()
   const { onlineClients } = useClientsDb()
+  const toast = useToast()
+
+  // A step of an add-on that's off was skipped. Rust says so once per automation.
+  api.onAutomationSkipped(({ message }) => toast.add({ title: 'Automation step skipped', description: message, icon: 'i-lucide-puzzle', color: 'warning' }))
 
   // Before the events below, so "only if viewers are on" already counts a first viewer.
   watch(

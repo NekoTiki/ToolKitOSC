@@ -13,12 +13,14 @@ pub fn boards_list(app: AppHandle) -> BoardsSnapshot {
 /// arrives as `board-pairing` events), or fails with a message to show.
 #[tauri::command]
 pub async fn board_add(app: AppHandle, id: String) -> Result<BoardView, String> {
+    crate::addons::require(&app, "boards")?;
     super::pair(app, Target::Found(id)).await
 }
 
 /// Same, for a board mDNS can't see: `192.168.1.40`, `tkosc-a1b2c3.local`, optionally `:port`.
 #[tauri::command]
 pub async fn board_add_by_address(app: AppHandle, address: String) -> Result<BoardView, String> {
+    crate::addons::require(&app, "boards")?;
     super::pair(app, Target::Address(address)).await
 }
 
@@ -42,6 +44,7 @@ pub fn board_save_outputs(app: AppHandle, id: String, outputs: Vec<OutputConfig>
 /// Switches a saved output on for half a second.
 #[tauri::command]
 pub fn board_test_output(app: AppHandle, id: String, pin: u8) -> Result<(), String> {
+    crate::addons::require(&app, "boards")?;
     super::test_output(&app, &id, pin)
 }
 

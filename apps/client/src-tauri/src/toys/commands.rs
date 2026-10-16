@@ -4,8 +4,10 @@ use tauri::AppHandle;
 
 /// Sets these actuators to `level` (0–1).
 #[tauri::command]
-pub fn toys_set(app: AppHandle, actuators: Vec<super::ActuatorRef>, level: f64) {
+pub fn toys_set(app: AppHandle, actuators: Vec<super::ActuatorRef>, level: f64) -> Result<(), String> {
+    crate::addons::require(&app, "intiface")?;
     super::set(&app, &actuators, level);
+    Ok(())
 }
 
 /// Stops every connected toy.
@@ -24,8 +26,9 @@ pub fn patterns_play(
     actuators: Vec<super::ActuatorRef>,
     stop_after_ms: Option<u64>,
     by: Option<String>
-) -> Option<u64> {
-    super::patterns::play(&app, &control_id, source, actuators, stop_after_ms, by)
+) -> Result<Option<u64>, String> {
+    crate::addons::require(&app, "intiface")?;
+    Ok(super::patterns::play(&app, &control_id, source, actuators, stop_after_ms, by))
 }
 
 /// Stops this control's pattern and zeroes its toys.

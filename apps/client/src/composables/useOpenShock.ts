@@ -89,7 +89,8 @@ export function useOpenShock(): {
     setToken: api.openShockSetToken,
     hasToken,
     enabled,
-    setEnabled: (value) => void api.openShockSetEnabled(value),
+    // OpenShock is an add-on: the registry turns it on and off (see src-tauri/src/addons).
+    setEnabled: (value) => void api.addonsSetEnabled('openshock', value),
     status,
     isAvailable,
     testConnection: () => void api.openShockRecheck(),

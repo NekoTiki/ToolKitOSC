@@ -20,11 +20,6 @@ pub fn intiface_set_url(app: AppHandle, url: Option<String>) {
 }
 
 #[tauri::command]
-pub fn intiface_set_enabled(app: AppHandle, enabled: bool) {
-    super::set_enabled(&app, enabled);
-}
-
-#[tauri::command]
 pub fn intiface_set_auto_launch(app: AppHandle, auto_launch: bool) {
     super::set_auto_launch(&app, auto_launch);
 }

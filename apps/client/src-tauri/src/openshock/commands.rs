@@ -24,23 +24,20 @@ pub async fn openshock_set_token(app: AppHandle, token: String) -> Result<(), St
 }
 
 #[tauri::command]
-pub fn openshock_set_enabled(app: AppHandle, enabled: bool) {
-    super::set_enabled(&app, enabled);
-}
-
-#[tauri::command]
 pub fn openshock_recheck(app: AppHandle) {
     super::recheck(&app);
 }
 
 #[tauri::command]
 pub async fn openshock_shockers(app: AppHandle) -> Result<Vec<super::Hub>, String> {
+    crate::addons::require(&app, "openshock")?;
     super::shockers(&app).await
 }
 
 /// Rejects when OpenShock isn't available. Failures while sending arrive as `openshock-error`.
 #[tauri::command]
 pub fn openshock_fire(app: AppHandle, fire: super::Fire) -> Result<(), String> {
+    crate::addons::require(&app, "openshock")?;
     super::fire(&app, fire)
 }
 
