@@ -1,15 +1,15 @@
+import type { ToyActuatorRef } from '@renderer/lib/tauri-bridge'
+import { api } from '@renderer/lib/tauri-bridge'
 import type { IntifaceActuatorRef, IntifacePatternRef } from '@toolkitosc/shared-ui'
 import { INTIFACE_PATTERN_OFF_ID, useIntifacePatternControl } from '@toolkitosc/shared-ui'
 
-import { useIntiface } from './useIntiface'
 import type { SavedPattern } from './useSavedPatterns'
 import { PATTERN_SAMPLE_MS, useSavedPatterns } from './useSavedPatterns'
 
 // Buttplug/Intiface has no server-side concept of a named, timed pattern (Pulse/Wave/...) - every
-// message is a one-shot "set this value now" instruction (see the ScalarCmd usage in
-// useIntiface.ts). Patterns are entirely a client-side thing: this repeatedly samples a pattern's
-// `value` function on an interval and sends whatever comes out, same as a human dragging the plain
-// toy slider very quickly.
+// message is a one-shot "set this value now" instruction. Patterns are played by sampling a level
+// every 50 ms, which Rust does (src-tauri/src/toys/patterns.rs, with the same maths as below) so a
+// hidden window can't slow it. The definitions here are for showing patterns.
 export interface IntifacePatternDefinition {
   id: string
   name: string
@@ -18,6 +18,8 @@ export interface IntifacePatternDefinition {
   value: (elapsedMs: number) => number
   // Set for a pattern the host recorded (see useSavedPatterns.ts): the length of one loop.
   durationMs?: number
+  // Set for a recording: what Rust plays. Without it, Rust plays the pattern by its id.
+  samples?: number[]
 }
 
 // Deterministic PRNG so 'Random' doesn't need to carry mutable state between calls - the same
@@ -81,6 +83,7 @@ export const toDefinition = (pattern: Pick<SavedPattern, 'id' | 'name' | 'icon' 
   name: pattern.name,
   icon: pattern.icon,
   durationMs: pattern.samples.length * PATTERN_SAMPLE_MS,
+  samples: pattern.samples,
   value: (t) => (pattern.samples[Math.floor(t / PATTERN_SAMPLE_MS) % pattern.samples.length] ?? 0) / 100
 })
 
@@ -104,17 +107,6 @@ export const resolvePatternRefs = (refs: IntifacePatternRef[]): IntifacePatternR
     return pattern ? [{ id: pattern.id, name: pattern.name, icon: pattern.icon }] : []
   })
 
-const PLAYBACK_INTERVAL_MS = 50
-
-interface RunningPattern {
-  actuators: IntifaceActuatorRef[]
-  startedAt: number
-  timer: ReturnType<typeof setInterval>
-  // Ends the pattern by itself (see PlayOptions.stopAfterMs).
-  stopTimer?: ReturnType<typeof setTimeout>
-  onEnd?: () => void
-}
-
 export interface PlayOptions {
   // Stops the pattern (and zeroes its toys) after this long. A viewer's own pattern uses it.
   stopAfterMs?: number | null
@@ -124,112 +116,66 @@ export interface PlayOptions {
   onEnd?: () => void
 }
 
-// Module-scope singleton, same reasoning as useIntiface.ts's own connection state: every control
-// instance (the real rendered one, a live authoring preview, ...) needs to see and stop the same
-// timer for a given control id, not each think they own a separate one.
-const runningPatterns = new Map<string, RunningPattern>()
+// Only the fields Rust needs: a control's actuator refs also carry names.
+const toRefs = (actuators: IntifaceActuatorRef[]): ToyActuatorRef[] =>
+  actuators.map(({ deviceIndex, actuatorIndex, actuatorType }) => ({ deviceIndex, actuatorIndex, actuatorType }))
 
-const actuatorKey = (actuator: Pick<IntifaceActuatorRef, 'deviceIndex' | 'actuatorIndex'>): string =>
-  `${actuator.deviceIndex}:${actuator.actuatorIndex}`
+const { setValue: setPatternValue } = useIntifacePatternControl()
+
+// Rust reports every change to a control's pattern, including the ones it makes by itself (a
+// viewer's pattern timing out, another pattern taking the toy over).
+api.onPatternValue(({ controlId, value, info }) => setPatternValue(controlId, value, info ?? undefined))
+
+// onEnd callbacks by run number, and runs that ended before their number came back.
+const endCallbacks = new Map<number, () => void>()
+const endedRuns = new Set<number>()
+
+api.onPatternEnded(({ run }) => {
+  const onEnd = endCallbacks.get(run)
+
+  endCallbacks.delete(run)
+  if (onEnd) onEnd()
+  else endedRuns.add(run)
+})
 
 export function useIntifacePatterns(): {
   // Starts (or stops, for INTIFACE_PATTERN_OFF_ID) the given pattern against `actuators` for this
   // control. Claims those actuators first (see releaseActuators) - only one thing should ever be
-  // driving a given actuator's value at a time, whether that's another running pattern or this one
-  // replacing its own previous pattern.
+  // driving a given actuator's value at a time.
   playPattern: (controlId: string, patternId: string, actuators: IntifaceActuatorRef[]) => void
   // Same, for a pattern that isn't in a registry (yet): the Patterns page tries out an unsaved take.
   playDefinition: (controlId: string, pattern: IntifacePatternDefinition, actuators: IntifaceActuatorRef[], options?: PlayOptions) => void
   stopPattern: (controlId: string) => void
   // Stops any running pattern (other than `exceptControlId`) that owns any of `actuators` - call
   // this whenever something else is about to drive one of these actuators directly (a plain toy
-  // slider, most notably), so a manually-adjusted toy doesn't keep fighting a pattern still running
-  // underneath it.
+  // slider, most notably), so a manually-adjusted toy doesn't keep fighting a pattern underneath it.
   releaseActuators: (actuators: IntifaceActuatorRef[], exceptControlId?: string) => void
   // Stops every running pattern and zeroes its toys, whichever avatar's control started it.
   stopAllPatterns: () => void
 } {
-  const { setActuatorIntensity } = useIntiface()
-  const { setValue: setPatternValue } = useIntifacePatternControl()
-
-  const stopPattern = (controlId: string): void => {
-    const entry = runningPatterns.get(controlId)
-
-    if (!entry) return
-
-    clearInterval(entry.timer)
-    clearTimeout(entry.stopTimer)
-    runningPatterns.delete(controlId)
-    entry.onEnd?.()
-  }
-
-  const releaseActuators = (actuators: IntifaceActuatorRef[], exceptControlId?: string): void => {
-    const keys = new Set(actuators.map(actuatorKey))
-
-    Array.from(runningPatterns.keys()).forEach((controlId) => {
-      if (controlId === exceptControlId) return
-
-      const entry = runningPatterns.get(controlId)
-
-      if (!entry?.actuators.some((actuator) => keys.has(actuatorKey(actuator)))) return
-
-      stopPattern(controlId)
-      setPatternValue(controlId, INTIFACE_PATTERN_OFF_ID)
-    })
-  }
-
-  const playPattern = (
-    controlId: string,
-    patternId: string,
-    actuators: IntifaceActuatorRef[]
-  ): void => {
-    stopPattern(controlId)
-
-    if (patternId === INTIFACE_PATTERN_OFF_ID) {
-      // Stopping the interval alone leaves the toy sitting at whatever value the last tick before
-      // this happened to land on - explicitly zero it out so switching to Off actually stops it.
-      setActuatorIntensity(actuators, 0)
-      setPatternValue(controlId, INTIFACE_PATTERN_OFF_ID)
-      return
-    }
-
-    const pattern = getPattern(patternId)
-
-    if (pattern) playDefinition(controlId, pattern, actuators)
+  const playPattern = (controlId: string, patternId: string, actuators: IntifaceActuatorRef[]): void => {
+    if (patternId === INTIFACE_PATTERN_OFF_ID) void api.patternsOff(controlId, toRefs(actuators))
+    else void api.patternsPlay(controlId, { id: patternId }, toRefs(actuators))
   }
 
   const playDefinition = (
     controlId: string,
     pattern: IntifacePatternDefinition,
     actuators: IntifaceActuatorRef[],
-    options: PlayOptions = {}
+    { stopAfterMs, by, onEnd }: PlayOptions = {}
   ): void => {
-    stopPattern(controlId)
-    releaseActuators(actuators, controlId)
-
-    const startedAt = Date.now()
-
-    const tick = (): void => {
-      setActuatorIntensity(actuators, pattern.value(Date.now() - startedAt))
-    }
-
-    tick()
-
-    const timer = setInterval(tick, PLAYBACK_INTERVAL_MS)
-    const { stopAfterMs, by, onEnd } = options
-    const stopTimer = stopAfterMs ? setTimeout(() => playPattern(controlId, INTIFACE_PATTERN_OFF_ID, actuators), stopAfterMs) : undefined
-
-    runningPatterns.set(controlId, { actuators, startedAt, timer, stopTimer, onEnd })
-    setPatternValue(controlId, pattern.id, by || stopTimer ? { by, endsAt: stopAfterMs ? startedAt + stopAfterMs : undefined } : undefined)
-  }
-
-  const stopAllPatterns = (): void => {
-    Array.from(runningPatterns.entries()).forEach(([controlId, entry]) => {
-      stopPattern(controlId)
-      setActuatorIntensity(entry.actuators, 0)
-      setPatternValue(controlId, INTIFACE_PATTERN_OFF_ID)
+    void api.patternsPlay(controlId, { id: pattern.id, samples: pattern.samples }, toRefs(actuators), stopAfterMs, by).then((run) => {
+      if (run === null || !onEnd) return
+      if (endedRuns.delete(run)) onEnd()
+      else endCallbacks.set(run, onEnd)
     })
   }
 
-  return { playPattern, playDefinition, stopPattern, releaseActuators, stopAllPatterns }
+  return {
+    playPattern,
+    playDefinition,
+    stopPattern: (controlId) => void api.patternsStop(controlId),
+    releaseActuators: (actuators, exceptControlId) => void api.patternsRelease(toRefs(actuators), exceptControlId),
+    stopAllPatterns: () => void api.patternsStopAll()
+  }
 }

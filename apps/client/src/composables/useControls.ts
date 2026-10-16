@@ -468,11 +468,12 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
       if (!intifaceAvailable.value) return undefined
 
       setIntifaceValue(control.id, command.value)
-      setActuatorIntensity(control.actuators, command.value)
       // Driving these actuators directly wins over anything currently animating them - stop any
       // pattern control that was still running against one of them (see the task's requirement
-      // that manually controlling a toy from elsewhere turns its pattern off).
+      // that manually controlling a toy from elsewhere turns its pattern off). Released first: a
+      // pattern tick landing after the new level would otherwise overwrite it.
       releaseActuators(control.actuators)
+      setActuatorIntensity(control.actuators, command.value)
     } else if (command.type === 'intiface-pattern' && control?.type === 'intiface-pattern') {
       // Same belt-and-suspenders guard as OpenShock above.
       if (!intifaceAvailable.value) return undefined

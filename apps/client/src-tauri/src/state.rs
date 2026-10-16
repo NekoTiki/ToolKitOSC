@@ -13,6 +13,8 @@ use crate::osc::cache::CacheThrottle;
 use crate::intiface::Intiface;
 use crate::openshock::OpenShock;
 use crate::server::Server;
+use crate::toys::patterns::Patterns;
+use crate::toys::saved::Saved;
 use crate::toys::Toys;
 use crate::types::{AvatarDetails, OscMessage};
 
@@ -62,7 +64,11 @@ pub struct AppState {
     /// The Intiface connection and its devices (see `intiface`).
     pub intiface: Intiface,
     /// What was last sent to each toy (see `toys`).
-    pub toys: Toys
+    pub toys: Toys,
+    /// Patterns playing now (see `toys::patterns`).
+    pub patterns: Patterns,
+    /// The host's recorded patterns (see `toys::saved`).
+    pub saved_patterns: Saved
 }
 
 impl Default for AppState {
@@ -84,7 +90,9 @@ impl Default for AppState {
             server: Server::default(),
             openshock: OpenShock::default(),
             intiface: Intiface::default(),
-            toys: Toys::default()
+            toys: Toys::default(),
+            patterns: Patterns::default(),
+            saved_patterns: Saved::default()
         }
     }
 }
