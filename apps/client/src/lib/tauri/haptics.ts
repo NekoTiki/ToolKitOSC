@@ -101,6 +101,8 @@ export interface HapticsState {
   avatarId: string | null
   zones: HapticsZone[]
   outputs: HapticsOutputLevel[]
+  // Avatar contacts are moving but no toy follows them here: OscGoesBrrr may still be running.
+  ogbHint: boolean
 }
 
 export const hapticsApi = {

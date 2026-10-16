@@ -24,6 +24,7 @@ const router = useRouter()
 const { openModal: confirm } = useAreYouSureModal()
 const {
   settings,
+  state,
   scope,
   avatarId,
   avatarName,
@@ -175,7 +176,7 @@ const setAvatarEnabled = (enabled: boolean): void =>
         <div class="flex items-center gap-3 rounded-field bg-(--aurora-well) px-3 py-2.5">
           <span class="grid min-w-0 flex-1">
             <b class="text-[14.5px] font-semibold text-highlighted">Avatar haptics</b>
-            <small class="text-xs text-muted">Toys follow your avatar</small>
+            <small class="text-xs text-muted">Also <code>TKOSC/Haptics</code></small>
           </span>
           <USwitch
             :model-value="settings.enabled"
@@ -296,6 +297,16 @@ const setAvatarEnabled = (enabled: boolean): void =>
       </PageHeader>
     </template>
 
+    <UAlert
+      v-if="settings && state.ogbHint"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-triangle-alert"
+      title="Is OscGoesBrrr still running?"
+      description="Your avatar's contacts are moving, but no toy follows them here yet. Close OscGoesBrrr before you set one up, or both apps will drive the same toys."
+      class="mb-3.5 max-w-3xl"
+    />
+
     <EmptyState
       v-if="!settings"
       icon="i-lucide-loader-circle"
@@ -342,6 +353,26 @@ const setAvatarEnabled = (enabled: boolean): void =>
             @update:model-value="change((target) => (target.priority.graceMs = $event ?? 0))"
           />
         </div>
+      </FormSection>
+
+      <FormSection
+        title="Avatar parameters"
+        description="Add these to your avatar to use them in VRChat."
+      >
+        <dl class="grid gap-2 text-sm">
+          <div class="grid gap-0.5 rounded-field bg-(--aurora-well) px-3.5 py-2.5">
+            <dt><code class="font-semibold text-highlighted">TKOSC/Haptics</code> <span class="text-muted">· bool</span></dt>
+            <dd class="text-muted">
+              Turns avatar haptics on and off from your expression menu, like the switch here.
+            </dd>
+          </div>
+          <div class="grid gap-0.5 rounded-field bg-(--aurora-well) px-3.5 py-2.5">
+            <dt><code class="font-semibold text-highlighted">TKOSC/HapticsLevel</code> <span class="text-muted">· float</span></dt>
+            <dd class="text-muted">
+              The strongest level touch drives right now, 0 to 1, for shaders or sounds.
+            </dd>
+          </div>
+        </dl>
       </FormSection>
     </div>
 

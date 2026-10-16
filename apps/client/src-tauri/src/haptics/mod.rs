@@ -2,6 +2,9 @@
 //! job OscGoesBrrr does. Contacts arrive live from `osc::udp`, `engine` turns them into one level
 //! per actuator every tick, and `haptics.json` (see `store`) says which toy follows what: a global
 //! setup, and per-avatar overrides.
+//!
+//! Two avatar parameters: `TKOSC/Haptics` (bool) turns haptics on and off from your expression
+//! menu, and `TKOSC/HapticsLevel` (float) gets the strongest level back, for shaders or sounds.
 mod depth;
 mod engine;
 pub mod model;
@@ -17,13 +20,23 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{interval, MissedTickBehavior};
 
 use crate::state::AppState;
-use crate::types::{OscArg, OscMessage};
+use crate::types::{OscArg, OscCommand, OscMessage};
 use engine::{Engine, OutputLevel, ZoneView};
 use model::HapticsSettings;
 
 const TICK: Duration = Duration::from_millis(50);
 /// `haptics-state` goes out at most this often.
 const VIEW_EVERY: Duration = Duration::from_millis(100);
+/// No OSC from VRChat for this long and every zone reads 0: VRChat closed, or OSC stopped
+/// mid-touch. A contact held still sends nothing, so this can't be per contact.
+const STALE_AFTER: Duration = Duration::from_secs(15);
+/// Contacts moved this recently: shown as a hint while no toy follows them (see `View::ogb_hint`).
+const CONTACTS_RECENT: Duration = Duration::from_secs(10);
+/// `TKOSC/HapticsLevel` goes out at most this often.
+const LEVEL_EVERY: Duration = Duration::from_millis(100);
+
+const SWITCH_PARAMETER: &str = "TKOSC/Haptics";
+const LEVEL_PARAMETER: &str = "TKOSC/HapticsLevel";
 
 #[derive(Default)]
 pub struct Haptics {
@@ -35,7 +48,13 @@ pub struct Haptics {
     /// The last `haptics-state` sent, and when.
     sent: Mutex<Option<(Instant, View)>>,
     /// The last `toys-state` sent.
-    touched: Mutex<Option<Vec<crate::toys::Touched>>>
+    touched: Mutex<Option<Vec<crate::toys::Touched>>>,
+    /// When VRChat last sent anything (see `STALE_AFTER`).
+    last_osc: Mutex<Option<Instant>>,
+    /// When a contact parameter last changed.
+    last_contact: Mutex<Option<Instant>>,
+    /// The last `TKOSC/HapticsLevel` sent, and when.
+    level_sent: Mutex<Option<(Instant, f64)>>
 }
 
 fn haptics(app: &AppHandle) -> &Haptics {
@@ -48,7 +67,10 @@ fn haptics(app: &AppHandle) -> &Haptics {
 pub struct View {
     pub avatar_id: Option<String>,
     pub zones: Vec<ZoneView>,
-    pub outputs: Vec<OutputLevel>
+    pub outputs: Vec<OutputLevel>,
+    /// Avatar contacts are moving but no toy follows them here: OscGoesBrrr may still be running,
+    /// and once a toy is set up both apps would drive it.
+    pub ogb_hint: bool
 }
 
 fn avatar_id(app: &AppHandle) -> Option<String> {
@@ -59,8 +81,19 @@ pub fn view(app: &AppHandle) -> View {
     View {
         avatar_id: avatar_id(app),
         zones: haptics(app).engine.lock().unwrap().zones(),
-        outputs: haptics(app).levels.lock().unwrap().clone()
+        outputs: haptics(app).levels.lock().unwrap().clone(),
+        ogb_hint: ogb_hint(app)
     }
+}
+
+fn ogb_hint(app: &AppHandle) -> bool {
+    let recent = haptics(app).last_contact.lock().unwrap().is_some_and(|at| at.elapsed() < CONTACTS_RECENT);
+    recent && !store::get(app).active_outputs(avatar_id(app).as_deref()).iter().any(|output| !output.sources.is_empty())
+}
+
+/// VRChat sent something live: it's still there.
+pub fn osc_alive(app: &AppHandle) {
+    *haptics(app).last_osc.lock().unwrap() = Some(Instant::now());
 }
 
 /// A live avatar parameter from VRChat. Values read when an avatar loads never get here, so they
@@ -69,7 +102,8 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
     let Some(name) = message.address.strip_prefix("/avatar/parameters/") else {
         return;
     };
-    if !(name.starts_with("OGB/") || name.starts_with("VFH/") || name.starts_with("TPS_Internal/")) {
+    let contact = name.starts_with("OGB/") || name.starts_with("VFH/") || name.starts_with("TPS_Internal/");
+    if !contact && name != SWITCH_PARAMETER {
         return;
     }
     let value = match message.args.first() {
@@ -77,8 +111,25 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
         Some(OscArg::Bool(on)) => zones::Value::Bool(*on),
         _ => return
     };
-    if haptics(app).task.lock().unwrap().is_some() {
-        haptics(app).engine.lock().unwrap().on_parameter(name, value);
+    if haptics(app).task.lock().unwrap().is_none() {
+        return;
+    }
+
+    if name == SWITCH_PARAMETER {
+        let on = match value {
+            zones::Value::Bool(on) => on,
+            zones::Value::Number(value) => value != 0.0
+        };
+        store::with(app, |settings| {
+            let changed = settings.enabled != on;
+            settings.enabled = on;
+            ((), changed)
+        });
+        return;
+    }
+
+    if haptics(app).engine.lock().unwrap().on_parameter(name, value) {
+        *haptics(app).last_contact.lock().unwrap() = Some(Instant::now());
     }
 }
 
@@ -108,6 +159,11 @@ pub fn avatar_changed(app: &AppHandle) {
 }
 
 fn tick(app: &AppHandle) {
+    let stale = !haptics(app).last_osc.lock().unwrap().is_some_and(|at| at.elapsed() < STALE_AFTER);
+    if stale {
+        haptics(app).engine.lock().unwrap().clear();
+    }
+
     let settings = store::get(app);
     let outputs = settings.active_outputs(avatar_id(app).as_deref());
     let levels = haptics(app).engine.lock().unwrap().tick(Instant::now(), &outputs);
@@ -134,11 +190,39 @@ fn tick(app: &AppHandle) {
         threshold: settings.priority.threshold.clamp(0.0, 1.0),
         grace: Duration::from_millis(settings.priority.grace_ms)
     };
+    let strongest = touches.iter().map(|touch| touch.level).fold(0.0, f64::max);
     crate::toys::set_touch(app, touches, priority);
+    send_level(app, strongest);
 
     *haptics(app).levels.lock().unwrap() = levels;
     emit_view(app, false);
     emit_touched(app);
+}
+
+/// `TKOSC/HapticsLevel`, when the worn avatar has it and the level changed.
+fn send_level(app: &AppHandle, level: f64) {
+    let level = (level * 100.0).round() / 100.0;
+    {
+        let mut sent = haptics(app).level_sent.lock().unwrap();
+        if sent.is_some_and(|(at, last)| last == level || at.elapsed() < LEVEL_EVERY) {
+            return;
+        }
+        *sent = Some((Instant::now(), level));
+    }
+    let state = app.state::<AppState>();
+    let has_parameter = state
+        .avatar_details
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|details| details.parameters.iter().any(|parameter| parameter.name == LEVEL_PARAMETER));
+    if !has_parameter {
+        return;
+    }
+    let command = OscCommand { address: format!("/avatar/parameters/{LEVEL_PARAMETER}"), args: vec![OscArg::Number(level)] };
+    if let Err(err) = crate::osc::send(&state, &command) {
+        tracing::warn!("Couldn't send {LEVEL_PARAMETER}: {err}");
+    }
 }
 
 /// Which actuators touch drives, for the tiles: a toy or pattern control on one of them reads
