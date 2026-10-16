@@ -10,6 +10,7 @@ use vrchat_osc::VRChatOSC;
 use crate::addons::Addons;
 use crate::automations::Automations;
 use crate::boards::Boards;
+use crate::haptics::Haptics;
 use crate::osc::cache::CacheThrottle;
 use crate::intiface::Intiface;
 use crate::openshock::OpenShock;
@@ -71,7 +72,9 @@ pub struct AppState {
     /// Patterns playing now (see `toys::patterns`).
     pub patterns: Patterns,
     /// The host's recorded patterns (see `toys::saved`).
-    pub saved_patterns: Saved
+    pub saved_patterns: Saved,
+    /// Avatar contacts and the toys they drive (see `haptics`).
+    pub haptics: Haptics
 }
 
 impl Default for AppState {
@@ -96,7 +99,8 @@ impl Default for AppState {
             intiface: Intiface::default(),
             toys: Toys::default(),
             patterns: Patterns::default(),
-            saved_patterns: Saved::default()
+            saved_patterns: Saved::default(),
+            haptics: Haptics::default()
         }
     }
 }
