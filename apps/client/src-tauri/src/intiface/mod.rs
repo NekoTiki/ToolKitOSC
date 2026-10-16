@@ -7,6 +7,7 @@
 pub mod launch;
 mod link;
 pub mod protocol;
+pub mod commands;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;

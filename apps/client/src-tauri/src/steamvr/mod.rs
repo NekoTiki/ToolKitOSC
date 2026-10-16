@@ -19,6 +19,8 @@ use std::path::{Path, PathBuf};
 
 use libloading::{Library, Symbol};
 
+pub mod commands;
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -70,7 +72,7 @@ pub fn is_supported() -> bool {
 /// the runtime SteamVR registered in `openvrpaths.vrpath` first (the same file the OpenVR library
 /// itself reads to find the runtime), then a `SteamVR` folder in every Steam library - a manually
 /// relocated SteamVR install that's in neither isn't found, same class of limitation as
-/// `commands::find_intiface_central`.
+/// `intiface::launch::find`.
 pub fn find_openvr_api() -> Option<PathBuf> {
     registered_runtimes()
         .into_iter()

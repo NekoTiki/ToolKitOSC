@@ -3,6 +3,7 @@
 mod arbiter;
 pub mod patterns;
 pub mod saved;
+pub mod commands;
 
 pub use arbiter::{set, stop_all, ActuatorRef, Toys};
 

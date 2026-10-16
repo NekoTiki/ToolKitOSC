@@ -1,7 +1,7 @@
+mod app;
 mod automations;
 mod avatar;
 mod boards;
-mod commands;
 mod controls;
 mod intiface;
 mod logging;
@@ -27,7 +27,7 @@ use tauri::{Manager, WindowEvent};
 use crate::state::AppState;
 
 /// Builds the tray icon and its "Show"/"Quit" menu, built once for the whole app lifetime but
-/// hidden until `commands::set_minimize_to_tray` shows it - the icon's only purpose is as a way
+/// hidden until `app::set_minimize_to_tray` shows it - the icon's only purpose is as a way
 /// back into a window that's hidden instead of closed, so it should only be visible while that
 /// setting is actually on.
 fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<tauri::tray::TrayIcon> {
@@ -94,72 +94,80 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
-            commands::send_osc_message,
-            commands::open_url,
-            commands::ready,
-            commands::intiface_state,
-            commands::intiface_migrate,
-            commands::intiface_set_url,
-            commands::intiface_set_enabled,
-            commands::intiface_set_auto_launch,
-            commands::intiface_launch,
-            commands::toys_set,
-            commands::toys_stop_all,
-            commands::patterns_play,
-            commands::patterns_off,
-            commands::patterns_stop,
-            commands::patterns_release,
-            commands::patterns_stop_all,
-            commands::patterns_saved_list,
-            commands::patterns_save,
-            commands::patterns_delete,
-            commands::patterns_migrate,
-            commands::steamvr_available,
-            commands::steamvr_set_auto_launch,
-            commands::steamvr_get_auto_launch,
-            commands::vrcx_available,
-            commands::vrcx_set_auto_launch,
-            commands::vrcx_get_auto_launch,
-            commands::set_minimize_to_tray,
-            commands::load_presets,
-            commands::save_presets,
-            commands::force_pull_parameters,
-            commands::boards_list,
-            commands::board_add,
-            commands::board_add_by_address,
-            commands::board_pair_cancel,
-            commands::board_remove,
-            commands::board_save_outputs,
-            commands::board_test_output,
-            commands::boards_stop_all,
-            commands::automations_list,
-            commands::automation_save,
-            commands::automation_delete,
-            commands::automation_set_enabled,
-            commands::automation_test,
-            commands::automations_set_paused,
-            commands::automation_event,
-            commands::automations_set_context,
-            commands::server_connect,
-            commands::server_disconnect,
-            commands::server_send,
-            commands::server_set_forwarded_addresses,
-            commands::server_request,
-            commands::server_set_policy,
-            commands::control_run,
-            commands::auth_state,
-            commands::auth_migrate,
-            commands::auth_sign_out,
-            commands::auth_sign_in,
-            commands::auth_sign_in_cancel,
-            commands::openshock_state,
-            commands::openshock_migrate,
-            commands::openshock_set_token,
-            commands::openshock_set_enabled,
-            commands::openshock_recheck,
-            commands::openshock_shockers,
-            commands::openshock_fire,
-            commands::openshock_stop_all
+            // The app itself, SteamVR and VRCX
+            app::open_url,
+            steamvr::commands::steamvr_available,
+            steamvr::commands::steamvr_set_auto_launch,
+            steamvr::commands::steamvr_get_auto_launch,
+            vrcx::commands::vrcx_available,
+            vrcx::commands::vrcx_set_auto_launch,
+            vrcx::commands::vrcx_get_auto_launch,
+            app::set_minimize_to_tray,
+            // OSC and presets
+            osc::commands::send_osc_message,
+            osc::commands::ready,
+            presets::load_presets,
+            presets::save_presets,
+            osc::commands::force_pull_parameters,
+            // Running a control as you
+            controls::control_run,
+            // ESP32 boards
+            boards::commands::boards_list,
+            boards::commands::board_add,
+            boards::commands::board_add_by_address,
+            boards::commands::board_pair_cancel,
+            boards::commands::board_remove,
+            boards::commands::board_save_outputs,
+            boards::commands::board_test_output,
+            boards::commands::boards_stop_all,
+            // Automations
+            automations::commands::automations_list,
+            automations::commands::automation_save,
+            automations::commands::automation_delete,
+            automations::commands::automation_set_enabled,
+            automations::commands::automation_test,
+            automations::commands::automations_set_paused,
+            automations::commands::automation_event,
+            automations::commands::automations_set_context,
+            // The share server: link, viewer commands, sign-in
+            server::commands::server_connect,
+            server::commands::server_disconnect,
+            server::commands::server_send,
+            server::commands::server_set_forwarded_addresses,
+            server::commands::server_request,
+            server::commands::server_set_policy,
+            server::commands::auth_state,
+            server::commands::auth_migrate,
+            server::commands::auth_sign_out,
+            server::commands::auth_sign_in,
+            server::commands::auth_sign_in_cancel,
+            // OpenShock
+            openshock::commands::openshock_state,
+            openshock::commands::openshock_migrate,
+            openshock::commands::openshock_set_token,
+            openshock::commands::openshock_set_enabled,
+            openshock::commands::openshock_recheck,
+            openshock::commands::openshock_shockers,
+            openshock::commands::openshock_fire,
+            openshock::commands::openshock_stop_all,
+            // Intiface, toys and patterns
+            intiface::commands::intiface_state,
+            intiface::commands::intiface_migrate,
+            intiface::commands::intiface_set_url,
+            intiface::commands::intiface_set_enabled,
+            intiface::commands::intiface_set_auto_launch,
+            intiface::commands::intiface_launch,
+            toys::commands::toys_set,
+            toys::commands::toys_stop_all,
+            toys::commands::patterns_play,
+            toys::commands::patterns_off,
+            toys::commands::patterns_stop,
+            toys::commands::patterns_release,
+            toys::commands::patterns_stop_all,
+            toys::commands::patterns_saved_list,
+            toys::commands::patterns_save,
+            toys::commands::patterns_delete,
+            toys::commands::patterns_migrate
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
@@ -169,7 +177,7 @@ pub fn run() {
                 let handle = app.handle().clone();
 
                 // Hides instead of closing while the "keep running in the tray" setting is on
-                // (state.minimize_to_tray, kept in sync by commands::set_minimize_to_tray) - the
+                // (state.minimize_to_tray, kept in sync by app::set_minimize_to_tray) - the
                 // OSC bridge below keeps running either way, so this is the only thing standing
                 // between "closing the window" and "quitting the app".
                 window.on_window_event(move |event| {
