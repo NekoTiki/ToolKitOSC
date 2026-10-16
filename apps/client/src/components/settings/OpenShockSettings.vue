@@ -5,7 +5,7 @@ import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { computed, ref } from 'vue'
 
-const { hasToken, status, setToken, enabled, setEnabled, shockerNames, state } = useOpenShock()
+const { hasToken, status, setToken, enabled, shockerNames, state } = useOpenShock()
 const toast = useToast()
 
 // The saved key stays in the app (the system's password store), so this field only ever holds a
@@ -59,13 +59,7 @@ const shockers = computed(() => Array.from(shockerNames.value.entries()).map(([i
 
 <template>
   <FormSection>
-    <USwitch
-      :model-value="enabled"
-      label="Enable OpenShock"
-      description="Lets you create and use Shocker controls."
-      @update:model-value="setEnabled(!!$event)"
-    />
-
+    <!-- Turned on and off on the Add-ons page: this section only shows while OpenShock is on. -->
     <template v-if="enabled">
       <UFormField
         label="API key"

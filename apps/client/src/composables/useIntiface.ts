@@ -13,7 +13,7 @@ const LEGACY_AUTO_LAUNCH_KEY = 'intiface_autoLaunch'
 
 // The connection to Intiface runs in Rust (src-tauri/src/intiface), so toys keep their timing
 // while this window is hidden and keep going through a reload. Status, as Rust reports it:
-// 'disabled': the user hasn't turned the integration on in Settings (the default).
+// 'disabled': the Intiface toys add-on is off (Settings > Add-ons), the default.
 // 'connecting': a connection attempt is in flight, including retries.
 // 'connected': the handshake succeeded. Fail-closed: only this counts as available.
 // 'error': nothing is listening at the URL; a retry is still scheduled.
@@ -63,7 +63,6 @@ export function useIntiface(): {
   isCustomUrl: ComputedRef<boolean>
   setUrl: (value?: string) => void
   enabled: ComputedRef<boolean>
-  setEnabled: (value: boolean) => void
   status: ComputedRef<IntifaceStatus>
   isAvailable: ComputedRef<boolean>
   devices: ComputedRef<Map<number, IntifaceDevice>>
@@ -94,8 +93,6 @@ export function useIntiface(): {
     // Reconnects against the new URL right away.
     setUrl: (value) => void api.intifaceSetUrl(value?.trim() || null),
     enabled,
-    // Intiface toys is an add-on: the registry turns it on and off (see src-tauri/src/addons).
-    setEnabled: (value) => void api.addonsSetEnabled('intiface', value),
     status,
     isAvailable,
     devices,

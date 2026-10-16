@@ -11,7 +11,6 @@ const {
   isCustomUrl,
   setUrl,
   enabled,
-  setEnabled,
   status,
   devices,
   installed,
@@ -79,13 +78,7 @@ const batteryTone = (level: number): string => (level <= 15 ? 'bg-error/15 text-
 
 <template>
   <FormSection>
-    <USwitch
-      :model-value="enabled"
-      label="Enable Intiface"
-      description="Connects to Intiface Central to control toys."
-      @update:model-value="setEnabled(!!$event)"
-    />
-
+    <!-- Turned on and off on the Add-ons page: this section only shows while Intiface toys is on. -->
     <template v-if="enabled">
       <UFormField
         label="Server URL"

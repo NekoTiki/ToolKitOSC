@@ -3,7 +3,8 @@
 // tooltip and the accessible name.
 //
 // `busy` spins a ring around the icon while the page's work runs in the background; `alert` is a
-// dot saying how that work ended, shown until the user opens the page.
+// dot saying how that work ended, shown until the user opens the page. `addon` gives a page an
+// add-on brings a dashed outline, to tell it from the core pages.
 defineProps<{
   icon: string
   label: string
@@ -12,6 +13,7 @@ defineProps<{
   badge?: number
   busy?: boolean
   alert?: 'success' | 'error' | null
+  addon?: boolean
 }>()
 </script>
 
@@ -19,7 +21,10 @@ defineProps<{
   <button
     type="button"
     class="relative flex h-13 w-full shrink-0 cursor-pointer items-center justify-center rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-    :class="active ? 'bg-primary/15 text-highlighted' : 'text-muted hover:bg-elevated/60 hover:text-default'"
+    :class="[
+      active ? 'bg-primary/15 text-highlighted' : 'text-muted hover:bg-elevated/60 hover:text-default',
+      addon && 'border border-dashed border-primary/45'
+    ]"
     :disabled="disabled"
     :aria-current="active ? 'page' : undefined"
     :aria-busy="busy || undefined"

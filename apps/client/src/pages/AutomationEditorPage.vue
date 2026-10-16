@@ -5,6 +5,7 @@ import ParameterListen from '@renderer/components/parameters/ParameterListen.vue
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
@@ -50,6 +51,7 @@ const { avatarDetails } = useAvatarDetails()
 const { boards } = useBoards()
 const { paused } = useStopEverything()
 const { openModal: confirm } = useAreYouSureModal()
+const { isOn, offAddonForAutomationKind, offAddonForControlType } = useAddons()
 
 const isNew = route.name === 'automation-new'
 const automationId = isNew ? null : String(route.params.automationId)
@@ -114,8 +116,12 @@ const eventControl = computed({
 
 const eventControlItems = computed(() => [
   { label: 'Any control', value: 'any' },
-  { label: 'Any shock', value: 'shock' },
-  ...controls.value.flatMap((group) => group.controls.map((control) => ({ label: `${control.name} · ${group.name}`, value: control.id })))
+  ...(isOn('openshock') || eventControl.value === 'shock' ? [{ label: 'Any shock', value: 'shock' }] : []),
+  ...controls.value.flatMap((group) =>
+    group.controls
+      .filter((control) => control.id === eventControl.value || !offAddonForControlType(control.type))
+      .map((control) => ({ label: `${control.name} · ${group.name}`, value: control.id }))
+  )
 ])
 
 // ---- Only if
@@ -281,7 +287,7 @@ const canHold = computed(() => !CONDITIONS[conditionType.value].moment && condit
 const addStep = (): void => {
   if (!draft.value || draft.value.then.length >= MAX_STEPS) return
   const condition = conditionType.value
-  draft.value.then.push(newStep(stepKindsFor(condition)[0]!, condition))
+  draft.value.then.push(newStep(stepKindsFor(condition, (kind) => !offAddonForAutomationKind(kind))[0]!, condition))
 }
 
 const removeStep = (index: number): void => {

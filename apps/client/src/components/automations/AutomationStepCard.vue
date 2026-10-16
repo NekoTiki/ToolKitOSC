@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useChatbox } from '@renderer/composables/useChatbox'
@@ -58,11 +59,12 @@ const showAllParameters = ref(false)
 const { controls } = useControls()
 const { lockedControlGroups } = useLockedControls()
 const { enabled: chatboxEnabled } = useChatbox()
+const { offAddonForAutomationKind, offAddonForControlType, setEnabled: setAddonEnabled } = useAddons()
 
 // The kinds that can run on this condition, plus the current one so a step that no longer fits
 // still shows what it is.
 const kinds = computed(() => {
-  const fitting = stepKindsFor(props.condition)
+  const fitting = stepKindsFor(props.condition, (kind) => !offAddonForAutomationKind(kind))
   return fitting.includes(step.value.kind) ? fitting : [...fitting, step.value.kind]
 })
 
@@ -257,10 +259,16 @@ const pickedControl = computed(() =>
     : undefined
 )
 
-// Only controls with a way to run on this condition.
+// The add-on this step needs, when it's off: the automation skips it.
+const stepAddonOff = computed(
+  () => offAddonForAutomationKind(step.value.kind) ?? (pickedControl.value ? offAddonForControlType(pickedControl.value.type) : undefined)
+)
+
+// Only controls with a way to run on this condition, and whose add-on is on (or the one picked).
 const controlItems = computed(() =>
   allControls.value
     .filter(({ control }) => controlRunsFor(props.condition, control.type).length)
+    .filter(({ control }) => control === pickedControl.value || !offAddonForControlType(control.type))
     .map(({ group, control }) => ({
       label: `${control.name} · ${CONTROL_TYPE_LABELS[control.type]} · ${group.name}`,
       value: `${group.id}:${control.id}`
@@ -427,6 +435,15 @@ const toInt = (value: number | string): number =>
         @click="emit('remove')"
       />
     </div>
+
+    <UAlert
+      v-if="stepAddonOff"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-puzzle"
+      :title="`${stepAddonOff.name} is off · this step is skipped`"
+      :actions="[{ label: `Turn on ${stepAddonOff.name}`, icon: 'i-lucide-power', color: 'neutral', variant: 'subtle', onClick: () => void setAddonEnabled(stepAddonOff!.id, true) }]"
+    />
 
     <div class="grid gap-1.5">
       <OptionGrid

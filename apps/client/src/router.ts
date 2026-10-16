@@ -1,5 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    // The add-on this page belongs to. While it's off, App.vue shows AddonOff instead.
+    addon?: string
+  }
+}
+
 // Hash history, not HTML5 history: the packaged app is served from Tauri's custom asset protocol,
 // which has no SPA fallback - a reload on `/controls` would look for a real file there. Hash URLs
 // always load index.html.
@@ -25,9 +32,19 @@ export const router = createRouter({
     { path: '/presets', name: 'presets', component: () => import('@renderer/pages/PresetsPage.vue') },
     { path: '/presets/new', name: 'preset-new', component: () => import('@renderer/pages/PresetsPage.vue') },
     { path: '/presets/:presetId', name: 'preset', component: () => import('@renderer/pages/PresetsPage.vue') },
-    { path: '/patterns', name: 'patterns', component: () => import('@renderer/pages/PatternsPage.vue') },
-    { path: '/patterns/new', name: 'pattern-new', component: () => import('@renderer/pages/PatternsPage.vue') },
-    { path: '/patterns/:patternId', name: 'pattern', component: () => import('@renderer/pages/PatternsPage.vue') },
+    { path: '/patterns', name: 'patterns', component: () => import('@renderer/pages/PatternsPage.vue'), meta: { addon: 'intiface' } },
+    {
+      path: '/patterns/new',
+      name: 'pattern-new',
+      component: () => import('@renderer/pages/PatternsPage.vue'),
+      meta: { addon: 'intiface' }
+    },
+    {
+      path: '/patterns/:patternId',
+      name: 'pattern',
+      component: () => import('@renderer/pages/PatternsPage.vue'),
+      meta: { addon: 'intiface' }
+    },
     { path: '/automations', name: 'automations', component: () => import('@renderer/pages/AutomationsPage.vue') },
     { path: '/automations/new', name: 'automation-new', component: () => import('@renderer/pages/AutomationEditorPage.vue') },
     {
@@ -45,7 +62,12 @@ export const router = createRouter({
     { path: '/activity', name: 'activity', component: () => import('@renderer/pages/ActivityPage.vue') },
     { path: '/ai', name: 'ai', component: () => import('@renderer/pages/AiPage.vue') },
     { path: '/settings/:section?', name: 'settings', component: () => import('@renderer/pages/SettingsPage.vue') },
-    { path: '/settings/esp32/:boardId', name: 'board', component: () => import('@renderer/pages/BoardEditorPage.vue') },
+    {
+      path: '/settings/esp32/:boardId',
+      name: 'board',
+      component: () => import('@renderer/pages/BoardEditorPage.vue'),
+      meta: { addon: 'boards' }
+    },
     { path: '/:pathMatch(.*)*', redirect: '/controls' }
   ]
 })
