@@ -35,6 +35,10 @@ const CONTACTS_RECENT: Duration = Duration::from_secs(10);
 /// `TKOSC/HapticsLevel` goes out at most this often.
 const LEVEL_EVERY: Duration = Duration::from_millis(100);
 
+/// SPS sockets and plugs only turn their contacts on while a haptics app says it's there, every
+/// few seconds (touch zones always send). OscGoesBrrr's parameter, which SPS listens for.
+const APP_PARAMETER: &str = "OGB_ENABLED";
+const APP_EVERY: Duration = Duration::from_secs(5);
 const SWITCH_PARAMETER: &str = "TKOSC/Haptics";
 const LEVEL_PARAMETER: &str = "TKOSC/HapticsLevel";
 
@@ -54,7 +58,9 @@ pub struct Haptics {
     /// When a contact parameter last changed.
     last_contact: Mutex<Option<Instant>>,
     /// The last `TKOSC/HapticsLevel` sent, and when.
-    level_sent: Mutex<Option<(Instant, f64)>>
+    level_sent: Mutex<Option<(Instant, f64)>>,
+    /// The last `OGB_ENABLED` sent, and when. `None` sends it on the next tick.
+    app_sent: Mutex<Option<(Instant, bool)>>
 }
 
 fn haptics(app: &AppHandle) -> &Haptics {
@@ -156,6 +162,29 @@ pub fn devices_changed(app: &AppHandle) {
 /// Another avatar: its zones start from nothing.
 pub fn avatar_changed(app: &AppHandle) {
     haptics(app).engine.lock().unwrap().clear();
+    // The new avatar's sockets and plugs hear we're here right away.
+    *haptics(app).app_sent.lock().unwrap() = None;
+}
+
+/// Tells the avatar's sockets and plugs whether haptics are on: right away when that changes or
+/// the avatar does, then again every few seconds while on.
+fn send_app_enabled(app: &AppHandle, enabled: bool) {
+    {
+        let mut sent = haptics(app).app_sent.lock().unwrap();
+        let due = match *sent {
+            None => true,
+            Some((at, last)) => last != enabled || (enabled && at.elapsed() >= APP_EVERY)
+        };
+        if !due {
+            return;
+        }
+        *sent = Some((Instant::now(), enabled));
+    }
+    let state = app.state::<AppState>();
+    let command = OscCommand { address: format!("/avatar/parameters/{APP_PARAMETER}"), args: vec![OscArg::Bool(enabled)] };
+    if let Err(err) = crate::osc::send(&state, &command) {
+        tracing::debug!("Couldn't send {APP_PARAMETER}: {err}");
+    }
 }
 
 fn tick(app: &AppHandle) {
@@ -165,6 +194,7 @@ fn tick(app: &AppHandle) {
     }
 
     let settings = store::get(app);
+    send_app_enabled(app, settings.enabled_for(avatar_id(app).as_deref()));
     let outputs = settings.active_outputs(avatar_id(app).as_deref());
     let levels = haptics(app).engine.lock().unwrap().tick(Instant::now(), &outputs);
 
@@ -279,6 +309,7 @@ fn stop(app: &AppHandle) {
     }
     haptics(app).engine.lock().unwrap().clear();
     haptics(app).levels.lock().unwrap().clear();
+    send_app_enabled(app, false);
     // Touch lets go of every toy.
     crate::toys::set_touch(app, Vec::new(), crate::toys::Priority { threshold: 1.0, grace: Duration::ZERO });
     emit_view(app, true);

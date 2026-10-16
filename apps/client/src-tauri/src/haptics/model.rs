@@ -252,11 +252,16 @@ impl HapticsSettings {
         added
     }
 
+    /// Whether haptics are on while wearing `avatar_id`: the main switch, and the avatar's own.
+    pub fn enabled_for(&self, avatar_id: Option<&str>) -> bool {
+        self.enabled && !avatar_id.and_then(|id| self.avatars.get(id)).is_some_and(|avatar| !avatar.enabled)
+    }
+
     /// The outputs that apply while wearing `avatar_id`: the avatar's own for each actuator it
     /// overrides, the global ones for the rest. None at all while haptics are off, globally or for
     /// this avatar.
     pub fn active_outputs(&self, avatar_id: Option<&str>) -> Vec<HapticsOutput> {
-        if !self.enabled {
+        if !self.enabled_for(avatar_id) {
             return Vec::new();
         }
         let Some(avatar) = avatar_id.and_then(|id| self.avatars.get(id)) else {
