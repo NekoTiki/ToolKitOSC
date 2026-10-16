@@ -127,7 +127,7 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
   const initial = (): AnyDraft => {
     if (!source) return { type: 'boolean', name: '', inputAddress: '' }
 
-    return _.omit(_.cloneDeep(source), ['locked', 'unavailable', 'limits', 'groupRules']) as AnyDraft
+    return _.omit(_.cloneDeep(source), ['locked', 'unavailable', 'paused', 'limits', 'groupRules']) as AnyDraft
   }
 
   // Cast rather than ref<AnyDraft>(): unwrapping this wide type sends TS past its depth limit.

@@ -58,6 +58,12 @@ export interface SavedPatternData {
   updatedAt: number
 }
 
+// An actuator avatar touch is driving right now (see src-tauri/src/haptics).
+export interface ToyTouched {
+  deviceIndex: number
+  actuatorIndex: number
+}
+
 export interface PatternValueEvent {
   controlId: string
   value: string
@@ -113,6 +119,11 @@ export const toysApi = {
   },
   onPatternEnded: (callback: (ended: { controlId: string; run: number }) => void): void => {
     void listen<{ controlId: string; run: number }>('pattern-ended', (event) => callback(event.payload))
+  },
+  // The actuators avatar touch drives right now. Empty while haptics are off.
+  toysTouched: (): Promise<ToyTouched[]> => invoke('toys_touched'),
+  onToysState: (callback: (state: { touched: ToyTouched[] }) => void): void => {
+    void listen<{ touched: ToyTouched[] }>('toys-state', (event) => callback(event.payload))
   },
   onToyValue: (callback: (value: { controlId: string; value: number }) => void): void => {
     void listen<{ controlId: string; value: number }>('toy-value', (event) => callback(event.payload))

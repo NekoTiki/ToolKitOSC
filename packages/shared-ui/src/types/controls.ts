@@ -81,6 +81,10 @@ export interface BaseControl {
   // Why, when it's more specific than the control type's usual reason (see Control.vue), e.g. an
   // OpenShock control whose shocker hubs are all offline. Computed client-side like `unavailable`.
   unavailableReason?: string
+  // A toy or pattern control whose toy avatar touch is driving right now: it still takes commands,
+  // but the toy waits until touch lets go. Only this flag is sent on, never why. Computed
+  // client-side like `unavailable`.
+  paused?: boolean
   // Set by the host's active profile, like `locked`: narrows what viewers may do with a control
   // that is still usable. Computed client-side (see useControls.ts), never saved, and enforced by
   // sanitizeCommand (utils/controlLimits.ts) on the host and the relay.

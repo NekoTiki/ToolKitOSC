@@ -33,7 +33,9 @@ pub struct Haptics {
     task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     levels: Mutex<Vec<OutputLevel>>,
     /// The last `haptics-state` sent, and when.
-    sent: Mutex<Option<(Instant, View)>>
+    sent: Mutex<Option<(Instant, View)>>,
+    /// The last `toys-state` sent.
+    touched: Mutex<Option<Vec<crate::toys::Touched>>>
 }
 
 fn haptics(app: &AppHandle) -> &Haptics {
@@ -106,10 +108,52 @@ pub fn avatar_changed(app: &AppHandle) {
 }
 
 fn tick(app: &AppHandle) {
-    let outputs = store::get(app).active_outputs(avatar_id(app).as_deref());
+    let settings = store::get(app);
+    let outputs = settings.active_outputs(avatar_id(app).as_deref());
     let levels = haptics(app).engine.lock().unwrap().tick(Instant::now(), &outputs);
+
+    // Stop everything keeps haptics off until you resume.
+    let touches = if crate::automations::is_paused(app) {
+        Vec::new()
+    } else {
+        outputs
+            .iter()
+            .zip(&levels)
+            .filter(|(output, _)| !output.sources.is_empty())
+            .map(|(output, level)| crate::toys::Touch {
+                actuator: crate::toys::ActuatorRef {
+                    device_index: output.actuator.device_index,
+                    actuator_index: output.actuator.actuator_index,
+                    actuator_type: output.actuator.actuator_type.clone()
+                },
+                level: level.level
+            })
+            .collect()
+    };
+    let priority = crate::toys::Priority {
+        threshold: settings.priority.threshold.clamp(0.0, 1.0),
+        grace: Duration::from_millis(settings.priority.grace_ms)
+    };
+    crate::toys::set_touch(app, touches, priority);
+
     *haptics(app).levels.lock().unwrap() = levels;
     emit_view(app, false);
+    emit_touched(app);
+}
+
+/// Which actuators touch drives, for the tiles: a toy or pattern control on one of them reads
+/// Paused, on the share page too (without saying why).
+fn emit_touched(app: &AppHandle) {
+    let touched = crate::toys::touched(app);
+    let mut sent = haptics(app).touched.lock().unwrap();
+    if sent.as_ref() != Some(&touched) {
+        let _ = app.emit("toys-state", serde_json::json!({ "touched": touched }));
+        *sent = Some(touched);
+    }
+}
+
+pub fn touched(app: &AppHandle) -> Vec<crate::toys::Touched> {
+    crate::toys::touched(app)
 }
 
 fn emit_view(app: &AppHandle, now: bool) {
@@ -151,7 +195,10 @@ fn stop(app: &AppHandle) {
     }
     haptics(app).engine.lock().unwrap().clear();
     haptics(app).levels.lock().unwrap().clear();
+    // Touch lets go of every toy.
+    crate::toys::set_touch(app, Vec::new(), crate::toys::Priority { threshold: 1.0, grace: Duration::ZERO });
     emit_view(app, true);
+    emit_touched(app);
 }
 
 /// Avatar haptics as an add-on (see `crate::addons`). It drives Intiface toys, so it needs them.
