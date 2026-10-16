@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { StatusTone } from '@renderer/components/layout/StatusChip.vue'
 import type { Addon, AddonState } from '@renderer/composables/useAddons'
-import { ADDON_SECTION, useAddons } from '@renderer/composables/useAddons'
+import { ADDON_SETUP, useAddons } from '@renderer/composables/useAddons'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -38,7 +38,7 @@ const go = (to: string): void => {
   void router.push(to)
 }
 
-const openAddon = (addon: Addon): void => go(`/settings/${ADDON_SECTION[addon.id] ?? 'addons'}`)
+const openAddon = (addon: Addon): void => go(ADDON_SETUP[addon.id] ?? '/settings/addons')
 </script>
 
 <template>
