@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import HapticsSourceEditor from '@renderer/components/haptics/HapticsSourceEditor.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import type { HapticsToy } from '@renderer/composables/useAvatarHaptics'
 import {
   newSource,
@@ -19,6 +21,7 @@ import { useRoute, useRouter } from 'vue-router'
 // every avatar or only the one you wear. Touch priority has its own pane.
 const route = useRoute()
 const router = useRouter()
+const { openModal: confirm } = useAreYouSureModal()
 const {
   settings,
   scope,
@@ -41,12 +44,14 @@ const {
 const isPriority = route.name === 'haptics-priority'
 const toyKey = computed(() => (typeof route.params.actuator === 'string' ? route.params.actuator : null))
 const toy = computed(() => toys.value.find((item) => item.key === toyKey.value))
+// /haptics/<toy>/sources/<n>: one of the toy's sources, as a sub-page of the toy.
+const sourceIndex = route.name === 'haptics-source' ? Number(route.params.index) : null
 
 // /haptics alone (or a toy that's gone) opens the first toy, or touch priority without any.
 watch(
   [toys, toyKey],
   () => {
-    if (isPriority || (route.name === 'haptics-toy' && toy.value)) return
+    if (isPriority || ((route.name === 'haptics-toy' || route.name === 'haptics-source') && toy.value)) return
 
     void router.replace(toys.value[0] ? `/haptics/${toys.value[0].key}` : '/haptics/priority')
   },
@@ -129,6 +134,21 @@ const ownSetup = (): void => {
 
   const current = toy.value
   change((target) => outputToEdit(target, current))
+}
+
+const editedSource = computed(() => (sourceIndex !== null && toy.value ? editedOutput(toy.value.key)?.sources[sourceIndex] : undefined))
+
+const removeSource = async (): Promise<void> => {
+  if (!toy.value || !editedSource.value || sourceIndex === null) return
+
+  const current = toy.value
+  const kind = ZONE_KIND_LABEL[SOURCE_ZONE_KIND[editedSource.value.kind]].toLowerCase()
+  const ok = await confirm({ title: 'Delete source?', message: `This toy stops following this ${kind}.`, confirmText: 'Delete' })
+
+  if (!ok) return
+
+  change((target) => outputToEdit(target, current).sources.splice(sourceIndex, 1))
+  void router.push(`/haptics/${current.key}`)
 }
 
 const setAvatarEnabled = (enabled: boolean): void =>
@@ -231,6 +251,31 @@ const setAvatarEnabled = (enabled: boolean): void =>
       #header
     >
       <PageHeader
+        v-if="toy && sourceIndex !== null"
+        :title="editedSource ? ZONE_KIND_LABEL[SOURCE_ZONE_KIND[editedSource.kind]] : 'Source'"
+        :meta="scope === 'avatar' ? `${avatarName} only` : 'All avatars'"
+        :crumbs="[
+          { label: 'Haptics', to: '/haptics' },
+          { label: toyName(toy), to: `/haptics/${toy.key}` },
+          { label: editedSource ? ZONE_KIND_LABEL[SOURCE_ZONE_KIND[editedSource.kind]] : 'Source' }
+        ]"
+      >
+        <template
+          v-if="editedSource"
+          #actions
+        >
+          <UButton
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="soft"
+            @click="removeSource"
+          >
+            Delete
+          </UButton>
+        </template>
+      </PageHeader>
+      <PageHeader
+        v-else
         :title="isPriority ? 'Touch priority' : toyName(toy!)"
         :meta="isPriority ? undefined : `${toy!.actuatorType}${toy!.connected ? '' : ' · offline'}`"
         :crumbs="[{ label: 'Haptics', to: '/haptics' }, { label: isPriority ? 'Touch priority' : toyName(toy!) }]"
@@ -299,6 +344,13 @@ const setAvatarEnabled = (enabled: boolean): void =>
         </div>
       </FormSection>
     </div>
+
+    <!-- One of the toy's sources -->
+    <HapticsSourceEditor
+      v-else-if="toy && sourceIndex !== null"
+      :toy="toy"
+      :index="sourceIndex"
+    />
 
     <!-- One toy -->
     <div
@@ -449,5 +501,17 @@ const setAvatarEnabled = (enabled: boolean): void =>
       title="No toys yet"
       description="Connect a toy in Intiface Central, then pick which part of your avatar it follows."
     />
+
+    <template
+      v-if="toy && editedSource"
+      #footer
+    >
+      <UButton
+        icon="i-lucide-check"
+        :to="`/haptics/${toy.key}`"
+      >
+        Done
+      </UButton>
+    </template>
   </PageLayout>
 </template>

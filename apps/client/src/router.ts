@@ -61,7 +61,7 @@ export const router = createRouter({
     {
       path: '/haptics/:actuator/sources/:index',
       name: 'haptics-source',
-      component: () => import('@renderer/pages/HapticsSourcePage.vue'),
+      component: () => import('@renderer/pages/HapticsPage.vue'),
       meta: { addon: 'haptics' }
     },
     { path: '/automations', name: 'automations', component: () => import('@renderer/pages/AutomationsPage.vue') },
