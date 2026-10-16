@@ -74,7 +74,7 @@ const setContact = (key: string, on: boolean): void => edit((target) => ((target
           v-for="name in zoneNames"
           :key="name"
           type="button"
-          class="min-h-10 cursor-pointer rounded-full border px-3.5 text-sm transition-colors"
+          class="relative isolate min-h-10 cursor-pointer overflow-hidden rounded-full border px-3.5 text-sm transition-colors"
           :class="
             source.zones.include.includes(name)
               ? 'border-primary/50 bg-primary/15 text-highlighted'
@@ -83,11 +83,13 @@ const setContact = (key: string, on: boolean): void => edit((target) => ((target
           :aria-pressed="source.zones.include.includes(name)"
           @click="toggleZone(name)"
         >
-          {{ name }}
+          <!-- How strongly it's touched, as a fill behind the name. -->
           <span
-            v-if="zoneLevel(name) > 0"
-            class="text-secondary tabular-nums"
-          > · {{ zoneLevel(name).toFixed(2) }}</span>
+            class="absolute inset-y-0 left-0 -z-10 bg-secondary/25 transition-[width] duration-100"
+            :style="{ width: `${zoneLevel(name) * 100}%` }"
+            aria-hidden="true"
+          />
+          {{ name }}
         </button>
       </div>
       <p

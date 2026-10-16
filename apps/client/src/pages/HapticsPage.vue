@@ -388,15 +388,17 @@ const setAvatarEnabled = (enabled: boolean): void =>
           <span
             v-for="zone in zones"
             :key="`${zone.kind}/${zone.name}`"
-            class="rounded-full border px-2.5 py-1 text-xs transition-colors"
-            :class="zone.level > 0 ? 'border-secondary/50 bg-secondary/15 text-secondary' : 'border-transparent bg-(--aurora-well) text-muted'"
+            class="relative isolate overflow-hidden rounded-full border px-2.5 py-1 text-xs transition-colors"
+            :class="zone.level > 0 ? 'border-secondary/50 bg-(--aurora-well) text-secondary' : 'border-transparent bg-(--aurora-well) text-muted'"
           >
+            <!-- How strongly it's touched, as a fill behind the name. -->
+            <span
+              class="absolute inset-y-0 left-0 -z-10 bg-secondary/25 transition-[width] duration-100"
+              :style="{ width: `${zone.level * 100}%` }"
+              aria-hidden="true"
+            />
             {{ zone.name }}
             <span class="text-dimmed">· {{ ZONE_KIND_LABEL[zone.kind].toLowerCase() }}</span>
-            <span
-              v-if="zone.level > 0"
-              class="tabular-nums"
-            > · {{ zone.level.toFixed(2) }}</span>
           </span>
         </div>
       </FormSection>
@@ -451,9 +453,16 @@ const setAvatarEnabled = (enabled: boolean): void =>
             v-for="(source, index) in shown.sources"
             :key="index"
             :to="inherited ? undefined : `/haptics/${toy.key}/sources/${index}`"
-            class="flex min-h-14 items-center gap-3 rounded-field bg-(--aurora-well) px-3.5 py-2.5"
+            class="relative isolate flex min-h-14 items-center gap-3 overflow-hidden rounded-field bg-(--aurora-well) px-3.5 py-2.5"
             :class="{ 'transition-colors hover:bg-(--aurora-glass)': !inherited }"
           >
+            <!-- The source's live level, as a fill behind the card. -->
+            <span
+              v-if="live || inherited"
+              class="absolute inset-y-0 left-0 -z-10 bg-secondary/15 transition-[width] duration-100"
+              :style="{ width: `${(level(toy.key).sources[index] ?? 0) * 100}%` }"
+              aria-hidden="true"
+            />
             <span class="grid min-w-0 flex-1">
               <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ sourceTitle(source) }}</b>
               <small class="truncate text-xs text-muted">{{ sourceSummary(source) }}</small>
