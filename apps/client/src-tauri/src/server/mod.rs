@@ -3,6 +3,8 @@
 //! message means: incoming ones go to it as `server-message` events, and it sends its own through
 //! `server_send`. Avatar parameter values are the exception: they go straight from the OSC
 //! receive path to the server (see `on_parameter`), for the parameters the webview asked for.
+//! The token it signs in with stays here too (see `auth`).
+pub mod auth;
 mod link;
 
 use std::collections::HashSet;
@@ -37,6 +39,7 @@ struct Link {
     id: u64,
     url: String,
     token: Option<String>,
+    protocol_version: u32,
     tx: mpsc::UnboundedSender<LinkCommand>
 }
 
@@ -57,16 +60,18 @@ struct Inner {
 
 #[derive(Default)]
 pub struct Server {
-    inner: Mutex<Inner>
+    inner: Mutex<Inner>,
+    pub auth: auth::Auth
 }
 
 fn server(app: &AppHandle) -> &Server {
     &app.state::<AppState>().inner().server
 }
 
-/// Connects to `url` (the server's `/host` socket), authenticating with `token` when there is
-/// one. Asking again for the link that's already up keeps it and replays its state instead.
-pub fn connect(app: &AppHandle, url: String, token: Option<String>, protocol_version: u32) {
+/// Connects to `url` (the server's `/host` socket), signed in with its token when there is one.
+/// Asking again for the link that's already up keeps it and replays its state instead.
+pub fn connect(app: &AppHandle, url: String, protocol_version: u32) {
+    let token = auth::token(app, &url);
     let replay = {
         let mut inner = server(app).inner.lock().unwrap();
         let same = inner.link.as_ref().is_some_and(|link| link.url == url && link.token == token);
@@ -85,7 +90,7 @@ pub fn connect(app: &AppHandle, url: String, token: Option<String>, protocol_ver
             let id = inner.next_id;
             let auth = token.as_deref().map(|token| auth_message(token, protocol_version));
             let tx = link::spawn(app.clone(), id, url.clone(), auth);
-            inner.link = Some(Link { id, url, token, tx });
+            inner.link = Some(Link { id, url, token, protocol_version, tx });
             None
         }
     };
@@ -99,6 +104,18 @@ pub fn connect(app: &AppHandle, url: String, token: Option<String>, protocol_ver
                 let _ = app.emit("server-message", text);
             }
         }
+    }
+}
+
+/// The token for the linked server changed (signed in or out, or loaded at startup): connects
+/// again with the new one. Nothing happens while it's the same.
+pub fn refresh(app: &AppHandle) {
+    let target = {
+        let inner = server(app).inner.lock().unwrap();
+        inner.link.as_ref().map(|link| (link.url.clone(), link.protocol_version))
+    };
+    if let Some((url, protocol_version)) = target {
+        connect(app, url, protocol_version);
     }
 }
 
@@ -230,7 +247,19 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
     let _ = app.emit("server-message", text);
 
     match kind.as_deref() {
-        Some("auth-error") => After::Stop(Status::Rejected),
+        Some("auth-error") => {
+            // The token is no good any more: forget it, which connects again signed out.
+            let url = server(app).inner.lock().unwrap().link.as_ref().map(|link| link.url.clone());
+            if let Some(url) = url {
+                let app = app.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Err(err) = auth::set_token(&app, &url, None) {
+                        tracing::error!("Couldn't forget the rejected token: {err}");
+                    }
+                });
+            }
+            After::Stop(Status::Rejected)
+        }
         Some("protocol-mismatch") => After::Stop(Status::Mismatch),
         _ => After::Continue
     }

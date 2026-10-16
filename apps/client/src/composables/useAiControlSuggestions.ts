@@ -1,8 +1,8 @@
 import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
-import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { usePresets } from '@renderer/composables/usePresets'
-import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
+import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
+import { api } from '@renderer/lib/tauri-bridge'
 import type { ControlGroup } from '@toolkitosc/shared-ui'
 import { ref } from 'vue'
 
@@ -45,7 +45,6 @@ export function useAiControlSuggestions(): {
   listOptions: () => Promise<AiOptions>
   generate: (provider?: string, profile?: string) => Promise<ControlGroup[]>
 } {
-  const { token } = useAuth()
   const { includedParameters } = usePresets()
   const { avatarDetails } = useAvatarDetails()
   const { waitForResult } = useAiGenerationStatus()
@@ -53,23 +52,18 @@ export function useAiControlSuggestions(): {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const authHeaders = (): HeadersInit => {
-    if (!token.value) throw new Error('Not logged in - log in from Settings first')
-
-    return { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' }
-  }
-
   // Model choice is never part of this - the server picks it from (provider, profile) alone (see
   // profiles.ts's resolveModel). This only ever offers the two axes the server actually exposes.
   // Always re-fetched (never cached here) - remaining credits change every time generate() runs,
   // and the modal that owns this composable's lifetime doesn't get remounted on every open (see
   // the AI page), so a caller has to explicitly call this again to see a fresh number.
   const listOptions = async (): Promise<AiOptions> => {
-    const response = await fetch(`${serverHttpUrl.value}/api/ai/providers`, { headers: authHeaders() })
+    // Rust adds the token, and rejects when signed out.
+    const response = await api.serverRequest(serverWsUrl.value, 'GET', '/api/ai/providers')
 
-    if (!response.ok) throw new Error(`Failed to list AI options (${response.status})`)
+    if (response.status >= 400) throw new Error(`Failed to list AI options (${response.status})`)
 
-    return (await response.json()) as AiOptions
+    return response.body as AiOptions
   }
 
   // Uses the app's existing noisy-address filter + the user's own per-avatar excluded list
@@ -94,24 +88,20 @@ export function useAiControlSuggestions(): {
         kind: param.kind
       }))
 
-      const response = await fetch(`${serverHttpUrl.value}/api/ai/suggest-controls`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          provider,
-          profile,
-          avatarId: avatarDetails.value.id,
-          avatarName: avatarDetails.value.name,
-          parameters
-        })
+      const response = await api.serverRequest(serverWsUrl.value, 'POST', '/api/ai/suggest-controls', {
+        provider,
+        profile,
+        avatarId: avatarDetails.value.id,
+        avatarName: avatarDetails.value.name,
+        parameters
       })
 
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
+      if (response.status >= 400) {
+        const body = (response.body ?? {}) as { statusMessage?: string }
         throw new Error(body.statusMessage || `Request failed (${response.status})`)
       }
 
-      const { requestId } = (await response.json()) as { requestId: string }
+      const { requestId } = response.body as { requestId: string }
 
       return await waitForResult(requestId)
     } catch (err) {

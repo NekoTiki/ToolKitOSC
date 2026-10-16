@@ -128,6 +128,12 @@ pub fn run() {
             commands::server_disconnect,
             commands::server_send,
             commands::server_set_forwarded_addresses,
+            commands::server_request,
+            commands::auth_state,
+            commands::auth_migrate,
+            commands::auth_sign_out,
+            commands::auth_sign_in,
+            commands::auth_sign_in_cancel,
             commands::openshock_state,
             commands::openshock_migrate,
             commands::openshock_set_token,
@@ -184,7 +190,14 @@ pub fn run() {
             // ESP32 boards: reconnects the added ones and browses for new ones over mDNS.
             boards::start(app.handle().clone());
             automations::start(app.handle().clone());
-            openshock::start(app.handle().clone());
+            // Tokens a launch with no password store had to put in a file go to the store first,
+            // if there's one now, before anything reads them.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                secrets::init(&handle);
+                openshock::start(handle.clone());
+                server::auth::start(handle);
+            });
 
             Ok(())
         })
