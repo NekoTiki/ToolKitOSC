@@ -4,6 +4,9 @@
 //! that's the caller's job, and your own clicks and automations act as you.
 //!
 //! Controls and commands are JSON as the webview stores them (see `types/controls.ts`).
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -45,8 +48,16 @@ fn actuators(control: &Value) -> Vec<ActuatorRef> {
     control.get("actuators").cloned().and_then(|a| serde_json::from_value(a).ok()).unwrap_or_default()
 }
 
+/// Each toy control's level as last set, for automations that hold and put it back.
+static TOY_LEVELS: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
+
+pub fn toy_level(control_id: &str) -> f64 {
+    TOY_LEVELS.lock().unwrap().as_ref().and_then(|levels| levels.get(control_id).copied()).unwrap_or(0.0)
+}
+
 /// Shows a toy control's level on its tile, and on the share page (the webview forwards it).
 fn report_toy(app: &AppHandle, control_id: &str, level: f64) {
+    TOY_LEVELS.lock().unwrap().get_or_insert_with(HashMap::new).insert(control_id.to_owned(), level);
     let _ = app.emit("toy-value", json!({ "controlId": control_id, "value": level }));
 }
 

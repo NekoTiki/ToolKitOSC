@@ -18,17 +18,7 @@ import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { ClientListEntry, ControlTypes, ViewerGroupsMessage } from '@toolkitosc/shared-ui'
-import {
-  INTIFACE_PATTERN_OFF_ID,
-  isOptionDisabled,
-  limitRange,
-  PROTOCOL_VERSION,
-  resolveControlForViewer,
-  useIntifaceControl,
-  useIntifacePatternControl,
-  useOpenShockControl,
-  VIEWER_PATTERN_ID
-} from '@toolkitosc/shared-ui'
+import { PROTOCOL_VERSION, useIntifaceControl, useIntifacePatternControl, useOpenShockControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import type { ComputedRef } from 'vue'
 import { watch } from 'vue'
@@ -86,8 +76,7 @@ export function useWebsocketHost(): {
   open: () => void
   close: () => void
 } {
-  const { controls, visibleControls, setControlLastUser, getControl, handleCommand } =
-    useControls(() => sendControls())
+  const { controls, visibleControls, setControlLastUser, getControl } = useControls(() => sendControls())
 
 
   const { user } = useAuth()
@@ -151,8 +140,8 @@ export function useWebsocketHost(): {
   const { bannedClients } = useBannedClientsDb()
   const { add: addCommandToDb, update: updateCommandInDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
-  const { lastUpdate: intifaceLastUpdate, controlValue: intifaceValues } = useIntifaceControl()
-  const { lastUpdate: intifacePatternLastUpdate, controlValue: intifacePatternValues } = useIntifacePatternControl()
+  const { lastUpdate: intifaceLastUpdate } = useIntifaceControl()
+  const { lastUpdate: intifacePatternLastUpdate } = useIntifacePatternControl()
   const { clientType } = useClientType()
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
@@ -403,36 +392,8 @@ export function useWebsocketHost(): {
     if (status.value === 'OPEN' && JSON.stringify(message) !== JSON.stringify(previous)) sendMessage('viewer-groups', message)
   })
 
-  // When a profile turns on, or its limits change while it's on, bring running toys within the new
-  // limits: a toy above its new max drops to it, and a pattern that's now blocked stops. Only ever
-  // lowers, so it can't start anything; slider and enum avatar state is left alone. Uses the most
-  // a viewer group gets, so a friend's toy isn't cut to what everyone else may set.
-  watch(
-    () =>
-      controls.value
-        .flatMap((group) => group.controls)
-        .map((control) => [control, resolveControlForViewer(control, Object.keys(control.groupRules ?? {})).limits] as const),
-    (entries, previous) => {
-      const before = new Map(previous?.map(([control, limits]) => [control.id, JSON.stringify(limits)]))
-
-      entries.forEach(([control, limits]) => {
-        if (!limits || before.get(control.id) === JSON.stringify(limits)) return
-
-        if (control.type === 'intiface-toy') {
-          const { max } = limitRange(limits)
-
-          if ((intifaceValues.value.get(control.id) ?? 0) > max) handleCommand(control, { type: 'intiface-toy', value: max })
-        } else if (control.type === 'intiface-pattern') {
-          const current = intifacePatternValues.value.get(control.id)
-
-          // A viewer's own pattern was clamped to the old limits when it started, so it stops too.
-          if (current && current !== INTIFACE_PATTERN_OFF_ID && (current === VIEWER_PATTERN_ID || isOptionDisabled(limits, current))) {
-            handleCommand(control, { type: 'intiface-pattern', value: INTIFACE_PATTERN_OFF_ID })
-          }
-        }
-      })
-    }
-  )
+  // When a profile's limits on a toy change, Rust brings running toys within them (see
+  // clamp_running in src-tauri/src/server/policy.rs), from the snapshot pushed above.
 
   return { clients, status, sendMessage, open, close }
 }
