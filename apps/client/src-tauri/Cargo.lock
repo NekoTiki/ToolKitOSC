@@ -5145,6 +5145,7 @@ dependencies = [
  "libloading 0.9.0",
  "mdns-sd",
  "mslnk",
+ "rand 0.9.5",
  "reqwest",
  "rosc",
  "rustls",

@@ -10,7 +10,7 @@
 mod hub;
 mod rest;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -148,7 +148,9 @@ struct Inner {
     next_hub_id: u64,
     live: bool,
     online: HashSet<String>,
-    pending: Vec<JoinHandle<()>>
+    pending: Vec<JoinHandle<()>>,
+    /// When each control may shock again, in Unix ms.
+    cooldowns: HashMap<String, u64>
 }
 
 pub struct OpenShock {
@@ -170,7 +172,8 @@ impl Default for OpenShock {
                 next_hub_id: 0,
                 live: false,
                 online: HashSet::new(),
-                pending: Vec::new()
+                pending: Vec::new(),
+                cooldowns: HashMap::new()
             }),
             client: reqwest::Client::builder()
                 .user_agent(USER_AGENT)
@@ -473,6 +476,75 @@ pub fn fire(app: &AppHandle, fire: Fire) -> Result<(), String> {
     inner.pending.retain(|task| !task.inner().is_finished());
     inner.pending.push(task);
     Ok(())
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or_default()
+}
+
+/// `floor(random × (max − min) + min)`, as the webview always rolled: `max` itself never comes up.
+fn roll(range: Option<&Value>) -> f64 {
+    let min = range.and_then(|r| r.get("min")).and_then(Value::as_f64).unwrap_or(0.0);
+    let max = range.and_then(|r| r.get("max")).and_then(Value::as_f64).unwrap_or(min);
+    (rand::random::<f64>() * (max - min) + min).floor()
+}
+
+/// Runs a Shocker control: checks its cooldown, rolls the intensity and duration, shows the roll on
+/// its tile (the `shock-value` event, which the share page gets too), and sends the shock once the
+/// reel animation is over. Returns what was rolled, with the shockers' names, or `None` when
+/// OpenShock isn't available or the control is cooling down.
+pub fn fire_control(app: &AppHandle, control: &Value, viewer_name: Option<String>) -> Option<Value> {
+    if !available(app) {
+        return None;
+    }
+    let control_id = control.get("id")?.as_str()?.to_owned();
+    let now = now_ms();
+    if openshock(app).inner.lock().unwrap().cooldowns.get(&control_id).is_some_and(|end| *end > now) {
+        return None;
+    }
+
+    let mode = serde_json::from_value::<ControlType>(control.get("mode")?.clone()).ok()?;
+    let shockers: Vec<String> = serde_json::from_value(control.get("shockers")?.clone()).ok()?;
+    let intensity = roll(control.get("intensity"));
+    let duration = roll(control.get("duration"));
+    let animation = control.get("animationDuration").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64;
+    let cooldown = control.get("cooldown").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64;
+    let cooldown_end = now + cooldown + animation;
+
+    let names: Vec<String> = {
+        let mut inner = openshock(app).inner.lock().unwrap();
+        inner.cooldowns.insert(control_id.clone(), cooldown_end);
+        // Names now, not ids: a shocker can be renamed or removed by the time the log is read.
+        shockers
+            .iter()
+            .filter_map(|id| inner.hubs.iter().flat_map(|hub| &hub.shockers).find(|s| &s.id == id).map(|s| s.name.clone()))
+            .collect()
+    };
+
+    let _ = app.emit(
+        "shock-value",
+        json!({
+            "controlId": control_id,
+            "value": { "intensity": intensity, "duration": duration, "cooldownEnd": cooldown_end, "animationDuration": animation }
+        })
+    );
+
+    let fired = fire(
+        app,
+        Fire {
+            shockers,
+            mode,
+            intensity: intensity.clamp(0.0, 100.0) as u8,
+            duration: duration.clamp(0.0, 65535.0) as u16,
+            delay_ms: animation,
+            viewer_name
+        }
+    );
+    if let Err(err) = fired {
+        tracing::warn!("Shock refused: {err}");
+    }
+
+    Some(json!({ "intensity": intensity, "duration": duration, "shockers": names }))
 }
 
 /// Over the live hub when it's connected, by REST otherwise.

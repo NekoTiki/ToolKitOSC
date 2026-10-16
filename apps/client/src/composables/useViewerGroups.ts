@@ -3,7 +3,7 @@ import { db } from '@renderer/db/clients.db'
 import { getUUID } from '@renderer/utils/uuid'
 import type { ViewerGroupInfo } from '@toolkitosc/shared-ui'
 import { liveQuery } from 'dexie'
-import { ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 
 // Viewer groups (Friends, Mods...): the host puts viewers in them by hand, and each profile can give a
 // group more than everyone else gets (see groupOverrides in useLockedControls.ts). The groups
@@ -80,6 +80,12 @@ const groupExists = (id: string): boolean => viewerGroups.value.some((group) => 
 const activeGroupIds = (key: string): string[] =>
   (memberships.value.get(key) ?? []).filter((membership) => isActive(membership) && groupExists(membership.id)).map((membership) => membership.id)
 
+// Everyone in at least one group right now: viewer key -> group ids. Rust checks viewer commands
+// against it (see useWebsocketHost.ts).
+const activeMemberships = computed<Record<string, string[]>>(() =>
+  Object.fromEntries([...memberships.value.keys()].map((key) => [key, activeGroupIds(key)] as const).filter(([, ids]) => ids.length))
+)
+
 // A viewer's current memberships, for showing them: expired ones and deleted groups left out.
 const membershipsOf = (client: Pick<Client, 'groups'>): (GroupMembership & { group: ViewerGroup })[] =>
   (client.groups ?? []).flatMap((membership) => {
@@ -149,6 +155,7 @@ export function useViewerGroups(): {
   updateGroup: typeof updateGroup
   deleteGroup: typeof deleteGroup
   activeGroupIds: typeof activeGroupIds
+  activeMemberships: typeof activeMemberships
   membershipsOf: typeof membershipsOf
   addToGroup: typeof addToGroup
   removeFromGroup: typeof removeFromGroup
@@ -162,6 +169,7 @@ export function useViewerGroups(): {
     updateGroup,
     deleteGroup,
     activeGroupIds,
+    activeMemberships,
     membershipsOf,
     addToGroup,
     removeFromGroup,

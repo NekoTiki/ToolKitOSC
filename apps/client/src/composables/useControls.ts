@@ -1,36 +1,24 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useIntiface } from '@renderer/composables/useIntiface'
-import { resolvePatternRefs, toDefinition, useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
+import { resolvePatternRefs } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
-import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { usePresets } from '@renderer/composables/usePresets'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
-import type {
-  BooleanEnumControl,
-  CommandWithoutIds,
-  ControlGroup,
-  ControlType,
-  EnumControl,
-  LastUser,
-  OpenShockCommandResult,
-  StepEnumControl,
-  ViewerGroupRule
-} from '@toolkitosc/shared-ui'
-import {
-  INTIFACE_PATTERN_OFF_ID,
-  useIntifaceControl,
-  useIntifacePatternControl,
-  useOpenShockControl,
-  VIEWER_LIVE_ID,
-  VIEWER_PATTERN_ID
-} from '@toolkitosc/shared-ui'
+import { api } from '@renderer/lib/tauri-bridge'
+import type { CommandWithoutIds, ControlGroup, ControlType, LastUser, ViewerGroupRule } from '@toolkitosc/shared-ui'
+import { useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import type { ComputedRef } from 'vue'
 import { computed, ref, toRaw, watch } from 'vue'
 
 const controlsList = ref<ControlGroup[]>([])
+
+// Rust reports what it did to toys and shockers, whoever asked: the tiles follow, and the existing
+// watches in useWebsocketHost.ts pass it on to the share page.
+api.onToyValue(({ controlId, value }) => useIntifaceControl().setValue(controlId, value))
+api.onShockValue(({ controlId, value }) => useOpenShockControl().setValue(controlId, value))
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
 
 // One-off migration: 'intiface-vibrator' (with a `vibrators` field) was renamed to 'intiface-toy'
@@ -82,32 +70,14 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   setControlPinned: (groupId: string, controlId: string, pinned: boolean) => void
   loadControls: (avatarId: string) => void
 
-  // Returns the resolved OpenShock intensity/duration/shockers for an 'open-shock-shocker' command
-  // (see OpenShockCommandResult) so the caller can log what actually got sent - it isn't known ahead
-  // of time, since it's randomized here. undefined for every other command type, or when the
-  // command didn't actually fire (OpenShock unavailable, or still on cooldown).
-  // `viewerName`: who sent it, when shown to viewers (a viewer's own pattern says whose it is).
-  // `onPatternEnd`: called when a viewer's own pattern stops playing.
-  handleCommand: (
-    control: ControlType,
-    command: CommandWithoutIds,
-    context?: { viewerName?: string; onPatternEnd?: () => void }
-  ) => OpenShockCommandResult | undefined
+  // Runs a command as you (see handleCommand below).
+  handleCommand: (control: ControlType, command: CommandWithoutIds) => void
 } {
   const { avatarDetails } = useAvatarDetails(() => loadControls())
   const { lockedControls, controlLimits, groupOverrides } = useLockedControls()
   const { viewerGroups } = useViewerGroups()
-  const { fire: openShockFire, isAvailable: openShockAvailable, shockerNames, hubsOffline } = useOpenShock()
-  const { controlValue, setValue } = useOpenShockControl()
-  const {
-    setActuatorIntensity,
-    isAvailable: intifaceAvailable,
-    devices: intifaceDevices
-  } = useIntiface()
-  const { setValue: setIntifaceValue } = useIntifaceControl()
-  const { controlValue: patternValues, setValue: setPatternValue } = useIntifacePatternControl()
-  const { playPattern, playDefinition, stopPattern, releaseActuators } = useIntifacePatterns()
-  const { update } = useOscMessages()
+  const { isAvailable: openShockAvailable, hubsOffline } = useOpenShock()
+  const { isAvailable: intifaceAvailable, devices: intifaceDevices } = useIntiface()
   const { getPreset } = usePresets()
 
   // The active profile's rules for each viewer group, by control id then group id. Groups that
@@ -387,123 +357,11 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     localStorage.setItem(`controls_${avatarId.value}`, JSON.stringify(controlsList.value))
   }
 
-  const handleCommand = (
-    control: ControlType,
-    command: CommandWithoutIds,
-    context: { viewerName?: string; onPatternEnd?: () => void } = {}
-  ): OpenShockCommandResult | undefined => {
-    if (command.type === 'boolean' && control?.type === 'boolean') {
-      update({ address: control.inputAddress, args: [command.value] })
-    } else if (command.type === 'boolean-group' && control?.type === 'boolean-group') {
-      control.inputs.forEach((input) => {
-        update({ address: input.inputAddress, args: [command.value] })
-      })
-    } else if (command.type === 'boolean-enum' && control?.type === 'boolean-enum') {
-      const selectedInput: BooleanEnumControl['inputs'][number] =
-        control.inputs[command.value as number]
-
-      if (selectedInput) {
-        selectedInput.inputAddress.true.forEach((addr) => update({ address: addr, args: [true] }))
-        selectedInput.inputAddress.false.forEach((addr) => update({ address: addr, args: [false] }))
-      }
-    } else if (command.type === 'enum' && control?.type === 'enum') {
-      const selectedOption: EnumControl['options'][number] =
-        control.options[command.value as number]
-
-      if (selectedOption) update({ address: control.inputAddress, args: [selectedOption.value] })
-    } else if (command.type === 'step-enum' && control?.type === 'step-enum') {
-      const selectedOption: StepEnumControl['options'][number] =
-        control.options[command.value as number]
-
-      if (selectedOption) update({ address: control.inputAddress, args: [selectedOption.value] })
-    } else if (command.type === 'slider' && control?.type === 'slider') {
-      update({ address: control.inputAddress, args: [command.value] })
-    } else if (command.type === 'open-shock-shocker' && control?.type === 'open-shock-shocker') {
-      // Belt-and-suspenders: the UI already hides/blocks this control while OpenShock isn't
-      // configured (see `unavailable` above and useWebsocketHost.ts's enforcement), but guard here
-      // too in case handleCommand is ever called directly (e.g. from the authoring preview).
-      if (!openShockAvailable.value) return undefined
-
-      const piShockValue = controlValue.value.get(control.id)
-      if (piShockValue && piShockValue.cooldownEnd > Date.now()) return undefined
-
-      const intensity = Math.floor(
-        Math.random() * (control.intensity.max - control.intensity.min) + control.intensity.min
-      )
-      const duration = Math.floor(
-        Math.random() * (control.duration.max - control.duration.min) + control.duration.min
-      )
-
-      setValue(control.id, {
-        intensity: Number(intensity),
-        duration: Number(duration),
-        cooldownEnd: Date.now() + control.cooldown + control.animationDuration,
-        animationDuration: control.animationDuration
-      })
-
-      // Rust waits for the reel animation, checks again that OpenShock may still be used, then
-      // sends it. Stop everything drops it there if it comes first.
-      openShockFire({
-        shockers: control.shockers,
-        mode: control.mode,
-        intensity: Number(intensity),
-        duration: Number(duration),
-        delayMs: control.animationDuration,
-        viewerName: context.viewerName ?? null
-      }).catch((error) => console.error('OpenShock refused the shock:', error))
-
-      return {
-        intensity: Number(intensity),
-        duration: Number(duration),
-        // Resolved to display names right now, from the cache useOpenShock keeps warm - not the
-        // raw ids (control.shockers), and not left for the log viewer to resolve later: a shocker
-        // could be renamed or removed from the account by the time a log gets read. A name that
-        // isn't cached yet is left out entirely rather than falling back to the id.
-        shockers: control.shockers
-          .map((id) => shockerNames.value.get(id))
-          .filter((name): name is string => !!name)
-      }
-    } else if (command.type === 'intiface-toy' && control?.type === 'intiface-toy') {
-      // Same belt-and-suspenders guard as OpenShock above.
-      if (!intifaceAvailable.value) return undefined
-
-      setIntifaceValue(control.id, command.value)
-      // Driving these actuators directly wins over anything currently animating them - stop any
-      // pattern control that was still running against one of them (see the task's requirement
-      // that manually controlling a toy from elsewhere turns its pattern off). Released first: a
-      // pattern tick landing after the new level would otherwise overwrite it.
-      releaseActuators(control.actuators)
-      setActuatorIntensity(control.actuators, command.value)
-    } else if (command.type === 'intiface-pattern' && control?.type === 'intiface-pattern') {
-      // Same belt-and-suspenders guard as OpenShock above.
-      if (!intifaceAvailable.value) return undefined
-
-      if (command.value === VIEWER_LIVE_ID) {
-        // A viewer is still recording: the toy follows their slider, like a toy slider would, and
-        // whatever this control was playing stops.
-        stopPattern(control.id)
-        if ((patternValues.value.get(control.id) ?? INTIFACE_PATTERN_OFF_ID) !== INTIFACE_PATTERN_OFF_ID) setPatternValue(control.id, INTIFACE_PATTERN_OFF_ID)
-        releaseActuators(control.actuators)
-        setActuatorIntensity(control.actuators, command.level ?? 0)
-      } else if (command.value === VIEWER_PATTERN_ID) {
-        // sanitizeCommand already checked and clamped the samples.
-        const pattern = toDefinition({ id: VIEWER_PATTERN_ID, name: 'Viewer pattern', samples: command.samples ?? [] })
-
-        playDefinition(control.id, pattern, control.actuators, {
-          stopAfterMs: control.viewerPatterns?.stopsAfterMs,
-          by: context.viewerName,
-          onEnd: context.onPatternEnd
-        })
-      } else {
-        playPattern(control.id, command.value, control.actuators)
-      }
-    } else if (command.type === 'preset' && control?.type === 'preset') {
-      const preset = getPreset(control.presetId)
-
-      preset?.parameters.forEach((param) => update({ address: param.address, args: [param.value] }))
-    }
-
-    return undefined
+  // Runs in Rust (src-tauri/src/controls.rs), the same code that runs viewers' commands, without
+  // their limits: your own clicks, previews and automations act as you. The tiles follow from the
+  // toy-value, shock-value and pattern-value events.
+  const handleCommand = (control: ControlType, command: CommandWithoutIds): void => {
+    void api.controlRun(control, command)
   }
 
   watch(

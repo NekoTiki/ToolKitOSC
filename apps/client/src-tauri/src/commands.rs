@@ -440,3 +440,30 @@ pub fn patterns_delete(app: AppHandle, id: String) {
 pub fn patterns_migrate(app: AppHandle, patterns: Vec<toys::saved::SavedPattern>) {
     toys::saved::migrate(&app, patterns);
 }
+
+/// The controls and rules viewer commands are checked against (see `server::policy`).
+#[tauri::command]
+pub fn server_set_policy(app: AppHandle, policy: server::policy::Policy) {
+    server::set_policy(&app, policy);
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlRunResult {
+    /// What a shock rolled, when one went out.
+    shock: Option<serde_json::Value>,
+    /// The run number of a pattern it started.
+    pattern_run: Option<u64>
+}
+
+/// Runs a command on a control as you: your own clicks, previews and automations. No limits apply.
+#[tauri::command]
+pub fn control_run(
+    app: AppHandle,
+    control: serde_json::Value,
+    command: serde_json::Value,
+    viewer_name: Option<String>
+) -> ControlRunResult {
+    let outcome = crate::controls::run(&app, &control, &command, viewer_name);
+    ControlRunResult { shock: outcome.shock, pattern_run: outcome.pattern_run }
+}

@@ -1,0 +1,271 @@
+[
+  {
+    "name": "boolean passes a boolean",
+    "control": { "id": "c", "name": "C", "type": "boolean", "inputAddress": "/a" },
+    "command": { "type": "boolean", "value": true },
+    "expected": { "type": "boolean", "value": true }
+  },
+  {
+    "name": "boolean drops a number",
+    "control": { "id": "c", "name": "C", "type": "boolean", "inputAddress": "/a" },
+    "command": { "type": "boolean", "value": 1 },
+    "expected": null
+  },
+  {
+    "name": "wrong type is dropped",
+    "control": { "id": "c", "name": "C", "type": "boolean", "inputAddress": "/a" },
+    "command": { "type": "slider", "value": 0.5 },
+    "expected": null
+  },
+  {
+    "name": "locked control is dropped",
+    "control": { "id": "c", "name": "C", "type": "boolean", "inputAddress": "/a", "locked": true },
+    "command": { "type": "boolean", "value": true },
+    "expected": null,
+    "resolved": { "locked": true, "limits": null }
+  },
+  {
+    "name": "unavailable control is dropped",
+    "control": { "id": "c", "name": "C", "type": "intiface-toy", "actuators": [], "unavailable": true },
+    "command": { "type": "intiface-toy", "value": 0.5 },
+    "expected": null
+  },
+  {
+    "name": "boolean-group passes a boolean",
+    "control": { "id": "c", "name": "C", "type": "boolean-group", "inputs": [{ "inputAddress": "/a" }] },
+    "command": { "type": "boolean-group", "value": false },
+    "expected": { "type": "boolean-group", "value": false }
+  },
+  {
+    "name": "boolean-enum picks an input",
+    "control": {
+      "id": "c", "name": "C", "type": "boolean-enum",
+      "inputs": [{ "id": "x", "name": "X", "inputAddress": { "true": [], "false": [] } }, { "id": "y", "name": "Y", "inputAddress": { "true": [], "false": [] } }]
+    },
+    "command": { "type": "boolean-enum", "value": 1 },
+    "expected": { "type": "boolean-enum", "value": 1 }
+  },
+  {
+    "name": "boolean-enum drops a disabled input",
+    "control": {
+      "id": "c", "name": "C", "type": "boolean-enum", "limits": { "disabledOptions": ["y"] },
+      "inputs": [{ "id": "x", "name": "X", "inputAddress": { "true": [], "false": [] } }, { "id": "y", "name": "Y", "inputAddress": { "true": [], "false": [] } }]
+    },
+    "command": { "type": "boolean-enum", "value": 1 },
+    "expected": null
+  },
+  {
+    "name": "boolean-enum drops a fraction and a missing index",
+    "control": { "id": "c", "name": "C", "type": "boolean-enum", "inputs": [{ "id": "x", "name": "X", "inputAddress": { "true": [], "false": [] } }] },
+    "command": { "type": "boolean-enum", "value": 0.5 },
+    "expected": null
+  },
+  {
+    "name": "boolean-enum drops an index past the end",
+    "control": { "id": "c", "name": "C", "type": "boolean-enum", "inputs": [{ "id": "x", "name": "X", "inputAddress": { "true": [], "false": [] } }] },
+    "command": { "type": "boolean-enum", "value": 3 },
+    "expected": null
+  },
+  {
+    "name": "enum blocks by option value, not index",
+    "control": {
+      "id": "c", "name": "C", "type": "enum", "inputAddress": "/a", "limits": { "disabledOptions": [5] },
+      "options": [{ "name": "A", "value": 5 }, { "name": "B", "value": 0 }]
+    },
+    "command": { "type": "enum", "value": 0 },
+    "expected": null
+  },
+  {
+    "name": "enum allows the other option",
+    "control": {
+      "id": "c", "name": "C", "type": "enum", "inputAddress": "/a", "limits": { "disabledOptions": [5] },
+      "options": [{ "name": "A", "value": 5 }, { "name": "B", "value": 0 }]
+    },
+    "command": { "type": "enum", "value": 1 },
+    "expected": { "type": "enum", "value": 1 }
+  },
+  {
+    "name": "step-enum accepts a whole number written as a float",
+    "control": { "id": "c", "name": "C", "type": "step-enum", "inputAddress": "/a", "options": [{ "name": "A", "value": 1 }, { "name": "B", "value": 2 }] },
+    "command": { "type": "step-enum", "value": 1.0 },
+    "expected": { "type": "step-enum", "value": 1 }
+  },
+  {
+    "name": "slider is clamped into the profile's range",
+    "control": { "id": "c", "name": "C", "type": "slider", "inputAddress": "/a", "limits": { "min": 0.2, "max": 0.6 } },
+    "command": { "type": "slider", "value": 0.9 },
+    "expected": { "type": "slider", "value": 0.6 }
+  },
+  {
+    "name": "slider below the min goes up to it",
+    "control": { "id": "c", "name": "C", "type": "slider", "inputAddress": "/a", "limits": { "min": 0.2 } },
+    "command": { "type": "slider", "value": -1 },
+    "expected": { "type": "slider", "value": 0.2 }
+  },
+  {
+    "name": "slider drops a string",
+    "control": { "id": "c", "name": "C", "type": "slider", "inputAddress": "/a" },
+    "command": { "type": "slider", "value": "0.5" },
+    "expected": null
+  },
+  {
+    "name": "toy clamps to 0-1 without limits",
+    "control": { "id": "c", "name": "C", "type": "intiface-toy", "actuators": [] },
+    "command": { "type": "intiface-toy", "value": 2 },
+    "expected": { "type": "intiface-toy", "value": 1 }
+  },
+  {
+    "name": "a group opens a locked control",
+    "control": { "id": "c", "name": "C", "type": "slider", "inputAddress": "/a", "locked": true, "groupRules": { "vip": { "locked": false } } },
+    "groupIds": ["vip"],
+    "command": { "type": "slider", "value": 0.5 },
+    "expected": { "type": "slider", "value": 0.5 },
+    "resolved": { "locked": false, "limits": null }
+  },
+  {
+    "name": "a group the viewer isn't in changes nothing",
+    "control": { "id": "c", "name": "C", "type": "slider", "inputAddress": "/a", "locked": true, "groupRules": { "vip": { "locked": false } } },
+    "groupIds": ["other"],
+    "command": { "type": "slider", "value": 0.5 },
+    "expected": null,
+    "resolved": { "locked": true, "limits": null }
+  },
+  {
+    "name": "the most generous of everyone and the group wins",
+    "control": {
+      "id": "c", "name": "C", "type": "intiface-toy", "actuators": [],
+      "limits": { "max": 0.4 }, "groupRules": { "vip": { "limits": { "max": 0.8, "min": 0.1 } } }
+    },
+    "groupIds": ["vip"],
+    "command": { "type": "intiface-toy", "value": 1 },
+    "expected": { "type": "intiface-toy", "value": 0.8 },
+    "resolved": { "locked": false, "limits": { "max": 0.8 } }
+  },
+  {
+    "name": "a group with no limits lifts them all",
+    "control": {
+      "id": "c", "name": "C", "type": "slider", "inputAddress": "/a",
+      "limits": { "max": 0.4, "disabledOptions": [] }, "groupRules": { "vip": { "limits": { "min": 0, "max": 1 } } }
+    },
+    "groupIds": ["vip"],
+    "command": { "type": "slider", "value": 1 },
+    "expected": { "type": "slider", "value": 1 },
+    "resolved": { "locked": false, "limits": null }
+  },
+  {
+    "name": "only options every open rule blocks stay blocked",
+    "control": {
+      "id": "c", "name": "C", "type": "enum", "inputAddress": "/a",
+      "limits": { "disabledOptions": [1, 2] }, "groupRules": { "vip": { "limits": { "disabledOptions": [2, 3] } } },
+      "options": [{ "name": "A", "value": 1 }, { "name": "B", "value": 2 }, { "name": "C", "value": 3 }]
+    },
+    "groupIds": ["vip"],
+    "command": { "type": "enum", "value": 0 },
+    "expected": { "type": "enum", "value": 0 },
+    "resolved": { "locked": false, "limits": { "disabledOptions": [2] } }
+  },
+  {
+    "name": "a locked group rule is ignored",
+    "control": {
+      "id": "c", "name": "C", "type": "slider", "inputAddress": "/a",
+      "limits": { "max": 0.5 }, "groupRules": { "vip": { "locked": true, "limits": { "max": 1 } } }
+    },
+    "groupIds": ["vip"],
+    "command": { "type": "slider", "value": 1 },
+    "expected": { "type": "slider", "value": 0.5 },
+    "resolved": { "locked": false, "limits": { "max": 0.5 } }
+  },
+  {
+    "name": "a pattern must be allowed",
+    "control": { "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [{ "id": "wave", "name": "Wave" }] },
+    "command": { "type": "intiface-pattern", "value": "pulse" },
+    "expected": null
+  },
+  {
+    "name": "an allowed pattern passes",
+    "control": { "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [{ "id": "wave", "name": "Wave" }] },
+    "command": { "type": "intiface-pattern", "value": "wave" },
+    "expected": { "type": "intiface-pattern", "value": "wave" }
+  },
+  {
+    "name": "a disabled pattern is dropped",
+    "control": {
+      "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "limits": { "disabledOptions": ["wave"] },
+      "allowedPatterns": [{ "id": "wave", "name": "Wave" }]
+    },
+    "command": { "type": "intiface-pattern", "value": "wave" },
+    "expected": null
+  },
+  {
+    "name": "off always passes",
+    "control": { "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [] },
+    "command": { "type": "intiface-pattern", "value": "off" },
+    "expected": { "type": "intiface-pattern", "value": "off" }
+  },
+  {
+    "name": "viewer patterns need to be switched on",
+    "control": { "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [] },
+    "command": { "type": "intiface-pattern", "value": "viewer-live", "level": 0.5 },
+    "expected": null
+  },
+  {
+    "name": "a live level is capped by the control and the profile",
+    "control": {
+      "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [], "limits": { "max": 0.5 },
+      "viewerPatterns": { "enabled": true, "maxIntensity": 0.7, "maxMs": 10000, "stopsAfterMs": null, "signedInOnly": false }
+    },
+    "command": { "type": "intiface-pattern", "value": "viewer-live", "level": 0.9 },
+    "expected": { "type": "intiface-pattern", "value": "viewer-live", "level": 0.5 }
+  },
+  {
+    "name": "viewer samples are clamped and rounded",
+    "control": {
+      "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [],
+      "viewerPatterns": { "enabled": true, "maxIntensity": 0.7, "maxMs": 10000, "stopsAfterMs": null, "signedInOnly": false }
+    },
+    "command": {
+      "type": "intiface-pattern", "value": "viewer",
+      "samples": [0, 10.4, 10.5, 99, -5, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+    },
+    "expected": {
+      "type": "intiface-pattern", "value": "viewer",
+      "samples": [0, 10, 11, 70, 0, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+    }
+  },
+  {
+    "name": "a recording under 1 s is dropped",
+    "control": {
+      "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [],
+      "viewerPatterns": { "enabled": true, "maxIntensity": 1, "maxMs": 10000, "stopsAfterMs": null, "signedInOnly": false }
+    },
+    "command": { "type": "intiface-pattern", "value": "viewer", "samples": [50, 50, 50] },
+    "expected": null
+  },
+  {
+    "name": "a recording over the control's length is dropped",
+    "control": {
+      "id": "c", "name": "C", "type": "intiface-pattern", "actuators": [], "allowedPatterns": [],
+      "viewerPatterns": { "enabled": true, "maxIntensity": 1, "maxMs": 1000, "stopsAfterMs": null, "signedInOnly": false }
+    },
+    "command": {
+      "type": "intiface-pattern", "value": "viewer",
+      "samples": [50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+    },
+    "expected": null
+  },
+  {
+    "name": "a shock carries no value",
+    "control": {
+      "id": "c", "name": "C", "type": "open-shock-shocker", "mode": "Shock", "shockers": [],
+      "intensity": { "min": 1, "max": 5 }, "duration": { "min": 300, "max": 600 }, "cooldown": 0, "animationDuration": 3000
+    },
+    "command": { "type": "open-shock-shocker", "value": 99 },
+    "expected": { "type": "open-shock-shocker" }
+  },
+  {
+    "name": "a preset carries no value",
+    "control": { "id": "c", "name": "C", "type": "preset", "presetId": "p" },
+    "command": { "type": "preset" },
+    "expected": { "type": "preset" }
+  }
+]
