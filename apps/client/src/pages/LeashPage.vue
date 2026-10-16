@@ -2,6 +2,7 @@
 import LeashCompass from '@renderer/components/leash/LeashCompass.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
+import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { movesYou, useLeash } from '@renderer/composables/useLeash'
 import type { LeashCheck, LeashProblem } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
@@ -10,6 +11,7 @@ import { computed, ref } from 'vue'
 // Leash: someone grabs the leash on your avatar in VRChat and pulls, and you walk toward them.
 // The live compass on the left, the worn avatar's leashes, settings and setup checks on the right.
 const toast = useToast()
+const { openModal: confirm } = useAreYouSureModal()
 const { settings, state, avatarName, avatar, change, changeAvatar } = useLeash()
 
 const pct = (value: number): string => `${Math.round(value * 100)} %`
@@ -125,6 +127,28 @@ const CHECK_ICON: Record<LeashCheck, { name: string; class: string }> = {
   waiting: { name: 'i-lucide-circle-dashed', class: 'text-muted' }
 }
 
+// Turning moves your view on its own, so turning it on asks first.
+const setTurning = async (enabled: boolean): Promise<void> => {
+  if (enabled) {
+    const ok = await confirm({
+      title: 'Turn toward the pull?',
+      message: "Your view turns on its own while you're pulled, which can cause motion sickness. You can turn it off here at any time.",
+      confirmText: 'Turn on',
+      danger: false
+    })
+
+    if (!ok) return
+  }
+
+  changeAvatar((own) => (own.turning.enabled = enabled))
+}
+
+// Which way each leash hangs from you, from the end of its name (`Hang::of` in leash/engine.rs).
+const HANGS = ['North', 'South', 'East', 'West']
+const unnamedHang = computed(() =>
+  state.value.detected.leashes.filter((leash) => movesYou(avatar.value, leash) && !HANGS.includes(leash.split('_').pop() ?? ''))
+)
+
 const testing = ref(false)
 
 const testPull = async (): Promise<void> => {
@@ -171,7 +195,18 @@ const testPull = async (): Promise<void> => {
       icon="i-lucide-person-standing"
       title="No avatar yet"
       description="Your leash shows here once VRChat tells the app which avatar you wear."
-    />
+    >
+      <template #actions>
+        <UButton
+          icon="i-lucide-book-open"
+          color="neutral"
+          variant="subtle"
+          to="/leash/setup"
+        >
+          Avatar setup guide
+        </UButton>
+      </template>
+    </EmptyState>
 
     <div
       v-else
@@ -292,6 +327,72 @@ const testPull = async (): Promise<void> => {
               @update:model-value="changeAvatar((own) => (own.upDownDeadzone = ($event ?? 50) / 100))"
             />
           </div>
+
+          <div class="flex items-center gap-3 rounded-field bg-(--aurora-well) px-3 py-2.5">
+            <span class="grid min-w-0 flex-1">
+              <b class="text-[14.5px] font-semibold text-highlighted">Turn toward the pull</b>
+              <small class="text-xs text-muted">Can cause motion sickness</small>
+            </span>
+            <USwitch
+              :model-value="avatar.turning.enabled"
+              aria-label="Turn toward the pull"
+              @update:model-value="setTurning"
+            />
+          </div>
+          <template v-if="avatar.turning.enabled">
+            <div class="grid gap-2">
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="text-muted">Turning speed</span>
+                <b class="font-semibold text-highlighted tabular-nums">{{ avatar.turning.multiplier.toFixed(1) }}×</b>
+              </div>
+              <USlider
+                :model-value="Math.round(avatar.turning.multiplier * 10)"
+                :min="1"
+                :max="20"
+                :step="1"
+                size="lg"
+                aria-label="Turning speed"
+                @update:model-value="changeAvatar((own) => (own.turning.multiplier = ($event ?? 8) / 10))"
+              />
+            </div>
+            <div class="grid gap-2">
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="text-muted">Start turning at</span>
+                <b class="font-semibold text-highlighted tabular-nums">{{ pct(avatar.turning.deadzone) }}</b>
+              </div>
+              <USlider
+                :model-value="Math.round(avatar.turning.deadzone * 100)"
+                :min="0"
+                :max="95"
+                :step="1"
+                size="lg"
+                aria-label="Start turning at"
+                @update:model-value="changeAvatar((own) => (own.turning.deadzone = ($event ?? 15) / 100))"
+              />
+            </div>
+            <div class="grid gap-2">
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="text-muted">Stop turning within</span>
+                <b class="font-semibold text-highlighted tabular-nums">{{ Math.round(avatar.turning.goalDegrees) }}°</b>
+              </div>
+              <USlider
+                :model-value="Math.round(avatar.turning.goalDegrees)"
+                :min="0"
+                :max="180"
+                :step="5"
+                size="lg"
+                aria-label="Stop turning within"
+                @update:model-value="changeAvatar((own) => (own.turning.goalDegrees = $event ?? 90))"
+              />
+            </div>
+            <p
+              v-if="unnamedHang.length"
+              class="text-[13px] text-muted"
+            >
+              {{ unnamedHang.join(', ') }} {{ unnamedHang.length === 1 ? 'turns' : 'turn' }} as if the leash is in front of you. End a leash's name with
+              <code>_North</code>, <code>_South</code>, <code>_East</code> or <code>_West</code> to say which way it hangs.
+            </p>
+          </template>
         </FormSection>
 
         <FormSection
@@ -322,6 +423,14 @@ const testPull = async (): Promise<void> => {
             @click="testPull"
           >
             Test pull
+          </UButton>
+          <UButton
+            icon="i-lucide-book-open"
+            color="neutral"
+            variant="subtle"
+            to="/leash/setup"
+          >
+            Avatar setup guide
           </UButton>
         </div>
         <p class="-mt-1.5 text-[13px] text-muted">

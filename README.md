@@ -195,4 +195,7 @@ style used in the history (`feat(client): …`, `fix(server): …`).
 ToolKitOSC is free software: you can redistribute it and/or modify it under the terms of
 the **GNU General Public License v3.0 or later**. See [`LICENSE`](LICENSE) for the full text.
 
+The avatar leash is based on [OSCLeash](https://github.com/ZenithVal/OSCLeash) by ZenithVal
+(MIT): avatars use its compass prefab, and the app uses its maths and defaults.
+
 This project is not affiliated with or endorsed by VRChat Inc.

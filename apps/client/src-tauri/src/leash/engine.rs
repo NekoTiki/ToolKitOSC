@@ -582,6 +582,38 @@ mod tests {
         assert_eq!(Hang::of("Leash"), Hang::North);
     }
 
+    fn turning_on() -> AvatarLeash {
+        let mut settings = AvatarLeash::default();
+        settings.turning.enabled = true;
+        settings
+    }
+
+    #[test]
+    fn turning_follows_where_the_leash_hangs() {
+        let settings = turning_on();
+        // Pulled back and to the right of a leash hanging behind you: 0.8 * -(0.7 * 0.6) - 0.
+        let d = Directions { x_pos: 0.7, z_neg: 0.3, ..Directions::default() };
+        assert!(near(movement(0.5, d, &settings, Hang::South).look, -0.336));
+        // A leash at your side turns with the forward pull: 0.8 * (0.6 * 0.6) + 0.2 on the right,
+        // 0.8 * -(0.6 * 0.6) - 0 on the left.
+        let d = Directions { z_pos: 0.6, x_neg: 0.2, ..Directions::default() };
+        assert!(near(movement(0.5, d, &settings, Hang::East).look, 0.488));
+        assert!(near(movement(0.5, d, &settings, Hang::West).look, -0.288));
+    }
+
+    #[test]
+    fn turning_stops_once_facing_the_pull() {
+        let settings = turning_on();
+        // Z+ at or past the goal (90° → 0.5): you already face it.
+        let d = Directions { z_pos: 0.5, x_pos: 0.3, ..Directions::default() };
+        assert_eq!(movement(0.5, d, &settings, Hang::North).look, 0.0);
+        // Below the turning deadzone nothing turns either.
+        let mut short = turning_on();
+        short.walk = 0.0;
+        let d = Directions { x_pos: 1.0, ..Directions::default() };
+        assert_eq!(movement(0.1, d, &short, Hang::North).look, 0.0);
+    }
+
     fn values(pairs: &[(&str, f64)]) -> HashMap<String, f64> {
         pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
     }

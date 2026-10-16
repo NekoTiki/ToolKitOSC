@@ -110,6 +110,25 @@ const formatDate = (date: string): string =>
   </FormSection>
 
   <FormSection
+    title="Thanks"
+    description="ToolKitOSC builds on other people's work."
+  >
+    <div class="flex items-center gap-3 rounded-field bg-(--aurora-well) px-3.5 py-2.5">
+      <span class="grid min-w-0 flex-1 gap-0.5 text-sm">
+        <b class="font-semibold text-highlighted">OSCLeash <span class="font-normal text-muted">by ZenithVal · MIT</span></b>
+        <small class="text-[13px] text-muted">The avatar leash uses its compass prefab and its maths.</small>
+      </span>
+      <UButton
+        icon="i-lucide-external-link"
+        color="neutral"
+        variant="ghost"
+        aria-label="OSCLeash on GitHub"
+        @click="api.openUrl('https://github.com/ZenithVal/OSCLeash')"
+      />
+    </div>
+  </FormSection>
+
+  <FormSection
     id="release-notes"
     class="scroll-mt-3.5"
     title="Release notes"
