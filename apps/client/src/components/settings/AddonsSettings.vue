@@ -97,7 +97,8 @@ const canLaunch = (addon: Addon): boolean =>
     <h2 class="font-mono text-[11.5px] tracking-widest text-muted uppercase">
       {{ group.label }}
     </h2>
-    <div class="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
+    <!-- As many columns as fit: the Add-ons section takes the whole width (see SettingsPage). -->
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-2.5">
       <article
         v-for="addon in group.items"
         :key="addon.id"
@@ -115,41 +116,44 @@ const canLaunch = (addon: Addon): boolean =>
           />
         </div>
 
-        <div
-          v-if="addon.enabled"
-          class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted"
-        >
-          <span
-            class="size-2.5 shrink-0 rounded-full"
-            :class="DOT[addon.status.state]"
-          />
-          <span :class="addon.status.state === 'error' ? 'text-error' : undefined">{{ addon.status.text }}</span>
-        </div>
-        <p
-          v-else
-          class="text-[13px] text-muted"
-        >
-          {{ addon.pitch }}
-        </p>
+        <!-- The status (or what it does, while off), with its safety and platform badges on the right. -->
+        <div class="flex items-start justify-between gap-3">
+          <div
+            v-if="addon.enabled"
+            class="flex min-w-0 items-center gap-2 text-[13px] text-muted"
+          >
+            <span
+              class="size-2.5 shrink-0 rounded-full"
+              :class="DOT[addon.status.state]"
+            />
+            <span :class="addon.status.state === 'error' ? 'text-error' : undefined">{{ addon.status.text }}</span>
+          </div>
+          <p
+            v-else
+            class="min-w-0 text-[13px] text-muted"
+          >
+            {{ addon.pitch }}
+          </p>
 
-        <div
-          v-if="addon.badge || addon.platforms.length === 1"
-          class="flex flex-wrap gap-1.5"
-        >
-          <UBadge
-            v-if="addon.badge"
-            :label="BADGES[addon.badge]?.label ?? addon.badge"
-            :color="BADGES[addon.badge]?.color ?? 'neutral'"
-            variant="subtle"
-            class="rounded-full"
-          />
-          <UBadge
-            v-if="addon.platforms.length === 1"
-            :label="`${addon.platforms[0] === 'windows' ? 'Windows' : 'Linux'} only`"
-            color="neutral"
-            variant="subtle"
-            class="rounded-full"
-          />
+          <div
+            v-if="addon.badge || addon.platforms.length === 1"
+            class="flex shrink-0 flex-wrap justify-end gap-1.5"
+          >
+            <UBadge
+              v-if="addon.badge"
+              :label="BADGES[addon.badge]?.label ?? addon.badge"
+              :color="BADGES[addon.badge]?.color ?? 'neutral'"
+              variant="subtle"
+              class="rounded-full"
+            />
+            <UBadge
+              v-if="addon.platforms.length === 1"
+              :label="`${addon.platforms[0] === 'windows' ? 'Windows' : 'Linux'} only`"
+              color="neutral"
+              variant="subtle"
+              class="rounded-full"
+            />
+          </div>
         </div>
 
         <div

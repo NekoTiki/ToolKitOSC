@@ -28,10 +28,12 @@ interface Section {
   icon: string
   component: Component
   addon?: string
+  // Takes the page's whole width instead of a reading column, e.g. a grid of cards.
+  wide?: boolean
 }
 
 const SECTIONS: Section[] = [
-  { key: 'addons', label: 'Add-ons', description: 'Turn on only what you own', icon: 'i-lucide-puzzle', component: AddonsSettings },
+  { key: 'addons', label: 'Add-ons', description: 'Turn on only what you own', icon: 'i-lucide-puzzle', component: AddonsSettings, wide: true },
   { key: 'appearance', label: 'Appearance', description: 'Theme colors and tile size', icon: 'i-lucide-palette', component: AppearanceSettings },
   { key: 'sharing', label: 'Sharing & access', description: 'Share link and who can use it', icon: 'i-lucide-share-2', component: SharingSettings },
   { key: 'chatbox', label: 'VRChat chatbox', description: 'Post viewer actions in-game', icon: 'i-lucide-message-square-text', component: ChatboxSettings },
@@ -120,7 +122,10 @@ const statusDot = (addonId: string): string => {
       />
     </template>
 
-    <div class="grid max-w-3xl grid-cols-1 gap-3.5">
+    <div
+      class="grid grid-cols-1 gap-3.5"
+      :class="section.wide && !sectionOff ? undefined : 'max-w-3xl'"
+    >
       <AddonOff
         v-if="sectionOff"
         :addon-id="sectionOff"
