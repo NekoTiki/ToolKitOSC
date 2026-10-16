@@ -1,5 +1,4 @@
 import { useChatbox } from '@renderer/composables/useChatbox'
-import { cancelPendingShocks } from '@renderer/composables/useControls'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
@@ -53,7 +52,7 @@ export function useStopEverything(): {
   const { stopAllDevices } = useIntiface()
   const { stopAllPatterns } = useIntifacePatterns()
   const { controlValue: toyValues, setValue: setToyValue } = useIntifaceControl()
-  const { command: openShockCommand, isAvailable: openShockAvailable, shockerNames } = useOpenShock()
+  const { stopAll: stopAllShockers } = useOpenShock()
   const toast = useToast()
 
   const setPaused = (value: boolean): void => {
@@ -62,7 +61,9 @@ export function useStopEverything(): {
   }
 
   const stop = (): void => {
-    cancelPendingShocks()
+    // Shocks still waiting for their animation are dropped, then every shocker on the account,
+    // not only the ones a control uses, gets a Stop.
+    stopAllShockers().catch(() => toast.add({ title: 'Could not reach OpenShock to stop the shockers', color: 'error' }))
     stopAllPatterns()
     // Every toy slider back to 0, so the app and viewers don't show toys running after a resume.
     toyValues.value.forEach((value, controlId) => {
@@ -72,13 +73,6 @@ export function useStopEverything(): {
     stopAllDevices()
     // Every output of every ESP32 board.
     void api.boardsStopAll()
-
-    // Every shocker on the account, not only the ones a control uses.
-    if (openShockAvailable.value && shockerNames.value.size) {
-      const shockers = Array.from(shockerNames.value.keys()).map((id) => ({ id, type: 'Stop' as const, intensity: 0, duration: 300 }))
-
-      openShockCommand(shockers).catch(() => toast.add({ title: 'Could not reach OpenShock to stop the shockers', color: 'error' }))
-    }
 
     if (paused.value) return
 

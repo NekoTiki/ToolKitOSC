@@ -6,6 +6,7 @@ import type { OpenShockStatus } from '@renderer/composables/useOpenShock'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
 import { uniqueClientCount, unsupportedControlTypes, useWebsocketHost } from '@renderer/composables/useWebsocketHost'
+import { api } from '@renderer/lib/tauri-bridge'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -40,6 +41,12 @@ const INTIFACE_TONE: Record<IntifaceStatus, StatusTone> = {
 }
 
 const go = (to: string): void => void router.push(to)
+
+// A shock Rust couldn't deliver (see src-tauri/src/openshock). StatusBar is always mounted, so the
+// listener is registered once.
+const toast = useToast()
+
+api.onOpenShockError((message) => toast.add({ title: 'OpenShock', description: message, color: 'error' }))
 
 onMounted(open)
 onBeforeUnmount(close)

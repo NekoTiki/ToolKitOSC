@@ -3,19 +3,41 @@ import type { StatusInfo } from '@renderer/components/settings/StatusLine.vue'
 import StatusLine from '@renderer/components/settings/StatusLine.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 
-const { token, status, setToken, enabled, setEnabled, shockerNames } = useOpenShock()
+const { hasToken, status, setToken, enabled, setEnabled, shockerNames, state } = useOpenShock()
+const toast = useToast()
 
-const draft = ref(token.value)
+// The saved key stays in the app (the system's password store), so this field only ever holds a
+// new one being pasted in.
+const draft = ref('')
 const visible = ref(false)
+const replacing = ref(false)
+const saving = ref(false)
 
-watch(token, (value) => (draft.value = value))
+const save = async (value: string): Promise<void> => {
+  saving.value = true
+  try {
+    await setToken(value)
+    draft.value = ''
+    replacing.value = false
+  } catch (error) {
+    toast.add({ title: 'Could not save the API key', description: String(error), color: 'error' })
+  } finally {
+    saving.value = false
+  }
+}
 
 // Committing re-validates the key against OpenShock, so it only happens on change/Enter/blur.
 const commit = (): void => {
-  if (draft.value !== token.value) setToken(draft.value)
+  if (draft.value.trim() && !saving.value) void save(draft.value)
 }
+
+const keyDescription = computed(() => {
+  if (!hasToken.value || replacing.value) return 'Create one in your OpenShock account settings.'
+
+  return state.value?.secretStore === 'file' ? 'Saved in a file, no password store found.' : "Saved in your system's password store."
+})
 
 const statusInfo = computed<StatusInfo>(() => {
   switch (status.value) {
@@ -47,14 +69,36 @@ const shockers = computed(() => Array.from(shockerNames.value.entries()).map(([i
     <template v-if="enabled">
       <UFormField
         label="API key"
-        description="Create one in your OpenShock account settings."
+        :description="keyDescription"
       >
+        <div
+          v-if="hasToken && !replacing"
+          class="flex gap-2"
+        >
+          <UButton
+            label="Replace"
+            icon="i-lucide-key-round"
+            color="neutral"
+            variant="outline"
+            @click="replacing = true"
+          />
+          <UButton
+            label="Remove"
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="soft"
+            :loading="saving"
+            @click="save('')"
+          />
+        </div>
         <UInput
+          v-else
           v-model="draft"
           :type="visible ? 'text' : 'password'"
           placeholder="Paste your OpenShock API key"
           class="w-full"
           autocomplete="off"
+          :disabled="saving"
           :ui="{ base: 'font-mono' }"
           @change="commit"
           @keyup.enter="commit"

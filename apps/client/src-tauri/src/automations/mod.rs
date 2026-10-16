@@ -251,6 +251,11 @@ pub fn test(app: &AppHandle, id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Stop everything is on (mirrored from the webview, see `set_paused`).
+pub fn is_paused(app: &AppHandle) -> bool {
+    automations(app).state.lock().unwrap().paused
+}
+
 pub fn set_paused(app: &AppHandle, paused: bool) {
     let effects = automations(app).state.lock().unwrap().set_paused(paused);
     apply(app, effects);
