@@ -208,7 +208,7 @@ const setAvatarEnabled = (enabled: boolean): void =>
           v-for="item in toys"
           :key="item.key"
           :to="`/haptics/${item.key}`"
-          class="grid gap-1.5 rounded-2xl border px-3 py-2.5 transition-colors"
+          class="grid gap-1.5 rounded-field border px-3 py-2.5 transition-colors"
           :class="item.key === toyKey ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
         >
           <span class="flex min-w-0 items-center gap-2">
