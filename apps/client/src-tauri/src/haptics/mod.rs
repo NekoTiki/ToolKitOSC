@@ -9,7 +9,7 @@ mod depth;
 mod engine;
 pub mod model;
 mod store;
-mod zones;
+pub(crate) mod zones;
 pub mod commands;
 
 use std::sync::Mutex;

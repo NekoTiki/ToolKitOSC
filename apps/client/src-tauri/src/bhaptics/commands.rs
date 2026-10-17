@@ -2,7 +2,7 @@
 
 use tauri::AppHandle;
 
-use super::model::BhapticsSettings;
+use super::model::{BhapticsSettings, Position};
 
 #[tauri::command]
 pub fn bhaptics_settings(app: AppHandle) -> Result<BhapticsSettings, String> {
@@ -40,4 +40,18 @@ pub fn bhaptics_launch_player(app: AppHandle) -> Result<(), String> {
 pub fn bhaptics_simulate(app: AppHandle, simulated: bool) -> Result<(), String> {
     crate::addons::require(&app, "bhaptics")?;
     super::set_simulated(&app, simulated)
+}
+
+/// Walks every motor of one position, one at a time.
+#[tauri::command]
+pub fn bhaptics_test_motors(app: AppHandle, position: Position) -> Result<(), String> {
+    crate::addons::require(&app, "bhaptics")?;
+    super::test_motors(&app, position)
+}
+
+/// Player's answers, the settings, the avatar check and the last 30 s of frames, as text.
+#[tauri::command]
+pub fn bhaptics_diagnostics(app: AppHandle) -> Result<String, String> {
+    crate::addons::require(&app, "bhaptics")?;
+    Ok(super::diagnostics(&app))
 }

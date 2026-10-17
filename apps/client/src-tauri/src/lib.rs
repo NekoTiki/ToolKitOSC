@@ -190,7 +190,9 @@ pub fn run() {
             bhaptics::commands::bhaptics_save,
             bhaptics::commands::bhaptics_state,
             bhaptics::commands::bhaptics_launch_player,
-            bhaptics::commands::bhaptics_simulate
+            bhaptics::commands::bhaptics_simulate,
+            bhaptics::commands::bhaptics_test_motors,
+            bhaptics::commands::bhaptics_diagnostics
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

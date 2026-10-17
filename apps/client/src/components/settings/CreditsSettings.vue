@@ -38,6 +38,12 @@ const THANKS = [
     links: [{ label: 'GitHub', url: 'https://github.com/ZenithVal/OSCLeash' }]
   },
   {
+    name: 'bHapticsLib',
+    by: 'HerpDerpinstine · MIT',
+    text: 'Shows how to talk to bHaptics Player, which the bHaptics add-on does the same way.',
+    links: [{ label: 'GitHub', url: 'https://github.com/HerpDerpinstine/bHapticsLib' }]
+  },
+  {
     name: 'OscGoesBrrr',
     by: 'SenkyDragon',
     text: 'Avatar haptics read the same OGB contacts, so avatars set up for it work as they are.',

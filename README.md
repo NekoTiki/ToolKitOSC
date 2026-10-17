@@ -196,7 +196,9 @@ ToolKitOSC is free software: you can redistribute it and/or modify it under the 
 the **GNU General Public License v3.0 or later**. See [`LICENSE`](LICENSE) for the full text.
 
 The avatar leash is based on [OSCLeash](https://github.com/ZenithVal/OSCLeash) by ZenithVal
-(MIT): avatars use its compass prefab, and the app uses its maths and defaults.
+(MIT): avatars use its compass prefab, and the app uses its maths and defaults. The bHaptics
+add-on talks to bHaptics Player the way [bHapticsLib](https://github.com/HerpDerpinstine/bHapticsLib)
+by HerpDerpinstine (MIT) does.
 
 Thanks as well to [OpenShock](https://openshock.org), [Intiface](https://intiface.com) and
 [OscGoesBrrr](https://osc.toys), and to every library the app is built on. Settings > About &
