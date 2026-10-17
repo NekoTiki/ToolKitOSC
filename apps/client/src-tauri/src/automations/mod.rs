@@ -13,6 +13,7 @@ pub mod model;
 mod store;
 pub mod commands;
 
+use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -44,6 +45,30 @@ impl Env for AppEnv<'_> {
     fn value(&self, address: &str) -> Option<f64> {
         self.0.state::<AppState>().messages.lock().unwrap().get(address).and_then(number)
     }
+
+    fn live(&self, action: &Action) -> bool {
+        addon_off(self.0, action).is_none()
+    }
+}
+
+/// The name of the add-on this step needs, when it's off.
+fn addon_off(app: &AppHandle, action: &Action) -> Option<&'static str> {
+    let owner = match action {
+        Action::BoardOutput { .. } => crate::addons::owner_of_automation_kind("board-output"),
+        Action::Control { control_type, .. } => crate::addons::owner_of_control_type(control_type),
+        _ => None
+    };
+    owner.filter(|owner| !crate::addons::is_on(app, owner.id)).map(|owner| owner.name)
+}
+
+/// Automations that already said they skipped a step, so each says it once per session.
+static SKIP_NOTED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Skipped {
+    automation_id: String,
+    message: String
 }
 
 pub fn start(app: AppHandle) {
@@ -73,6 +98,8 @@ fn parameter_command(address: &str, value_type: ValueType, value: f64) -> OscCom
 fn apply(app: &AppHandle, effects: Vec<Effect>) {
     for effect in effects {
         match effect {
+            // The add-on may have been turned off while a hold was being renewed.
+            Effect::Send(_, _) if !crate::addons::is_on(app, "boards") => {}
             Effect::Send(board_id, message) => {
                 if !boards::send_output(app, &board_id, message.clone()) {
                     tracing::debug!("ESP32 board {board_id} offline, dropped {message:?}");
@@ -94,6 +121,20 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
             }
             Effect::Ran(id) => {
                 let _ = app.emit("automation-ran", id);
+            }
+            Effect::Skipped { automation_id, action } => {
+                let Some(addon) = addon_off(app, &action) else {
+                    continue;
+                };
+                if !SKIP_NOTED.lock().unwrap().get_or_insert_with(HashSet::new).insert(automation_id.clone()) {
+                    continue;
+                }
+                let step = match action {
+                    Action::BoardOutput { .. } => "ESP32 output",
+                    _ => "Control"
+                };
+                tracing::info!("Automation {automation_id} skipped a step: {addon} is off");
+                let _ = app.emit("automation-skipped", Skipped { automation_id, message: format!("Skipped {step}: {addon} is off") });
             }
             Effect::Chatbox { board_id, pin, note } => {
                 if let Some(info) = boards::output_info(app, &board_id, pin) {
@@ -181,6 +222,9 @@ pub fn set_enabled(app: &AppHandle, id: &str, enabled: bool) {
 /// What a Test of one step sends, and what it sends `TEST_MS` later to undo it (holds and
 /// follows of a parameter).
 fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result<(Effect, Option<Effect>), String> {
+    if let Some(addon) = addon_off(app, action) {
+        return Err(format!("{addon} is off."));
+    }
     let run = |phase: Phase| Effect::App(AppRun { automation_id: id.to_string(), step: index, action: action.clone(), phase });
     match action {
         action if action.in_app() => Ok(match action.runs() {

@@ -2,8 +2,8 @@
 //! keep going through a webview reload. The connection, the device list, battery readings and
 //! auto-launching Intiface Central live here; what to send to the toys comes from `toys`.
 //!
-//! The settings (URL, on/off, auto-launch) are in `intiface.json`, copied once from the webview's
-//! localStorage.
+//! The settings (URL, auto-launch) are in `intiface.json`, copied once from the webview's
+//! localStorage. It's an add-on (see `addons`): the registry turns it on and off.
 pub mod launch;
 mod link;
 pub mod protocol;
@@ -53,7 +53,9 @@ struct Settings {
     /// Empty for the default.
     #[serde(default)]
     url: String,
-    #[serde(default)]
+    /// Set by the add-on registry. Only read from files written before the switch moved to
+    /// `addons.json`.
+    #[serde(default, skip_serializing)]
     enabled: bool,
     #[serde(default)]
     auto_launch: bool
@@ -129,38 +131,62 @@ fn save_settings(app: &AppHandle, settings: &Settings) {
     }
 }
 
-/// At startup: reads the settings, looks for an Intiface Central install, and connects if it's on.
-pub fn start(app: AppHandle) {
-    let settings = load_settings(&app);
+/// The add-on was turned on (or is on at launch): reads the settings once, looks for an Intiface
+/// Central install, and connects.
+fn start(app: &AppHandle) {
     let installed = launch::available();
+    ensure_loaded(app);
     {
-        let mut inner = intiface(&app).inner.lock().unwrap();
-        inner.loaded = settings.is_some();
-        inner.settings = settings.unwrap_or_default();
+        let mut inner = intiface(app).inner.lock().unwrap();
+        inner.settings.enabled = true;
         inner.installed = installed;
     }
-    restart(&app);
+    reset_launch_attempts(app);
+    restart(app);
 }
 
-/// The first launch after this moved out of the webview: takes over its localStorage settings.
-/// A no-op once `intiface.json` exists.
+/// The add-on was turned off: patterns and toys stop first, then the connection closes.
+fn stop(app: &AppHandle) {
+    crate::toys::patterns::stop_all(app);
+    crate::toys::stop_all(app);
+    intiface(app).inner.lock().unwrap().settings.enabled = false;
+    restart(app);
+}
+
+/// Reads `intiface.json` the first time anything needs the settings. The switch isn't in it any
+/// more, so it keeps whatever the registry set.
+fn ensure_loaded(app: &AppHandle) {
+    if intiface(app).inner.lock().unwrap().loaded {
+        return;
+    }
+    let settings = load_settings(app).unwrap_or_default();
+    let mut inner = intiface(app).inner.lock().unwrap();
+    if !inner.loaded {
+        inner.loaded = true;
+        inner.settings = Settings { enabled: inner.settings.enabled, ..settings };
+    }
+}
+
+/// The first launch after this moved out of the webview: takes over its localStorage settings, and
+/// keeps the add-on on if it was. A no-op once `intiface.json` exists.
 pub fn migrate(app: &AppHandle, url: Option<String>, enabled: Option<bool>, auto_launch: Option<bool>) {
     if load_settings(app).is_some() {
         return;
     }
-    let settings = Settings {
-        url: normalize_url(url.as_deref()),
-        enabled: enabled.unwrap_or(false),
-        auto_launch: auto_launch.unwrap_or(false)
+    ensure_loaded(app);
+    let settings = {
+        let mut inner = intiface(app).inner.lock().unwrap();
+        inner.settings.url = normalize_url(url.as_deref());
+        inner.settings.auto_launch = auto_launch.unwrap_or(false);
+        inner.settings.clone()
     };
     save_settings(app, &settings);
-    {
-        let mut inner = intiface(app).inner.lock().unwrap();
-        inner.loaded = true;
-        inner.settings = settings;
-    }
     tracing::info!("Moved the Intiface settings out of the webview");
-    restart(app);
+    if enabled.unwrap_or(false) {
+        crate::addons::adopt(app, "intiface");
+    } else if settings.enabled {
+        restart(app);
+    }
 }
 
 fn normalize_url(url: Option<&str>) -> String {
@@ -171,10 +197,10 @@ fn normalize_url(url: Option<&str>) -> String {
 }
 
 fn update_settings(app: &AppHandle, change: impl FnOnce(&mut Settings)) -> Settings {
+    ensure_loaded(app);
     let settings = {
         let mut inner = intiface(app).inner.lock().unwrap();
         change(&mut inner.settings);
-        inner.loaded = true;
         inner.settings.clone()
     };
     save_settings(app, &settings);
@@ -184,12 +210,6 @@ fn update_settings(app: &AppHandle, change: impl FnOnce(&mut Settings)) -> Setti
 /// Reconnects against the new URL right away.
 pub fn set_url(app: &AppHandle, url: Option<String>) {
     update_settings(app, |settings| settings.url = normalize_url(url.as_deref()));
-    reset_launch_attempts(app);
-    restart(app);
-}
-
-pub fn set_enabled(app: &AppHandle, enabled: bool) {
-    update_settings(app, |settings| settings.enabled = enabled);
     reset_launch_attempts(app);
     restart(app);
 }
@@ -251,6 +271,7 @@ fn restart(app: &AppHandle) {
 }
 
 pub fn view(app: &AppHandle) -> View {
+    ensure_loaded(app);
     let inner = intiface(app).inner.lock().unwrap();
     View {
         url: inner.settings.url.clone(),
@@ -268,6 +289,7 @@ pub fn view(app: &AppHandle) -> View {
 
 fn emit_state(app: &AppHandle) {
     let _ = app.emit("intiface-state", view(app));
+    crate::addons::changed(app);
 }
 
 fn is_current(inner: &Inner, id: u64) -> bool {
@@ -395,4 +417,59 @@ fn maybe_auto_launch(app: &AppHandle, id: u64) -> bool {
         tracing::error!("Failed to launch Intiface Central: {err}");
     }
     true
+}
+
+/// Intiface toys as an add-on (see `crate::addons`). It also owns the toys and patterns in
+/// `crate::toys`.
+pub struct Addon;
+
+impl crate::addons::Addon for Addon {
+    fn manifest(&self) -> crate::addons::Manifest {
+        crate::addons::Manifest {
+            id: "intiface",
+            name: "Intiface toys",
+            group: "toys",
+            pitch: "Toys through Intiface Central, with patterns your viewers can play",
+            platforms: &["windows", "linux"],
+            badge: None,
+            needs: &[],
+            control_types: &["intiface-toy", "intiface-pattern"],
+            automation_kinds: &[],
+            pages: &["patterns"]
+        }
+    }
+
+    fn start(&self, app: &AppHandle) {
+        start(app);
+    }
+
+    fn stop(&self, app: &AppHandle) {
+        stop(app);
+    }
+
+    fn status(&self, app: &AppHandle) -> crate::addons::Status {
+        use crate::addons::{State, Status as S};
+        let inner = intiface(app).inner.lock().unwrap();
+        let toys = inner.devices.len();
+        match inner.status.unwrap_or(Status::Disabled) {
+            Status::Disabled => S::new(State::Off, "Off"),
+            Status::Connecting => S::new(State::Busy, "Connecting…"),
+            Status::Launching => S::new(State::Busy, "Starting Intiface Central…"),
+            Status::Connected if toys == 0 => S::new(State::Ok, "Connected · no toys yet"),
+            Status::Connected => S::new(State::Ok, format!("Connected · {toys} toy{}", if toys == 1 { "" } else { "s" })),
+            Status::Error => S::new(State::Warn, "Intiface Central isn't running"),
+            Status::Busy => S::new(State::Warn, "Intiface Central is busy, or its server is stopped"),
+            Status::Refused => S::new(State::Error, "Intiface Central refused the connection")
+        }
+    }
+
+    fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
+        crate::toys::patterns::stop_all(app);
+        crate::toys::stop_all(app);
+        Box::pin(async { Ok(()) })
+    }
+
+    fn was_in_use(&self, app: &AppHandle) -> bool {
+        load_settings(app).is_some_and(|settings| settings.enabled)
+    }
 }

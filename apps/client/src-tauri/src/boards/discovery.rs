@@ -10,26 +10,25 @@ use super::FoundBoard;
 
 const SERVICE_TYPE: &str = "_tkosc._tcp.local.";
 
-pub fn start(app: AppHandle) {
+/// Starts browsing. Returns the daemon, so shutting it down ends the browse.
+pub fn start(app: AppHandle) -> Option<ServiceDaemon> {
     let daemon = match ServiceDaemon::new() {
         Ok(daemon) => daemon,
         Err(err) => {
             tracing::error!("mDNS for ESP32 boards couldn't start, boards can only be added by address: {err}");
-            return;
+            return None;
         }
     };
     let events = match daemon.browse(SERVICE_TYPE) {
         Ok(events) => events,
         Err(err) => {
             tracing::error!("Couldn't browse for ESP32 boards: {err}");
-            return;
+            return None;
         }
     };
+    tracing::info!("Browsing for ESP32 boards");
 
     tauri::async_runtime::spawn(async move {
-        // Owned by the task so it lives as long as the browse does.
-        let _daemon = daemon;
-
         while let Ok(event) = events.recv_async().await {
             match event {
                 ServiceEvent::ServiceResolved(service) => {
@@ -42,7 +41,9 @@ pub fn start(app: AppHandle) {
                 _ => {}
             }
         }
+        tracing::info!("Stopped browsing for ESP32 boards");
     });
+    Some(daemon)
 }
 
 fn parse(service: &ResolvedService) -> Option<FoundBoard> {

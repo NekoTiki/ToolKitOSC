@@ -1,7 +1,4 @@
 import { useChatbox } from '@renderer/composables/useChatbox'
-import { useIntiface } from '@renderer/composables/useIntiface'
-import { useIntifacePatterns } from '@renderer/composables/useIntifacePatterns'
-import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { api } from '@renderer/lib/tauri-bridge'
 import { isRegistered, register, unregister } from '@tauri-apps/plugin-global-shortcut'
 import { useIntifaceControl } from '@toolkitosc/shared-ui'
@@ -49,10 +46,7 @@ export function useStopEverything(): {
   // Registers the saved hotkey. Called once at startup (see useStopEverythingTriggers).
   registerHotkey: () => Promise<void>
 } {
-  const { stopAllDevices } = useIntiface()
-  const { stopAllPatterns } = useIntifacePatterns()
   const { controlValue: toyValues, setValue: setToyValue } = useIntifaceControl()
-  const { stopAll: stopAllShockers } = useOpenShock()
   const toast = useToast()
 
   const setPaused = (value: boolean): void => {
@@ -61,18 +55,22 @@ export function useStopEverything(): {
   }
 
   const stop = (): void => {
-    // Shocks still waiting for their animation are dropped, then every shocker on the account,
-    // not only the ones a control uses, gets a Stop.
-    stopAllShockers().catch(() => toast.add({ title: 'Could not reach OpenShock to stop the shockers', color: 'error' }))
-    stopAllPatterns()
+    // Every add-on that's on stops: OpenShock drops shocks still waiting for their animation and
+    // sends a Stop to every shocker on the account, Intiface stops every pattern and toy (not only
+    // the ones a control drives), and every output of every ESP32 board goes off.
+    void api.addonsStopEverything().then((failures) =>
+      failures.forEach((failure) =>
+        toast.add({
+          title: failure.id === 'openshock' ? 'Could not reach OpenShock to stop the shockers' : `Could not stop ${failure.id}`,
+          description: failure.message,
+          color: 'error'
+        })
+      )
+    )
     // Every toy slider back to 0, so the app and viewers don't show toys running after a resume.
     toyValues.value.forEach((value, controlId) => {
       if (value > 0) setToyValue(controlId, 0)
     })
-    // Also catches toys no control of this avatar drives.
-    stopAllDevices()
-    // Every output of every ESP32 board.
-    void api.boardsStopAll()
 
     if (paused.value) return
 

@@ -1,3 +1,4 @@
+mod addons;
 mod app;
 mod automations;
 mod avatar;
@@ -111,6 +112,11 @@ pub fn run() {
             osc::commands::force_pull_parameters,
             // Running a control as you
             controls::control_run,
+            // Add-ons
+            addons::commands::addons_list,
+            addons::commands::addons_set_enabled,
+            addons::commands::addons_finish_setup,
+            addons::commands::addons_stop_everything,
             // ESP32 boards
             boards::commands::boards_list,
             boards::commands::board_add,
@@ -145,7 +151,6 @@ pub fn run() {
             openshock::commands::openshock_state,
             openshock::commands::openshock_migrate,
             openshock::commands::openshock_set_token,
-            openshock::commands::openshock_set_enabled,
             openshock::commands::openshock_recheck,
             openshock::commands::openshock_shockers,
             openshock::commands::openshock_fire,
@@ -154,7 +159,6 @@ pub fn run() {
             intiface::commands::intiface_state,
             intiface::commands::intiface_migrate,
             intiface::commands::intiface_set_url,
-            intiface::commands::intiface_set_enabled,
             intiface::commands::intiface_set_auto_launch,
             intiface::commands::intiface_launch,
             toys::commands::toys_set,
@@ -213,16 +217,16 @@ pub fn run() {
                 }
             });
 
-            // ESP32 boards: reconnects the added ones and browses for new ones over mDNS.
-            boards::start(app.handle().clone());
+            // The added ESP32 boards are known even while their add-on is off, for automations.
+            boards::load(app.handle());
             automations::start(app.handle().clone());
-            intiface::start(app.handle().clone());
             // Tokens a launch with no password store had to put in a file go to the store first,
-            // if there's one now, before anything reads them.
+            // if there's one now, before anything reads them. Then the add-ons that are on start
+            // (deciding which are, the first time, can read OpenShock's token).
             let handle = app.handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
                 secrets::init(&handle);
-                openshock::start(handle.clone());
+                addons::start(&handle);
                 server::auth::start(handle);
             });
 

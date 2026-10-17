@@ -71,7 +71,6 @@ export const toysApi = {
     invoke('intiface_migrate', { url, enabled, autoLaunch }),
   // Empty goes back to the default URL. Reconnects right away.
   intifaceSetUrl: (url: string | null): Promise<void> => invoke('intiface_set_url', { url }),
-  intifaceSetEnabled: (enabled: boolean): Promise<void> => invoke('intiface_set_enabled', { enabled }),
   intifaceSetAutoLaunch: (autoLaunch: boolean): Promise<void> => invoke('intiface_set_auto_launch', { autoLaunch }),
   // Opens the local Intiface Central install. Rejects with a message when it isn't found.
   intifaceLaunch: (): Promise<void> => invoke('intiface_launch'),

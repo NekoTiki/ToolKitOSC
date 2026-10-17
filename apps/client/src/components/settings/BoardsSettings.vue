@@ -5,9 +5,14 @@ import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { boardStatusInfo, useBoards } from '@renderer/composables/useBoards'
 import type { Board } from '@renderer/lib/tauri-bridge'
+import { api } from '@renderer/lib/tauri-bridge'
 import { formatMs } from '@renderer/utils/automations'
 import { useNow } from '@vueuse/core'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+
+// ESP32 boards is an add-on that starts off for anyone without a board. Until the Add-ons page
+// owns its switch, opening this section turns it on, so finding and adding a first board works.
+onMounted(() => void api.addonsSetEnabled('boards', true))
 
 const {
   boards,

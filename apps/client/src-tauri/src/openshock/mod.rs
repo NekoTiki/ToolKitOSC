@@ -1,6 +1,7 @@
 //! OpenShock, run from Rust so a shock waiting for its reel animation doesn't depend on the window,
 //! and Stop everything can cancel it from here. The token lives in the system password store (see
-//! `secrets`) and never reaches the webview; the on/off switch is in `openshock.json`.
+//! `secrets`) and never reaches the webview. It's an add-on (see `addons`): the registry turns it
+//! on and off.
 //!
 //! It fails closed: nothing goes out unless the last token check passed, the switch is on and
 //! Stop everything isn't on. A shock still waiting for its animation checks again before it goes.
@@ -132,9 +133,12 @@ pub struct View {
     secret_store: secrets::Backend
 }
 
+/// `openshock.json`. Now only a marker that the localStorage hand-off happened: the switch moved to
+/// `addons.json`, and `enabled` is only read from files written before that.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Settings {
-    enabled: bool
+    #[serde(default, skip_serializing)]
+    enabled: Option<bool>
 }
 
 struct Inner {
@@ -164,7 +168,7 @@ impl Default for OpenShock {
         Self {
             inner: Mutex::new(Inner {
                 loaded: false,
-                enabled: true,
+                enabled: false,
                 token: None,
                 status: Status::Unconfigured,
                 hubs: Vec::new(),
@@ -214,13 +218,27 @@ fn save_settings(app: &AppHandle, settings: &Settings) {
     }
 }
 
-/// At startup: reads the switch and the token, then checks the token. The password store can be
-/// slow to answer, so this runs off the main thread.
-pub fn start(app: AppHandle) {
+/// The add-on was turned on (or is on at launch): reads the token, then checks it. The password
+/// store can be slow to answer, so this runs off the main thread.
+fn start(app: &AppHandle) {
+    openshock(app).inner.lock().unwrap().enabled = true;
+    let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         load(&app);
         recheck(&app);
     });
+}
+
+/// The add-on was turned off: shocks still waiting are dropped and the live hub closes.
+fn stop(app: &AppHandle) {
+    {
+        let mut inner = openshock(app).inner.lock().unwrap();
+        inner.enabled = false;
+        for task in inner.pending.drain(..) {
+            task.abort();
+        }
+    }
+    recheck(app);
 }
 
 /// Blocking: may read the password store.
@@ -228,19 +246,18 @@ fn load(app: &AppHandle) {
     if openshock(app).inner.lock().unwrap().loaded {
         return;
     }
-    let settings = load_settings(app);
     let token = secrets::get(app, TOKEN_KEY);
 
     let mut inner = openshock(app).inner.lock().unwrap();
     if !inner.loaded {
         inner.loaded = true;
-        inner.enabled = settings.map_or(true, |s| s.enabled);
         inner.token = token;
     }
 }
 
 /// The first launch after this moved out of the webview: takes over the token and switch it kept
-/// in localStorage. A no-op once `openshock.json` exists. Blocking.
+/// in localStorage, and keeps the add-on on if it was. A no-op once `openshock.json` exists.
+/// Blocking.
 pub fn migrate(app: &AppHandle, token: Option<String>, enabled: Option<bool>) -> Result<(), String> {
     load(app);
     if load_settings(app).is_some() {
@@ -255,10 +272,11 @@ pub fn migrate(app: &AppHandle, token: Option<String>, enabled: Option<bool>) ->
         }
     }
 
-    let enabled = enabled.unwrap_or(true);
-    openshock(app).inner.lock().unwrap().enabled = enabled;
-    save_settings(app, &Settings { enabled });
+    save_settings(app, &Settings::default());
     tracing::info!("Moved the OpenShock settings out of the webview");
+    if enabled.unwrap_or(true) && token.is_some() {
+        crate::addons::adopt(app, "openshock");
+    }
     recheck(app);
     Ok(())
 }
@@ -280,6 +298,7 @@ pub fn view(app: &AppHandle) -> View {
 
 fn emit_state(app: &AppHandle) {
     let _ = app.emit("openshock-state", view(app));
+    crate::addons::changed(app);
 }
 
 fn emit_error(app: &AppHandle, message: String) {
@@ -304,12 +323,6 @@ pub fn set_token(app: &AppHandle, token: String) -> Result<(), String> {
     }
     recheck(app);
     Ok(())
-}
-
-pub fn set_enabled(app: &AppHandle, enabled: bool) {
-    openshock(app).inner.lock().unwrap().enabled = enabled;
-    save_settings(app, &Settings { enabled });
-    recheck(app);
 }
 
 /// Checks the token by fetching the shocker list, then starts or stops the live hub to match.
@@ -599,6 +612,60 @@ pub async fn stop_all(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     };
     rest::control(&openshock(app).client, &token, &controls).await
+}
+
+/// OpenShock as an add-on (see `crate::addons`).
+pub struct Addon;
+
+impl crate::addons::Addon for Addon {
+    fn manifest(&self) -> crate::addons::Manifest {
+        crate::addons::Manifest {
+            id: "openshock",
+            name: "OpenShock",
+            group: "toys",
+            pitch: "Shockers your viewers can fire, with the limits you set",
+            platforms: &["windows", "linux"],
+            badge: Some("shocks"),
+            needs: &[],
+            control_types: &["open-shock-shocker"],
+            automation_kinds: &[],
+            pages: &[]
+        }
+    }
+
+    fn start(&self, app: &AppHandle) {
+        start(app);
+    }
+
+    fn stop(&self, app: &AppHandle) {
+        stop(app);
+    }
+
+    fn status(&self, app: &AppHandle) -> crate::addons::Status {
+        use crate::addons::{State, Status as S};
+        let inner = openshock(app).inner.lock().unwrap();
+        if inner.token.is_none() {
+            return S::new(if inner.loaded { State::Warn } else { State::Busy }, if inner.loaded { "No API key yet" } else { "Starting…" });
+        }
+        let shockers: usize = inner.hubs.iter().map(|hub| hub.shockers.len()).sum();
+        let count = format!("{shockers} shocker{}", if shockers == 1 { "" } else { "s" });
+        match inner.status {
+            Status::Unconfigured | Status::Checking => S::new(State::Busy, "Checking your API key…"),
+            Status::Invalid => S::new(State::Error, "OpenShock refused your API key"),
+            Status::Valid if inner.live && !inner.hubs.is_empty() && inner.online.is_empty() => S::new(State::Warn, "Hub offline"),
+            Status::Valid if inner.live => S::new(State::Ok, format!("Connected · {count}")),
+            Status::Valid => S::new(State::Ok, format!("Ready · {count}"))
+        }
+    }
+
+    fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
+        let app = app.clone();
+        Box::pin(async move { stop_all(&app).await })
+    }
+
+    fn was_in_use(&self, app: &AppHandle) -> bool {
+        load_settings(app).map_or(true, |settings| settings.enabled.unwrap_or(true)) && secrets::get(app, TOKEN_KEY).is_some()
+    }
 }
 
 #[cfg(test)]

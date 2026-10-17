@@ -69,7 +69,8 @@ pub fn run(app: &AppHandle, control: &Value, command: &Value, viewer_name: Optio
     let (Some(kind), Some(control_kind)) = (text(command, "type"), text(control, "type")) else {
         return outcome;
     };
-    if kind != control_kind {
+    // Commands for a control whose add-on is off do nothing, whoever sends them.
+    if kind != control_kind || !crate::addons::control_type_live(app, kind) {
         return outcome;
     }
     let value = command.get("value");
