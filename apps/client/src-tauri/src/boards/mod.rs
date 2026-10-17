@@ -487,6 +487,7 @@ impl crate::addons::Addon for Addon {
             platforms: &["windows", "linux"],
             badge: None,
             needs: &[],
+            needs_any: &[],
             control_types: &[],
             automation_kinds: &["board-output"],
             pages: &[]

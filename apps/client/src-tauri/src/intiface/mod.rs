@@ -434,6 +434,7 @@ impl crate::addons::Addon for Addon {
             platforms: &["windows", "linux"],
             badge: None,
             needs: &[],
+            needs_any: &[],
             control_types: &["intiface-toy", "intiface-pattern"],
             automation_kinds: &[],
             pages: &["patterns"]

@@ -34,6 +34,8 @@ pub struct Manifest {
     pub badge: Option<&'static str>,
     /// Add-ons it can't work without.
     pub needs: &'static [&'static str],
+    /// Add-ons it needs at least one of (avatar haptics: Intiface or bHaptics).
+    pub needs_any: &'static [&'static str],
     /// The control types it owns (`types/controls.ts`).
     pub control_types: &'static [&'static str],
     /// The automation step and trigger kinds it owns (`automations::model::Action`, `Trigger`).
@@ -161,7 +163,8 @@ fn start_order(manifests: &[Manifest], on: &HashSet<String>) -> Vec<String> {
     loop {
         let before = left.len();
         left.retain(|m| {
-            let ready = m.needs.iter().all(|need| order.iter().any(|id| id == need));
+            let started = |need: &&str| order.iter().any(|id| id == need);
+            let ready = m.needs.iter().all(started) && (m.needs_any.is_empty() || m.needs_any.iter().any(started));
             if ready {
                 order.push(m.id.to_owned());
             }
@@ -169,7 +172,7 @@ fn start_order(manifests: &[Manifest], on: &HashSet<String>) -> Vec<String> {
         });
         if left.is_empty() || left.len() == before {
             for m in left {
-                tracing::warn!("Add-on {} needs {:?}, which isn't on", m.id, m.needs);
+                tracing::warn!("Add-on {} needs {:?} and one of {:?}, which aren't on", m.id, m.needs, m.needs_any);
             }
             return order;
         }
@@ -374,6 +377,7 @@ mod tests {
             platforms: &[],
             badge: None,
             needs,
+            needs_any: &[],
             control_types: &[],
             automation_kinds: &[],
             pages: &[]
@@ -395,6 +399,15 @@ mod tests {
         let manifests = [manifest("haptics", &["intiface"]), manifest("intiface", &[])];
         assert_eq!(start_order(&manifests, &on(&["haptics"])), Vec::<String>::new());
         assert_eq!(start_order(&manifests, &on(&[])), Vec::<String>::new());
+    }
+
+    #[test]
+    fn start_order_takes_any_one_of_needs_any() {
+        let haptics = Manifest { needs_any: &["intiface", "bhaptics"], ..manifest("haptics", &[]) };
+        let manifests = [haptics, manifest("intiface", &[]), manifest("bhaptics", &[])];
+        assert_eq!(start_order(&manifests, &on(&["haptics", "bhaptics"])), ["bhaptics", "haptics"]);
+        assert_eq!(start_order(&manifests, &on(&["haptics", "intiface"])), ["intiface", "haptics"]);
+        assert_eq!(start_order(&manifests, &on(&["haptics"])), Vec::<String>::new());
     }
 
     /// The real manifests, called directly: going through `ADDONS` would link the whole app (and

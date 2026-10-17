@@ -24,7 +24,11 @@ const toTurnOn = computed(() => {
   const order: string[] = []
   const add = (id: string): void => {
     if (order.includes(id)) return
-    addons.value.find((addon) => addon.id === id)?.needs.forEach(add)
+    const addon = addons.value.find((a) => a.id === id)
+
+    addon?.needs.forEach(add)
+    // Needs one of several: the first, unless one of them is already picked.
+    if (addon?.needsAny.length && !addon.needsAny.some((need) => picked.value.has(need) || order.includes(need))) add(addon.needsAny[0]!)
     order.push(id)
   }
 

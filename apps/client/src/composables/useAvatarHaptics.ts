@@ -1,8 +1,11 @@
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { BHAPTICS_POSITIONS, useBhaptics } from '@renderer/composables/useBhaptics'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import type {
   AvatarHaptics,
+  BhapticsPosition,
+  HapticsBhapticsTarget,
   HapticsOutput,
   HapticsSettings,
   HapticsSource,
@@ -60,9 +63,22 @@ const save = (): void => {
   }, SAVE_DELAY_MS)
 }
 
-// "device-actuator", as the page's routes use it.
-export const actuatorKey = (actuator: { deviceIndex: number; actuatorIndex: number }): string =>
-  `${actuator.deviceIndex}-${actuator.actuatorIndex}`
+// "device-actuator", as the page's routes use it, or "b-<position>-<region>" for bHaptics gear.
+export const actuatorKey = (actuator: { deviceIndex: number; actuatorIndex: number; bhaptics?: HapticsBhapticsTarget }): string =>
+  actuator.bhaptics ? `b-${actuator.bhaptics.position}-${actuator.bhaptics.region}` : `${actuator.deviceIndex}-${actuator.actuatorIndex}`
+
+// The parts of each bHaptics position a source can drive: a vest side's top two rows, the three
+// under them, or all of it. Everything else only whole.
+const REGION_LABELS: Partial<Record<BhapticsPosition, Record<'upper' | 'lower', string>>> = {
+  VestFront: { upper: 'Chest', lower: 'Belly' },
+  VestBack: { upper: 'Upper back', lower: 'Lower back' }
+}
+
+export const bhapticsTargetName = (target: Pick<HapticsBhapticsTarget, 'position' | 'region'>): string => {
+  const position = BHAPTICS_POSITIONS[target.position].label
+
+  return target.region === 'whole' ? position : `${position} · ${REGION_LABELS[target.position]?.[target.region] ?? target.region}`
+}
 
 export const ZONE_KIND_LABEL: Record<HapticsZoneKind, string> = { socket: 'Socket', plug: 'Plug', touch: 'Touch zone' }
 
@@ -133,6 +149,8 @@ export interface HapticsToy {
   connected: boolean
   // Its device has more than one motor, so the name says which.
   oneOfMany: boolean
+  // Part of your bHaptics gear rather than a toy.
+  bhaptics?: HapticsBhapticsTarget
 }
 
 export function useAvatarHaptics(): {
@@ -160,6 +178,7 @@ export function useAvatarHaptics(): {
 } {
   const { avatarDetails } = useAvatarDetails()
   const { devices } = useIntiface()
+  const { state: bhapticsState } = useBhaptics()
 
   const avatarId = computed(() => avatarDetails.value?.id ?? null)
   const avatarName = computed(() => avatarDetails.value?.name ?? 'This avatar')
@@ -192,6 +211,29 @@ export function useAvatarHaptics(): {
       }
     }
 
+    // The parts of each bHaptics device Player has connected now.
+    if (isOn('bhaptics')) {
+      for (const position of bhapticsState.value.connected) {
+        const regions = REGION_LABELS[position] ? (['upper', 'lower', 'whole'] as const) : (['whole'] as const)
+
+        for (const region of regions) {
+          const target: HapticsBhapticsTarget = { position, region, fill: 'all' }
+
+          list.push({
+            key: actuatorKey({ deviceIndex: 0, actuatorIndex: 0, bhaptics: target }),
+            deviceIndex: 0,
+            actuatorIndex: 0,
+            actuatorType: 'bHaptics',
+            deviceName: bhapticsTargetName(target),
+            actuatorDescription: '',
+            connected: true,
+            oneOfMany: false,
+            bhaptics: target
+          })
+        }
+      }
+    }
+
     const saved = [...(settings.value?.outputs ?? []), ...(avatar.value?.outputs ?? [])]
 
     for (const { actuator } of saved) {
@@ -199,7 +241,13 @@ export function useAvatarHaptics(): {
 
       if (list.some((toy) => toy.key === key)) continue
 
-      list.push({ key, ...actuator, connected: false, oneOfMany: false })
+      list.push({
+        key,
+        ...actuator,
+        ...(actuator.bhaptics && { actuatorType: 'bHaptics', deviceName: bhapticsTargetName(actuator.bhaptics) }),
+        connected: false,
+        oneOfMany: false
+      })
     }
 
     return list
@@ -241,7 +289,7 @@ export function useAvatarHaptics(): {
   }
 
   const outputToEdit = (target: HapticsSettings, toy: HapticsToy): HapticsOutput => {
-    const actuator = _.pick(toy, ['deviceIndex', 'actuatorIndex', 'actuatorType', 'deviceName', 'actuatorDescription'])
+    const actuator = _.pick(toy, ['deviceIndex', 'actuatorIndex', 'actuatorType', 'deviceName', 'actuatorDescription', 'bhaptics'])
     const fresh = (): HapticsOutput => ({ actuator, sources: [], maxStrength: 1 })
 
     if (scope.value === 'avatar' && avatarId.value) {

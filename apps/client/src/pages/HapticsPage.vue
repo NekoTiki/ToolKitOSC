@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import BhapticsMotors from '@renderer/components/bhaptics/BhapticsMotors.vue'
 import HapticsSourceEditor from '@renderer/components/haptics/HapticsSourceEditor.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import type { HapticsToy } from '@renderer/composables/useAvatarHaptics'
 import {
@@ -11,14 +13,16 @@ import {
   SOURCE_ZONE_KIND,
   useAvatarHaptics,
   ZONE_KIND_LABEL} from '@renderer/composables/useAvatarHaptics'
+import { useBhaptics } from '@renderer/composables/useBhaptics'
 import { isTouched } from '@renderer/composables/useIntiface'
-import type { HapticsSource } from '@renderer/lib/tauri-bridge'
+import type { HapticsBhapticsTarget, HapticsSource } from '@renderer/lib/tauri-bridge'
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-// Haptics: which toy follows which part of your avatar. Each toy motor is in the sidebar with a
-// live meter; the main pane lists its sources (each opens its own page) and its Max strength, for
-// every avatar or only the one you wear. Touch priority has its own pane.
+// Haptics: which toy follows which part of your avatar. Each toy motor, and each part of your
+// bHaptics gear, is in the sidebar with a live meter; the main pane lists its sources (each opens
+// its own page) and its Max strength, for every avatar or only the one you wear. Touch priority has
+// its own pane.
 const route = useRoute()
 const router = useRouter()
 const { openModal: confirm } = useAreYouSureModal()
@@ -41,6 +45,16 @@ const {
   outputToEdit,
   removeOverride
 } = useAvatarHaptics()
+const { isOn } = useAddons()
+const { state: bhapticsState } = useBhaptics()
+
+// The sidebar's two lists: toys, then parts of your bHaptics gear.
+const toyGroups = computed(() =>
+  [
+    { key: 'toys', label: 'Toys', items: toys.value.filter((item) => !item.bhaptics), empty: isOn('intiface') ? 'No toys yet. Connect one in Intiface Central.' : null },
+    { key: 'bhaptics', label: 'bHaptics', items: toys.value.filter((item) => item.bhaptics), empty: isOn('bhaptics') ? 'Nothing connected. Pair your gear in bHaptics Player.' : null }
+  ].filter((group) => group.items.length || group.empty)
+)
 
 const isPriority = route.name === 'haptics-priority'
 const toyKey = computed(() => (typeof route.params.actuator === 'string' ? route.params.actuator : null))
@@ -137,6 +151,19 @@ const ownSetup = (): void => {
   change((target) => outputToEdit(target, current))
 }
 
+// A part of your bHaptics gear: how its level lights it.
+const fill = computed(() => shown.value?.actuator.bhaptics?.fill ?? 'all')
+
+const setFill = (value: HapticsBhapticsTarget['fill']): void => {
+  if (!toy.value?.bhaptics) return
+
+  const current = toy.value
+  change((target) => {
+    const edited = outputToEdit(target, current)
+    edited.actuator.bhaptics = { ...current.bhaptics!, ...edited.actuator.bhaptics, fill: value }
+  })
+}
+
 const editedSource = computed(() => (sourceIndex !== null && toy.value ? editedOutput(toy.value.key)?.sources[sourceIndex] : undefined))
 
 const removeSource = async (): Promise<void> => {
@@ -204,46 +231,51 @@ const setAvatarEnabled = (enabled: boolean): void =>
         aria-label="Toys"
         class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1.5"
       >
-        <small class="px-1.5 pt-2 text-xs font-medium text-muted">Toys</small>
-        <RouterLink
-          v-for="item in toys"
-          :key="item.key"
-          :to="`/haptics/${item.key}`"
-          class="grid gap-1.5 rounded-field border px-3 py-2.5 transition-colors"
-          :class="item.key === toyKey ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
+        <template
+          v-for="group in toyGroups"
+          :key="group.key"
         >
-          <span class="flex min-w-0 items-center gap-2">
-            <b class="flex-1 truncate text-[14.5px] font-semibold text-highlighted">{{ toyName(item) }}</b>
-            <span
-              v-if="isTouched([item])"
-              class="shrink-0 rounded-full bg-secondary/15 px-2 py-0.5 text-[11.5px] font-medium text-secondary"
-            >Touch</span>
-            <span
-              v-else-if="!item.connected"
-              class="shrink-0 rounded-full bg-(--aurora-well) px-2 py-0.5 text-[11.5px] text-muted"
-            >Offline</span>
-          </span>
-          <small class="truncate text-xs text-muted">{{ item.actuatorType }} · {{ sourceCount(item) }}</small>
-          <span
-            class="h-1.5 overflow-hidden rounded-full bg-(--aurora-well)"
-            role="meter"
-            :aria-valuenow="level(item.key).level"
-            aria-valuemin="0"
-            aria-valuemax="1"
-            :aria-label="`${toyName(item)} level`"
+          <small class="px-1.5 pt-2 text-xs font-medium text-muted">{{ group.label }}</small>
+          <RouterLink
+            v-for="item in group.items"
+            :key="item.key"
+            :to="`/haptics/${item.key}`"
+            class="grid gap-1.5 rounded-field border px-3 py-2.5 transition-colors"
+            :class="item.key === toyKey ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
           >
+            <span class="flex min-w-0 items-center gap-2">
+              <b class="flex-1 truncate text-[14.5px] font-semibold text-highlighted">{{ toyName(item) }}</b>
+              <span
+                v-if="item.bhaptics ? bhapticsState.touched.includes(item.bhaptics.position) : isTouched([item])"
+                class="shrink-0 rounded-full bg-secondary/15 px-2 py-0.5 text-[11.5px] font-medium text-secondary"
+              >Touch</span>
+              <span
+                v-else-if="!item.connected"
+                class="shrink-0 rounded-full bg-(--aurora-well) px-2 py-0.5 text-[11.5px] text-muted"
+              >Offline</span>
+            </span>
+            <small class="truncate text-xs text-muted">{{ item.actuatorType }} · {{ sourceCount(item) }}</small>
             <span
-              class="block h-full rounded-full bg-secondary transition-[width] duration-100"
-              :style="{ width: `${level(item.key).level * 100}%` }"
-            />
-          </span>
-        </RouterLink>
-        <p
-          v-if="!toys.length"
-          class="px-1.5 text-sm text-muted"
-        >
-          No toys yet. Connect one in Intiface Central.
-        </p>
+              class="h-1.5 overflow-hidden rounded-full bg-(--aurora-well)"
+              role="meter"
+              :aria-valuenow="level(item.key).level"
+              aria-valuemin="0"
+              aria-valuemax="1"
+              :aria-label="`${toyName(item)} level`"
+            >
+              <span
+                class="block h-full rounded-full bg-secondary transition-[width] duration-100"
+                :style="{ width: `${level(item.key).level * 100}%` }"
+              />
+            </span>
+          </RouterLink>
+          <p
+            v-if="!group.items.length"
+            class="px-1.5 text-sm text-muted"
+          >
+            {{ group.empty }}
+          </p>
+        </template>
       </nav>
     </template>
 
@@ -513,9 +545,31 @@ const setAvatarEnabled = (enabled: boolean): void =>
       </FormSection>
 
       <FormSection
+        v-if="toy.bhaptics"
+        title="On your gear"
+        :description="fill === 'depth' ? 'Rows light from the bottom up as the level grows, like a socket\'s depth.' : 'Every motor here plays at the level.'"
+      >
+        <div class="flex flex-wrap items-center gap-4">
+          <BhapticsMotors
+            :position="toy.bhaptics.position"
+            :levels="bhapticsState.playing[toy.bhaptics.position]"
+          />
+          <SegmentedControl
+            :model-value="fill"
+            :items="[
+              { value: 'all', label: 'All at once' },
+              { value: 'depth', label: 'From the bottom up' }
+            ]"
+            aria-label="How it lights"
+            @update:model-value="setFill"
+          />
+        </div>
+      </FormSection>
+
+      <FormSection
         v-if="shown"
         title="Max strength"
-        description="This toy never goes past it from haptics, whatever its sources say."
+        :description="toy.bhaptics ? 'These motors never go past it from haptics, whatever its sources say.' : 'This toy never goes past it from haptics, whatever its sources say.'"
       >
         <div class="grid gap-2">
           <div class="flex justify-end text-sm">
@@ -538,8 +592,8 @@ const setAvatarEnabled = (enabled: boolean): void =>
     <EmptyState
       v-else
       icon="i-lucide-hand-heart"
-      title="No toys yet"
-      description="Connect a toy in Intiface Central, then pick which part of your avatar it follows."
+      title="Nothing to drive yet"
+      description="Connect a toy in Intiface Central or your gear in bHaptics Player, then pick which part of your avatar it follows."
     />
 
     <template

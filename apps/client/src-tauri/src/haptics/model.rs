@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::bhaptics::model::Position;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct HapticsSettings {
@@ -53,7 +55,8 @@ impl Default for AvatarHaptics {
     }
 }
 
-/// A toy motor, as controls store it (`IntifaceActuatorRef`): the names are for display.
+/// A toy motor, as controls store it (`IntifaceActuatorRef`): the names are for display. Or, with
+/// `bhaptics`, a part of your bHaptics gear: then the Intiface fields are unused.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Actuator {
@@ -61,12 +64,93 @@ pub struct Actuator {
     pub actuator_index: u32,
     pub actuator_type: String,
     pub device_name: String,
-    pub actuator_description: String
+    pub actuator_description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bhaptics: Option<BhapticsTarget>
+}
+
+/// Which actuator an output is for, to match a global output with an avatar's own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActuatorKey {
+    Intiface(u32, u32),
+    Bhaptics(Position, Region)
 }
 
 impl Actuator {
-    pub fn key(&self) -> (u32, u32) {
-        (self.device_index, self.actuator_index)
+    pub fn key(&self) -> ActuatorKey {
+        match &self.bhaptics {
+            Some(target) => ActuatorKey::Bhaptics(target.position, target.region),
+            None => ActuatorKey::Intiface(self.device_index, self.actuator_index)
+        }
+    }
+}
+
+/// Part of one bHaptics position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Region {
+    #[default]
+    Whole,
+    /// The top two rows of a vest side: the chest, or the upper back.
+    Upper,
+    /// The three rows under them: the belly, or the lower back.
+    Lower
+}
+
+/// How a level lights the region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Fill {
+    /// Every motor at the level.
+    #[default]
+    All,
+    /// Rows light from the bottom up as the level grows, like a socket's depth.
+    Depth
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BhapticsTarget {
+    pub position: Position,
+    #[serde(default)]
+    pub region: Region,
+    #[serde(default)]
+    pub fill: Fill
+}
+
+impl BhapticsTarget {
+    /// The region's motors, top row first.
+    pub fn motors(&self) -> Vec<usize> {
+        let columns = self.position.columns();
+        let vest = matches!(self.position, Position::VestFront | Position::VestBack);
+        (0..self.position.motors())
+            .filter(|motor| match (self.region, vest) {
+                (Region::Upper, true) => motor / columns < 2,
+                (Region::Lower, true) => motor / columns >= 2,
+                _ => true
+            })
+            .collect()
+    }
+
+    /// What each of the position's motors plays for `level` (0–1, already capped at `max`).
+    pub fn levels(&self, level: f64, max: f64) -> Vec<f64> {
+        let columns = self.position.columns();
+        let motors = self.motors();
+        let mut levels = vec![0.0; self.position.motors()];
+        match self.fill {
+            Fill::All => motors.iter().for_each(|motor| levels[*motor] = level),
+            Fill::Depth => {
+                let top = motors.first().map_or(0, |motor| motor / columns);
+                let rows = motors.last().map_or(0, |motor| motor / columns + 1) - top;
+                // How far up the region the level reaches, in rows.
+                let reach = if max > 0.0 { (level / max).clamp(0.0, 1.0) } else { 0.0 } * rows as f64;
+                for motor in motors {
+                    let from_bottom = (rows - 1 - (motor / columns - top)) as f64;
+                    levels[motor] = (reach - from_bottom).clamp(0.0, 1.0) * max;
+                }
+            }
+        }
+        levels
     }
 }
 
@@ -306,7 +390,7 @@ mod tests {
         let settings: HapticsSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.priority, TouchPriority { threshold: 0.02, grace_ms: 1500 });
         let output = &settings.outputs[0];
-        assert_eq!(output.actuator.key(), (2, 1));
+        assert_eq!(output.actuator.key(), ActuatorKey::Intiface(2, 1));
         let HapticsSource::SpsSocket(socket) = &output.sources[0] else { panic!("not a socket") };
         assert!(socket.my_plugs && socket.other_plugs && socket.other_hands && !socket.own_hands);
         assert_eq!(socket.shape, Shape { follow_movement: false, dead_zone: 0.1, scale: 1.0 });
@@ -356,5 +440,35 @@ mod tests {
 
         settings.enabled = false;
         assert!(settings.active_outputs(None).is_empty());
+    }
+
+    #[test]
+    fn a_vest_region_reads_and_keys_apart_from_toys() {
+        let actuator: Actuator =
+            serde_json::from_str(r#"{ "bhaptics": { "position": "VestFront", "region": "upper", "fill": "depth" } }"#).unwrap();
+        assert_eq!(actuator.key(), ActuatorKey::Bhaptics(Position::VestFront, Region::Upper));
+        assert_ne!(actuator.key(), Actuator::default().key());
+        let toy = serde_json::to_value(Actuator::default()).unwrap();
+        assert!(toy.get("bhaptics").is_none(), "toys are saved as before");
+    }
+
+    #[test]
+    fn regions_and_fills() {
+        let chest = BhapticsTarget { position: Position::VestFront, region: Region::Upper, fill: Fill::All };
+        assert_eq!(chest.motors(), (0..8).collect::<Vec<_>>());
+        let belly = BhapticsTarget { region: Region::Lower, ..chest };
+        assert_eq!(belly.motors(), (8..20).collect::<Vec<_>>());
+        let head = BhapticsTarget { position: Position::Head, region: Region::Upper, fill: Fill::All };
+        assert_eq!(head.motors().len(), 6, "only vests have parts");
+
+        assert_eq!(chest.levels(0.5, 1.0)[..9], [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0]);
+        let depth = BhapticsTarget { fill: Fill::Depth, ..belly };
+        let half = depth.levels(0.5, 1.0);
+        assert_eq!(half[16..20], [1.0; 4], "the bottom row first");
+        assert_eq!(half[12..16], [0.5; 4]);
+        assert_eq!(half[8], 0.0);
+        let deep = depth.levels(1.0, 1.0);
+        assert!(deep[8..20].iter().all(|level| *level == 1.0));
+        assert!(depth.levels(0.5, 0.5)[8..20].iter().all(|level| *level == 0.5), "max strength fills it at max");
     }
 }

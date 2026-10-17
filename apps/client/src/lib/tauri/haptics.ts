@@ -2,6 +2,7 @@
 // the `haptics-state` event.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import type { BhapticsPosition } from '@toolkitosc/shared-ui'
 
 export interface HapticsShape {
   // Speed instead of depth: the toy responds to thrusting, not to holding still.
@@ -47,12 +48,23 @@ export interface HapticsTouchSource extends SourceBase {
 
 export type HapticsSource = HapticsSocketSource | HapticsPlugSource | HapticsTouchSource
 
+// Part of one bHaptics position: a vest side's top two rows ('upper': chest or upper back), the three
+// under them ('lower': belly or lower back), or all of it. 'depth' lights rows from the bottom up as
+// the level grows. Mirrors `BhapticsTarget` in haptics/model.rs.
+export interface HapticsBhapticsTarget {
+  position: BhapticsPosition
+  region: 'whole' | 'upper' | 'lower'
+  fill: 'all' | 'depth'
+}
+
+// A toy motor, or with `bhaptics`, part of your bHaptics gear (then the other fields are unused).
 export interface HapticsActuator {
   deviceIndex: number
   actuatorIndex: number
   actuatorType: string
   deviceName: string
   actuatorDescription: string
+  bhaptics?: HapticsBhapticsTarget
 }
 
 export interface HapticsOutput {
@@ -92,6 +104,7 @@ export interface HapticsZone {
 export interface HapticsOutputLevel {
   deviceIndex: number
   actuatorIndex: number
+  bhaptics?: HapticsBhapticsTarget
   level: number
   // Each source's level, in order.
   sources: number[]

@@ -24,8 +24,14 @@ export function useAddonSwitch(): {
   const { openModal: confirm } = useAreYouSureModal()
   const toast = useToast()
 
+  const byId = (id: string): Addon | undefined => addons.value.find((a) => a.id === id)
+
   const turnOn = async (addon: Addon): Promise<boolean> => {
-    const missing = addon.needs.map((id) => addons.value.find((a) => a.id === id)).filter((a): a is Addon => !!a && !a.enabled)
+    const missing = addon.needs.map(byId).filter((a): a is Addon => !!a && !a.enabled)
+    // Needs one of several and has none: the first one is offered.
+    const anyOf = addon.needsAny.map(byId).filter((a): a is Addon => !!a)
+
+    if (anyOf.length && !anyOf.some((a) => a.enabled)) missing.push(anyOf[0]!)
 
     if (
       missing.length &&
@@ -46,7 +52,12 @@ export function useAddonSwitch(): {
   }
 
   const turnOff = async (addon: Addon): Promise<boolean> => {
-    const dependents = addons.value.filter((a) => a.enabled && a.needs.includes(addon.id))
+    // Those that need it, or need one of several and it's the only one of them on.
+    const dependents = addons.value.filter(
+      (a) =>
+        a.enabled &&
+        (a.needs.includes(addon.id) || (a.needsAny.includes(addon.id) && !a.needsAny.some((id) => id !== addon.id && byId(id)?.enabled)))
+    )
     const affected = [...dependents, addon]
     const controlTypes = savedControlTypes()
     const usage = affected
