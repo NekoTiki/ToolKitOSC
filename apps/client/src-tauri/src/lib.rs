@@ -176,7 +176,8 @@ pub fn run() {
             // Avatar haptics
             haptics::commands::haptics_settings,
             haptics::commands::haptics_save,
-            haptics::commands::haptics_state
+            haptics::commands::haptics_state,
+            haptics::commands::toys_touched
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

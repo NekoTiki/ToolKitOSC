@@ -1,4 +1,4 @@
-import type { IntifaceDevice, IntifaceState, IntifaceStatus, ToyActuatorRef } from '@renderer/lib/tauri-bridge'
+import type { IntifaceDevice, IntifaceState, IntifaceStatus, ToyActuatorRef, ToyTouched } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { ComputedRef } from 'vue'
 import { computed, ref } from 'vue'
@@ -28,6 +28,20 @@ const state = ref<IntifaceState | null>(null)
 
 api.onIntifaceState((value) => (state.value = value))
 void api.intifaceState().then((value) => (state.value ??= value))
+
+// The actuators avatar touch drives right now ("device:actuator"). Viewers wait on them, so their
+// toy and pattern tiles read Paused.
+const touched = ref<Set<string>>(new Set())
+const touchKey = (deviceIndex: number, actuatorIndex: number): string => `${deviceIndex}:${actuatorIndex}`
+const setTouched = (list: ToyTouched[]): void => {
+  touched.value = new Set(list.map((actuator) => touchKey(actuator.deviceIndex, actuator.actuatorIndex)))
+}
+
+api.onToysState(({ touched }) => setTouched(touched))
+void api.toysTouched().then(setTouched)
+
+export const isTouched = (actuators: ToyActuatorRef[]): boolean =>
+  actuators.some((actuator) => touched.value.has(touchKey(actuator.deviceIndex, actuator.actuatorIndex)))
 
 const legacyUrl = localStorage.getItem(LEGACY_URL_KEY)
 const legacyEnabled = localStorage.getItem(LEGACY_ENABLED_KEY)

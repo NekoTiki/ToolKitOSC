@@ -190,6 +190,21 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       </span>
     </div>
 
+    <!-- Paused: avatar touch is driving this toy. Unlike the blockers above, the tile still takes
+    input (the scrim lets clicks through), and it doesn't say why. -->
+    <div
+      v-if="control.paused && !blocker && !edit"
+      class="pointer-events-none absolute inset-0 z-10 flex items-end rounded-panel bg-black/30 p-(--tile-pad)"
+    >
+      <span class="flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-muted">
+        <UIcon
+          name="i-lucide-pause"
+          class="size-3.5 shrink-0"
+        />
+        Paused
+      </span>
+    </div>
+
     <!-- Edit mode: labeled, icon-over-text buttons big enough for a VR pointer. `.handle` is the
     only element vue-draggable-plus grabs to reorder, so clicks on the other buttons never start a
     drag. -->

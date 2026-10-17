@@ -1,11 +1,11 @@
-//! Everything that drives toys goes through here, so one place knows each actuator's level. For
-//! now the last writer wins, as it always has; avatar haptics will add touch priority here.
+//! Everything that drives toys goes through here, so one place knows each actuator's level: the last
+//! writer wins, except that avatar touch comes first (see `arbiter`).
 mod arbiter;
 pub mod patterns;
 pub mod saved;
 pub mod commands;
 
-pub use arbiter::{set, stop_all, ActuatorRef, Toys};
+pub use arbiter::{set, set_touch, stop_all, touched, ActuatorRef, Priority, Touch, Touched, Toys};
 
 use tauri::AppHandle;
 

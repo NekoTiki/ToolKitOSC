@@ -22,6 +22,13 @@ pub fn haptics_save(app: AppHandle, settings: HapticsSettings) -> Result<(), Str
     Ok(())
 }
 
+/// The actuators touch drives right now, without waiting for the next `toys-state`. Empty while
+/// haptics are off.
+#[tauri::command]
+pub fn toys_touched(app: AppHandle) -> Vec<crate::toys::Touched> {
+    super::touched(&app)
+}
+
 /// The zones and levels right now, without waiting for the next `haptics-state`.
 #[tauri::command]
 pub fn haptics_state(app: AppHandle) -> Result<super::View, String> {

@@ -38,6 +38,9 @@ export interface WsEnvelope<Type extends string, Message> {
 // pattern values 'viewer' (with `samples`) and 'viewer-live' (with `level`). An older server or
 // host drops both as unknown patterns, and 'intiface-pattern-value-update' gains optional `by` and
 // `endsAt`, which an older viewer page ignores.
+//
+// Additive, no bump: Toy and Toy Pattern controls may carry `paused` while avatar touch drives their
+// toy. An older server forwards it and an older viewer page just doesn't dim the tile.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility

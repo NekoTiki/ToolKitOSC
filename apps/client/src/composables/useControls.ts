@@ -1,7 +1,7 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { useIntiface } from '@renderer/composables/useIntiface'
+import { isTouched, useIntiface } from '@renderer/composables/useIntiface'
 import { resolvePatternRefs } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
@@ -120,6 +120,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
           : control.type === 'open-shock-shocker' && openShockAvailable.value && hubsOffline(control.shockers)
             ? { unavailableReason: 'Hub offline' }
             : {}),
+        // Avatar touch is driving one of its toys: viewers can still use it, the toy waits.
+        ...((control.type === 'intiface-toy' || control.type === 'intiface-pattern') && isTouched(control.actuators) && { paused: true }),
         unavailable: !!offAddonForControlType(control.type) || (
           control.type === 'open-shock-shocker'
             ? !openShockAvailable.value || hubsOffline(control.shockers)
@@ -243,7 +245,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     // Callers pass groups from `controls`, so drop the derived flags it adds.
     controlsList.value = groups.map((group) => ({
       ...group,
-      controls: group.controls.map((control) => _.omit(control, ['locked', 'unavailable', 'limits', 'groupRules']) as ControlType)
+      controls: group.controls.map((control) => _.omit(control, ['locked', 'unavailable', 'paused', 'limits', 'groupRules']) as ControlType)
     }))
 
     saveControls()
