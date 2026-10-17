@@ -4,7 +4,7 @@
 //! setup, and per-avatar overrides.
 //!
 //! Two avatar parameters: `TKOSC/Haptics` (bool) turns haptics on and off from your expression
-//! menu, and `TKOSC/HapticsLevel` (float) gets the strongest level back, for shaders or sounds.
+//! menu, and follows the switch on the page, and `TKOSC/HapticsLevel` (float) gets the strongest level back, for shaders or sounds.
 mod depth;
 mod engine;
 pub mod model;
@@ -60,7 +60,9 @@ pub struct Haptics {
     /// The last `TKOSC/HapticsLevel` sent, and when.
     level_sent: Mutex<Option<(Instant, f64)>>,
     /// The last `OGB_ENABLED` sent, and when. `None` sends it on the next tick.
-    app_sent: Mutex<Option<(Instant, bool)>>
+    app_sent: Mutex<Option<(Instant, bool)>>,
+    /// The last `TKOSC/Haptics` sent. `None` sends it once the worn avatar has it.
+    switch_sent: Mutex<Option<bool>>
 }
 
 fn haptics(app: &AppHandle) -> &Haptics {
@@ -164,6 +166,8 @@ pub fn avatar_changed(app: &AppHandle) {
     haptics(app).engine.lock().unwrap().clear();
     // The new avatar's sockets and plugs hear we're here right away.
     *haptics(app).app_sent.lock().unwrap() = None;
+    // Its menu shows the switch as it is here, not as the avatar saved it.
+    *haptics(app).switch_sent.lock().unwrap() = None;
 }
 
 /// Tells the avatar's sockets and plugs whether haptics are on: right away when that changes or
@@ -195,6 +199,7 @@ fn tick(app: &AppHandle) {
 
     let settings = store::get(app);
     send_app_enabled(app, settings.enabled_for(avatar_id(app).as_deref()));
+    send_switch(app, settings.enabled);
     let outputs = settings.active_outputs(avatar_id(app).as_deref());
     let levels = haptics(app).engine.lock().unwrap().tick(Instant::now(), &outputs);
 
@@ -227,6 +232,30 @@ fn tick(app: &AppHandle) {
     *haptics(app).levels.lock().unwrap() = levels;
     emit_view(app, false);
     emit_touched(app);
+}
+
+/// `TKOSC/Haptics`, so the expression menu follows the switch on the page. Only once the worn avatar
+/// has it: its parameters may arrive after the avatar change.
+fn send_switch(app: &AppHandle, enabled: bool) {
+    let mut sent = haptics(app).switch_sent.lock().unwrap();
+    if *sent == Some(enabled) {
+        return;
+    }
+    let state = app.state::<AppState>();
+    let has_parameter = state
+        .avatar_details
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|details| details.parameters.iter().any(|parameter| parameter.name == SWITCH_PARAMETER));
+    if !has_parameter {
+        return;
+    }
+    *sent = Some(enabled);
+    let command = OscCommand { address: format!("/avatar/parameters/{SWITCH_PARAMETER}"), args: vec![OscArg::Bool(enabled)] };
+    if let Err(err) = crate::osc::send(&state, &command) {
+        tracing::warn!("Couldn't send {SWITCH_PARAMETER}: {err}");
+    }
 }
 
 /// `TKOSC/HapticsLevel`, when the worn avatar has it and the level changed.
@@ -310,6 +339,7 @@ fn stop(app: &AppHandle) {
     haptics(app).engine.lock().unwrap().clear();
     haptics(app).levels.lock().unwrap().clear();
     send_app_enabled(app, false);
+    *haptics(app).switch_sent.lock().unwrap() = None;
     // Touch lets go of every toy.
     crate::toys::set_touch(app, Vec::new(), crate::toys::Priority { threshold: 1.0, grace: Duration::ZERO });
     emit_view(app, true);
