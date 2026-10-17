@@ -103,6 +103,7 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Ori
     if origin == Origin::Live && osc_msg.address.starts_with("/avatar/parameters/") {
         crate::automations::on_parameter(app, &osc_msg, previous.as_ref());
         crate::haptics::on_parameter(app, &osc_msg);
+        crate::leash::on_parameter(app, &osc_msg);
     }
 
     let avatar_id = state.avatar_details.lock().unwrap().as_ref().map(|d| d.id.clone());
@@ -132,6 +133,7 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
     tracing::info!("Avatar changed: {avatar_id}");
     crate::automations::avatar_changed(app);
     crate::haptics::avatar_changed(app);
+    crate::leash::avatar_changed(app);
     *state.unresolved_avatar.lock().unwrap() = None;
 
     *state.avatar_details.lock().unwrap() = Some(details.clone());

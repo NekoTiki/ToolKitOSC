@@ -17,7 +17,7 @@ const { boards } = useBoards()
 const { installed: intifaceInstalled, launch: launchIntiface } = useIntiface()
 const router = useRouter()
 
-const GROUPS: Record<string, string> = { toys: 'Toys and shockers' }
+const GROUPS: Record<string, string> = { toys: 'Toys and shockers', movement: 'Movement' }
 
 const BADGES: Record<string, { label: string; color: 'error' | 'warning' | 'neutral' }> = {
   shocks: { label: 'Shocks', color: 'error' }

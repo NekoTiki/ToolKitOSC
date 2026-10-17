@@ -14,8 +14,9 @@ export const ADDON_SETUP: Record<string, string> = {
   openshock: '/settings/openshock',
   intiface: '/settings/intiface',
   boards: '/settings/esp32',
-  // Avatar haptics have no Settings section: they're set up on their own page.
-  haptics: '/haptics'
+  // Avatar haptics and the leash have no Settings section: they're set up on their own page.
+  haptics: '/haptics',
+  leash: '/leash'
 }
 
 // Module-scope singletons - every caller shares Rust's state, so turning one on or off is

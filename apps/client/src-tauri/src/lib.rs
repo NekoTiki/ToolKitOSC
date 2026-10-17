@@ -5,6 +5,7 @@ mod avatar;
 mod boards;
 mod controls;
 mod haptics;
+mod leash;
 mod intiface;
 mod logging;
 mod net;
@@ -177,7 +178,12 @@ pub fn run() {
             haptics::commands::haptics_settings,
             haptics::commands::haptics_save,
             haptics::commands::haptics_state,
-            haptics::commands::toys_touched
+            haptics::commands::toys_touched,
+            // Avatar leash
+            leash::commands::leash_settings,
+            leash::commands::leash_save,
+            leash::commands::leash_state,
+            leash::commands::leash_test_pull
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
