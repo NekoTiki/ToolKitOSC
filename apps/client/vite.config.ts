@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
+import credits from './vite-plugin-credits.ts'
+
 // Every floating/portaled Nuxt UI component (Tooltip, Popover, DropdownMenu, Select, SelectMenu,
 // ContextMenu) teleports its content to <body> with no z-index of its own (verified against this
 // version's theme defaults - none of them set one), and neither does Modal/Slideover. That leaves
@@ -77,7 +79,8 @@ export default defineConfig({
         contextMenu: { slots: { content: Z_OVERLAY } }
       }
     }),
-    tailwindcss()
+    tailwindcss(),
+    credits()
   ],
   resolve: {
     // vue-router isn't hoisted to the workspace root (client and server pin different majors), so

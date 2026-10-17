@@ -198,4 +198,8 @@ the **GNU General Public License v3.0 or later**. See [`LICENSE`](LICENSE) for t
 The avatar leash is based on [OSCLeash](https://github.com/ZenithVal/OSCLeash) by ZenithVal
 (MIT): avatars use its compass prefab, and the app uses its maths and defaults.
 
+Thanks as well to [OpenShock](https://openshock.org), [Intiface](https://intiface.com) and
+[OscGoesBrrr](https://osc.toys), and to every library the app is built on. Settings > About &
+updates > Credits lists them all with their licenses.
+
 This project is not affiliated with or endorsed by VRChat Inc.

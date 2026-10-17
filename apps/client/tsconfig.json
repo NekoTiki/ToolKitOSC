@@ -5,11 +5,13 @@
     "src/**/*.vue",
     "src/**/*.d.ts",
     "*.d.ts",
-    "vite.config.ts"
+    "vite.config.ts",
+    "vite-plugin-credits.ts"
   ],
   "compilerOptions": {
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "preserve",
+    "allowImportingTsExtensions": true,
     "paths": {
       "@renderer/*": ["./src/*"]
     },
