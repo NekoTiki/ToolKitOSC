@@ -14,7 +14,7 @@ import StartupSettings from '@renderer/components/settings/StartupSettings.vue'
 import StopSettings from '@renderer/components/settings/StopSettings.vue'
 import { useAddons } from '@renderer/composables/useAddons'
 import type { Component } from 'vue'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 // Settings as a page with a section list, replacing the three-tab modal. Changes apply as you
@@ -60,6 +60,15 @@ const navGroups = computed(() => [
 
 // A link to an add-on's section still opens it while the add-on is off, with a Turn on button.
 const section = computed(() => SECTIONS.find((s) => s.key === route.params.section) ?? SECTIONS[0]!)
+// The page stays mounted across sections (see App.vue), so the list keeps its scroll; the
+// section itself starts at the top.
+const body = ref<HTMLElement | null>(null)
+
+watch(
+  () => section.value.key,
+  () => body.value?.closest('.overflow-auto')?.scrollTo({ top: 0 })
+)
+
 const sectionOff = computed(() => (section.value.addon && !isOn(section.value.addon) ? section.value.addon : null))
 
 const statusDot = (addonId: string): string => {
@@ -123,6 +132,7 @@ const statusDot = (addonId: string): string => {
     </template>
 
     <div
+      ref="body"
       class="grid grid-cols-1 gap-3.5"
       :class="section.wide && !sectionOff ? undefined : 'max-w-3xl'"
     >
