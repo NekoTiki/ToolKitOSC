@@ -6,6 +6,7 @@ import AddonsSettings from '@renderer/components/settings/AddonsSettings.vue'
 import AppearanceSettings from '@renderer/components/settings/AppearanceSettings.vue'
 import BoardsSettings from '@renderer/components/settings/BoardsSettings.vue'
 import ChatboxSettings from '@renderer/components/settings/ChatboxSettings.vue'
+import CreditsSettings from '@renderer/components/settings/CreditsSettings.vue'
 import DataSettings from '@renderer/components/settings/DataSettings.vue'
 import IntifaceSettings from '@renderer/components/settings/IntifaceSettings.vue'
 import OpenShockSettings from '@renderer/components/settings/OpenShockSettings.vue'
@@ -20,7 +21,8 @@ import { useRoute } from 'vue-router'
 // Settings as a page with a section list, replacing the three-tab modal. Changes apply as you
 // make them, like before - there's no Save button. `/settings/<section>` deep-links a section
 // (the top bar's OpenShock and Intiface chips link to theirs). An add-on's section (`addon`) is only
-// listed while that add-on is on, under Your add-ons.
+// listed while that add-on is on, under Your add-ons. A section's sub-pages
+// (`/settings/<section>/<sub>`, e.g. About › Credits) open in the same place, so the list stays.
 interface Section {
   key: string
   label: string
@@ -28,8 +30,9 @@ interface Section {
   icon: string
   component: Component
   addon?: string
-  // Takes the page's whole width instead of a reading column, e.g. a grid of cards.
+  // Takes the page's whole width instead of a reading column, e.g. a grid of cards. Its sub-pages too.
   wide?: boolean
+  subpages?: Record<string, { label: string; component: Component }>
 }
 
 const SECTIONS: Section[] = [
@@ -41,7 +44,7 @@ const SECTIONS: Section[] = [
   { key: 'account', label: 'Account & server', description: 'Discord sign-in and server', icon: 'i-lucide-globe', component: AccountSettings },
   { key: 'startup', label: 'Startup', description: 'Tray, SteamVR and VRChat', icon: 'i-lucide-power', component: StartupSettings },
   { key: 'data', label: 'Data & logs', description: 'Activity log and bans', icon: 'i-lucide-database', component: DataSettings },
-  { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings, wide: true },
+  { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings, wide: true, subpages: { credits: { label: 'Credits', component: CreditsSettings } } },
   { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings, addon: 'openshock' },
   { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings, addon: 'intiface' },
   { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings, addon: 'boards' }
@@ -60,12 +63,13 @@ const navGroups = computed(() => [
 
 // A link to an add-on's section still opens it while the add-on is off, with a Turn on button.
 const section = computed(() => SECTIONS.find((s) => s.key === route.params.section) ?? SECTIONS[0]!)
+const subpage = computed(() => section.value.subpages?.[String(route.params.sub)] ?? null)
 // The page stays mounted across sections (see App.vue), so the list keeps its scroll; the
 // section itself starts at the top.
 const body = ref<HTMLElement | null>(null)
 
 watch(
-  () => section.value.key,
+  () => [section.value.key, subpage.value],
   () => body.value?.closest('.overflow-auto')?.scrollTo({ top: 0 })
 )
 
@@ -126,8 +130,12 @@ const statusDot = (addonId: string): string => {
 
     <template #header>
       <PageHeader
-        :title="section.label"
-        :crumbs="[{ label: 'Settings', to: '/settings' }, { label: section.label }]"
+        :title="subpage?.label ?? section.label"
+        :crumbs="
+          subpage
+            ? [{ label: 'Settings', to: '/settings' }, { label: section.label, to: `/settings/${section.key}` }, { label: subpage.label }]
+            : [{ label: 'Settings', to: '/settings' }, { label: section.label }]
+        "
       />
     </template>
 
@@ -141,7 +149,7 @@ const statusDot = (addonId: string): string => {
         :addon-id="sectionOff"
       />
       <component
-        :is="section.component"
+        :is="subpage?.component ?? section.component"
         v-else
       />
     </div>

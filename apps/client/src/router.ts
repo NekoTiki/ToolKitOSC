@@ -87,8 +87,9 @@ export const router = createRouter({
     { path: '/viewers/:clientId?', name: 'viewers', component: () => import('@renderer/pages/ViewersPage.vue') },
     { path: '/activity', name: 'activity', component: () => import('@renderer/pages/ActivityPage.vue') },
     { path: '/ai', name: 'ai', component: () => import('@renderer/pages/AiPage.vue') },
-    { path: '/settings/:section?', name: 'settings', component: () => import('@renderer/pages/SettingsPage.vue') },
-    { path: '/settings/about/credits', name: 'credits', component: () => import('@renderer/pages/CreditsPage.vue') },
+    // `:sub` is a section's sub-page (About › Credits). The board route below still wins for
+    // `/settings/esp32/<id>`: a static segment ranks above a param.
+    { path: '/settings/:section?/:sub?', name: 'settings', component: () => import('@renderer/pages/SettingsPage.vue') },
     {
       path: '/settings/esp32/:boardId',
       name: 'board',
