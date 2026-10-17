@@ -32,6 +32,7 @@ const items = computed<RailItem[]>(() => [
   ...(isOn('intiface') ? [{ key: 'patterns', label: 'Patterns', icon: 'i-lucide-audio-waveform', to: '/patterns', addon: true }] : []),
   // So do avatar haptics, an add-on of their own.
   ...(isOn('haptics') ? [{ key: 'haptics', label: 'Haptics', icon: 'i-lucide-hand-heart', to: '/haptics', addon: true }] : []),
+  ...(isOn('leash') ? [{ key: 'leash', label: 'Leash', icon: 'i-tkosc-collar', to: '/leash', addon: true }] : []),
   { key: 'automations', label: 'Automations', icon: 'i-lucide-workflow', to: '/automations' },
   { key: 'profiles', label: 'Profiles', icon: 'i-lucide-lock', to: '/profiles' },
   { key: 'viewers', label: 'Viewers', icon: 'i-lucide-users', to: '/viewers', badge: uniqueClientCount.value },
