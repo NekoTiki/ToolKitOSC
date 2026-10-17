@@ -400,6 +400,16 @@ const profileTarget = computed({
 
 const chatboxStep = computed(() => (step.value.kind === 'chatbox' ? step.value : null))
 
+// ---- Leash
+
+const leashStep = computed(() => (step.value.kind === 'leash-enabled' ? step.value : null))
+const leashValue = computed({
+  get: () => (leashStep.value?.enabled ? 'on' : 'off'),
+  set: (value: 'on' | 'off') => {
+    if (leashStep.value) leashStep.value.enabled = value === 'on'
+  }
+})
+
 const toInt = (value: number | string): number =>
   Math.min(255, Math.max(0, Math.round(Number(value) || 0)))
 </script>
@@ -872,5 +882,21 @@ const toInt = (value: number | string): number =>
       Stops every toy, pattern, shock and board output and pauses your controls, like the button in
       the top bar.
     </p>
+
+    <UFormField
+      v-else-if="leashStep"
+      label="Leash moves me"
+      description="Like the switch on the Leash page, or TKOSC/Leash."
+    >
+      <SegmentedControl
+        v-model="leashValue"
+        class="w-fit"
+        :items="[
+          { value: 'on', label: 'On' },
+          { value: 'off', label: 'Off' }
+        ]"
+        aria-label="Leash moves me"
+      />
+    </UFormField>
   </div>
 </template>

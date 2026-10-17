@@ -12,7 +12,9 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use super::model::{Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType};
+use super::model::{
+    Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, LeashEvent, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType
+};
 use crate::boards::protocol::OutputMessage;
 
 /// How long each hold/follow message keeps the output on, and how often it's renewed.
@@ -122,7 +124,9 @@ pub enum Effect {
     /// An output step with `chatbox` on switched it on or off.
     Chatbox { board_id: String, pin: u8, note: BoardNote },
     /// A step was skipped because its add-on is off.
-    Skipped { automation_id: String, action: Action }
+    Skipped { automation_id: String, action: Action },
+    /// Turns "Leash moves me" on or off.
+    Leash(bool)
 }
 
 #[derive(Default)]
@@ -207,17 +211,22 @@ impl State {
 
     /// Something the frontend reports, e.g. a viewer using a control.
     pub fn on_event(&mut self, happened: &AppEvent, env: &dyn Env) -> Vec<Effect> {
+        self.on_moment(|when| matches!(when, Trigger::AppEvent { event } if event.matches(happened)), env)
+    }
+
+    /// The avatar leash was grabbed, pulled to running or let go.
+    pub fn on_leash(&mut self, happened: LeashEvent, env: &dyn Env) -> Vec<Effect> {
+        self.on_moment(|when| matches!(when, Trigger::Leash { event } if *event == happened), env)
+    }
+
+    /// Fires every automation whose trigger `matches`.
+    fn on_moment(&mut self, matches: impl Fn(&Trigger) -> bool, env: &dyn Env) -> Vec<Effect> {
         let mut effects = Vec::new();
         if self.paused {
             return effects;
         }
         let now = Instant::now();
-        let matching: Vec<Automation> = self
-            .automations
-            .iter()
-            .filter(|a| a.enabled && matches!(&a.when, Trigger::AppEvent { event } if event.matches(happened)))
-            .cloned()
-            .collect();
+        let matching: Vec<Automation> = self.automations.iter().filter(|a| a.enabled && matches(&a.when)).cloned().collect();
         for automation in matching {
             self.fire(&automation, now, env, &mut effects);
         }
@@ -353,6 +362,7 @@ impl State {
                 }
                 ParameterAction::Hold { .. } | ParameterAction::Follow { .. } => {}
             },
+            Action::LeashEnabled { enabled } => effects.push(Effect::Leash(*enabled)),
             Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => {}
         }
     }
@@ -1191,6 +1201,18 @@ mod tests {
         assert!(sends(&state.on_event(&toggle, &TestEnv)).is_empty());
         let shock = AppEvent::ViewerCommand { control_id: Some("s".into()), control_type: Some("open-shock-shocker".into()) };
         assert_eq!(sends(&state.on_event(&shock, &TestEnv)).len(), 1);
+        assert!(sends(&state.on_event(&AppEvent::FirstViewer, &TestEnv)).is_empty());
+    }
+
+    #[test]
+    fn leash_events_fire_their_own_automations() {
+        let mut state = State::default();
+        let mut a = automation("grab", Condition::TurnsOn, ValueType::Bool, OutputAction::Pulse { on_ms: 200, off_ms: 0, count: 1 });
+        a.when = Trigger::Leash { event: LeashEvent::Grabbed };
+        state.automations.push(a);
+
+        assert_eq!(sends(&state.on_leash(LeashEvent::Grabbed, &TestEnv)).len(), 1);
+        assert!(sends(&state.on_leash(LeashEvent::Released, &TestEnv)).is_empty());
         assert!(sends(&state.on_event(&AppEvent::FirstViewer, &TestEnv)).is_empty());
     }
 

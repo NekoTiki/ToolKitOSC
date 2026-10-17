@@ -36,7 +36,7 @@ pub struct Manifest {
     pub needs: &'static [&'static str],
     /// The control types it owns (`types/controls.ts`).
     pub control_types: &'static [&'static str],
-    /// The automation step kinds it owns (`automations::model::Action`).
+    /// The automation step and trigger kinds it owns (`automations::model::Action`, `Trigger`).
     pub automation_kinds: &'static [&'static str],
     /// The rail pages it brings (router names).
     pub pages: &'static [&'static str]
@@ -407,6 +407,7 @@ mod tests {
         assert_eq!(find_control_type(real(), "intiface-pattern").map(|m| m.id), Some("intiface"));
         assert!(find_control_type(real(), "slider").is_none());
         assert_eq!(find_automation_kind(real(), "board-output").map(|m| m.id), Some("boards"));
+        assert_eq!(find_automation_kind(real(), "leash-enabled").map(|m| m.id), Some("leash"));
         assert!(find_automation_kind(real(), "control").is_none());
     }
 }
