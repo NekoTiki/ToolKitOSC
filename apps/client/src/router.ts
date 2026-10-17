@@ -65,6 +65,12 @@ export const router = createRouter({
       meta: { addon: 'haptics' }
     },
     { path: '/leash', name: 'leash', component: () => import('@renderer/pages/LeashPage.vue'), meta: { addon: 'leash' } },
+    {
+      path: '/leash/setup',
+      name: 'leash-setup',
+      component: () => import('@renderer/pages/LeashSetupPage.vue'),
+      meta: { addon: 'leash' }
+    },
     { path: '/automations', name: 'automations', component: () => import('@renderer/pages/AutomationsPage.vue') },
     { path: '/automations/new', name: 'automation-new', component: () => import('@renderer/pages/AutomationEditorPage.vue') },
     {
