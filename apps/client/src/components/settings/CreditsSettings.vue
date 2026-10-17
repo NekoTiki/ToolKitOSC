@@ -99,13 +99,13 @@ const DEV_BUILD = import.meta.env.DEV
       <article
         v-for="project in THANKS"
         :key="project.name"
-        class="grid content-start gap-2 rounded-field bg-(--aurora-well) px-3.5 py-3"
+        class="flex flex-col gap-2 rounded-field bg-(--aurora-well) px-3.5 py-3"
       >
         <span class="grid gap-0.5 text-sm">
           <b class="font-semibold text-highlighted">{{ project.name }} <span class="font-normal text-muted">by {{ project.by }}</span></b>
           <small class="text-[13px] text-muted">{{ project.text }}</small>
         </span>
-        <div class="flex flex-wrap gap-1.5">
+        <div class="mt-auto flex flex-wrap gap-1.5">
           <UButton
             v-for="link in project.links"
             :key="link.url"
