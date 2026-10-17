@@ -6,6 +6,7 @@ import GroupListItem from '@renderer/components/controls/GroupListItem.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
+import { useAddonSwitch } from '@renderer/composables/useAddonSwitch'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControlActivity } from '@renderer/composables/useControlActivity'
@@ -56,7 +57,8 @@ const { lockedControlGroups, currentLockedControlsGroup, defaultLockedControlsGr
 const { density, editMode } = useControlsView()
 const { openModal: confirm } = useAreYouSureModal()
 const { presets, applyPreset } = usePresets()
-const { offAddonForControlType, setEnabled: setAddonEnabled } = useAddons()
+const { offAddonForControlType } = useAddons()
+const { setAddon } = useAddonSwitch()
 const toast = useToast()
 
 // Groups are keyed by avatar id (see useControls.ts), so there's nothing to show or add to until
@@ -815,7 +817,7 @@ const mode = computed<'use' | 'edit'>({
                 block
                 class="mt-1.5 rounded-2xl"
                 :title="`This control is kept and hidden from viewers while ${offAddonForControlType(item.control.type)!.name} is off`"
-                @click="setAddonEnabled(offAddonForControlType(item.control.type)!.id, true)"
+                @click="setAddon(offAddonForControlType(item.control.type)!, true)"
               >
                 Turn on {{ offAddonForControlType(item.control.type)!.name }}
               </UButton>

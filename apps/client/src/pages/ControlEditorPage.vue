@@ -12,6 +12,7 @@ import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
+import { useAddonSwitch } from '@renderer/composables/useAddonSwitch'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useControlEditor } from '@renderer/composables/useControlEditor'
 import { useControls } from '@renderer/composables/useControls'
@@ -59,7 +60,8 @@ interface TypeChoice {
   reason?: string
 }
 
-const { offAddonForControlType, setEnabled: setAddonEnabled } = useAddons()
+const { offAddonForControlType } = useAddons()
+const { setAddon } = useAddonSwitch()
 
 // The type's add-on, when it's off: the control is kept, but viewers don't get it.
 const typeAddonOff = computed(() => (type.value ? offAddonForControlType(type.value) : undefined))
@@ -361,7 +363,7 @@ onBeforeRouteLeave(async () => {
             icon="i-lucide-puzzle"
             :title="`${typeAddonOff.name} is off`"
             description="This control is kept, but it's hidden from viewers and does nothing until you turn the add-on back on."
-            :actions="[{ label: `Turn on ${typeAddonOff.name}`, icon: 'i-lucide-power', color: 'neutral', variant: 'subtle', onClick: () => void setAddonEnabled(typeAddonOff!.id, true) }]"
+            :actions="[{ label: `Turn on ${typeAddonOff.name}`, icon: 'i-lucide-power', color: 'neutral', variant: 'subtle', onClick: () => void setAddon(typeAddonOff!, true) }]"
           />
 
           <template v-if="type === 'open-shock-shocker'">
