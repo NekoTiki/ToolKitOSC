@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { useBhapticsControl } from '../composables/useBhapticsControl'
 import type { BhapticsControl, BhapticsControlCommand, BhapticsPosition, ControlLimits } from '../types/controls'
-import { BHAPTICS_HOLD_TICK_MS, BHAPTICS_LAYOUT } from '../types/controls'
+import { BHAPTICS_EFFECTS, BHAPTICS_HOLD_TICK_MS, BHAPTICS_LAYOUT } from '../types/controls'
 import { limitRange } from '../utils/controlLimits'
 import ControlBase from './ControlBase.vue'
 
@@ -201,6 +201,13 @@ const onKeyUp = (event: KeyboardEvent): void => {
   }
 }
 
+const effects = computed(() => BHAPTICS_EFFECTS.filter((effect) => props.control.effects?.includes(effect.id)))
+
+const playEffect = (effect: { id: string; label: string }): void => {
+  emit('command', { type: 'bhaptics', value: 'effect', effect: effect.id })
+  status.value = `You played ${effect.label}`
+}
+
 const pick = (next: BhapticsPosition): void => {
   end()
   position.value = next
@@ -285,6 +292,20 @@ const pick = (next: BhapticsPosition): void => {
         </div>
       </div>
 
+      <div
+        v-if="effects.length"
+        class="flex flex-wrap gap-1.5"
+      >
+        <button
+          v-for="effect in effects"
+          :key="effect.id"
+          type="button"
+          class="min-h-8 cursor-pointer rounded-full px-3 text-xs font-semibold text-highlighted shadow-[inset_0_0_0_1px_var(--ui-border)] transition-colors hover:bg-(--aurora-glass)"
+          @click.stop="playEffect(effect)"
+        >
+          {{ effect.label }}
+        </button>
+      </div>
       <small
         class="min-h-[1.4em] truncate text-xs text-muted"
         aria-live="polite"

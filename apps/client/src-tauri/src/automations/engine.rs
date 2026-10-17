@@ -126,7 +126,9 @@ pub enum Effect {
     /// A step was skipped because its add-on is off.
     Skipped { automation_id: String, action: Action },
     /// Turns "Leash moves me" on or off.
-    Leash(bool)
+    Leash(bool),
+    /// A bHaptics pulse or effect step.
+    Bhaptics(Action)
 }
 
 #[derive(Default)]
@@ -363,6 +365,7 @@ impl State {
                 ParameterAction::Hold { .. } | ParameterAction::Follow { .. } => {}
             },
             Action::LeashEnabled { enabled } => effects.push(Effect::Leash(*enabled)),
+            Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => effects.push(Effect::Bhaptics(action.clone())),
             Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => {}
         }
     }

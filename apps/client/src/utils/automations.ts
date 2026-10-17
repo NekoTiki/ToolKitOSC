@@ -16,6 +16,7 @@ import type {
   ParameterValueType
 } from '@renderer/lib/tauri-bridge'
 import type { ControlType, ControlTypes } from '@toolkitosc/shared-ui'
+import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT } from '@toolkitosc/shared-ui'
 
 // What each kind of "when" and "do" means, for the editor and the list. The backend checks the
 // same rules (src-tauri/src/automations/model.rs `validate`); this only keeps the editor from
@@ -329,6 +330,18 @@ export const STEP_KINDS: Record<
     description: 'Turn Leash moves me on or off.',
     icon: 'i-tkosc-collar',
     runs: ['moment']
+  },
+  'bhaptics-pulse': {
+    label: 'bHaptics pulse',
+    description: 'Play motors of your vest, head or arms for a moment.',
+    icon: 'i-lucide-shirt',
+    runs: ['moment']
+  },
+  'bhaptics-effect': {
+    label: 'bHaptics effect',
+    description: 'Play a heartbeat, rain or a sweep on your gear.',
+    icon: 'i-lucide-audio-waveform',
+    runs: ['moment']
   }
 }
 
@@ -450,6 +463,10 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
       return { kind, text: '', delayMs: 0 }
     case 'leash-enabled':
       return { kind, enabled: false, delayMs: 0 }
+    case 'bhaptics-pulse':
+      return { kind, position: 'VestFront', motors: [], intensity: 0.6, ms: 1000, delayMs: 0 }
+    case 'bhaptics-effect':
+      return { kind, effect: 'heartbeat', positions: ['VestFront', 'VestBack'], intensity: 0.6, delayMs: 0 }
     default:
       return { kind, delayMs: 0 }
   }
@@ -664,6 +681,12 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
       break
     case 'leash-enabled':
       what = step.enabled ? 'turn the leash on' : 'turn the leash off'
+      break
+    case 'bhaptics-pulse':
+      what = `bHaptics ${BHAPTICS_LAYOUT[step.position].label.toLowerCase()} at ${Math.round(step.intensity * 100)}% for ${formatMs(step.ms)}`
+      break
+    case 'bhaptics-effect':
+      what = `bHaptics ${BHAPTICS_EFFECTS.find((e) => e.id === step.effect)?.label.toLowerCase() ?? 'effect'}`
       break
     default:
       what = 'stop everything'

@@ -1,6 +1,7 @@
 // Automations - src-tauri/src/automations/.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import type { BhapticsPosition } from '@toolkitosc/shared-ui'
 
 // Automations - mirrors src-tauri/src/automations/model.rs. "When" and "do" are tagged on `kind`
 // so other kinds (app events, chatbox...) can be added next to these.
@@ -131,6 +132,10 @@ export type ChatboxStepAction = { kind: 'chatbox'; text: string }
 export type StopEverythingAction = { kind: 'stop-everything' }
 // Turns "Leash moves me" on or off (the avatar leash add-on).
 export type LeashEnabledAction = { kind: 'leash-enabled'; enabled: boolean }
+// The bHaptics add-on: some motors of one device for `ms` (all of them when `motors` is empty), or
+// a built-in effect across several. `intensity` is 0-1.
+export type BhapticsPulseAction = { kind: 'bhaptics-pulse'; position: BhapticsPosition; motors: number[]; intensity: number; ms: number }
+export type BhapticsEffectAction = { kind: 'bhaptics-effect'; effect: string; positions: BhapticsPosition[]; intensity: number }
 
 export type AutomationAction =
   | BoardOutputAction
@@ -140,6 +145,8 @@ export type AutomationAction =
   | ChatboxStepAction
   | StopEverythingAction
   | LeashEnabledAction
+  | BhapticsPulseAction
+  | BhapticsEffectAction
 
 // The backend asking the app to carry out a step (see useAutomationRunner.ts). `start` and `stop`
 // bracket a hold; `follow` carries the trigger's value, 0-1.

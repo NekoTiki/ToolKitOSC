@@ -426,6 +426,7 @@ mod tests {
         assert!(find_control_type(real(), "slider").is_none());
         assert_eq!(find_automation_kind(real(), "board-output").map(|m| m.id), Some("boards"));
         assert_eq!(find_automation_kind(real(), "leash-enabled").map(|m| m.id), Some("leash"));
+        assert_eq!(find_automation_kind(real(), "bhaptics-effect").map(|m| m.id), Some("bhaptics"));
         assert!(find_automation_kind(real(), "control").is_none());
     }
 }

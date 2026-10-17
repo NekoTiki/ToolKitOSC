@@ -56,6 +56,8 @@ fn addon_off(app: &AppHandle, action: &Action) -> Option<&'static str> {
     let owner = match action {
         Action::BoardOutput { .. } => crate::addons::owner_of_automation_kind("board-output"),
         Action::LeashEnabled { .. } => crate::addons::owner_of_automation_kind("leash-enabled"),
+        Action::BhapticsPulse { .. } => crate::addons::owner_of_automation_kind("bhaptics-pulse"),
+        Action::BhapticsEffect { .. } => crate::addons::owner_of_automation_kind("bhaptics-effect"),
         Action::Control { control_type, .. } => crate::addons::owner_of_control_type(control_type),
         _ => None
     };
@@ -109,6 +111,8 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
             // The add-on may have been turned off since.
             Effect::Leash(_) if !crate::addons::is_on(app, "leash") => {}
             Effect::Leash(enabled) => crate::leash::set_enabled(app, enabled),
+            Effect::Bhaptics(_) if !crate::addons::is_on(app, "bhaptics") => {}
+            Effect::Bhaptics(action) => crate::bhaptics::run_step(app, &action),
             Effect::Parameter { address, value_type, value } => {
                 if let Err(err) = crate::osc::send(&app.state::<AppState>(), &parameter_command(&address, value_type, value)) {
                     tracing::debug!("Couldn't set {address}: {err}");
@@ -136,6 +140,8 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 let step = match action {
                     Action::BoardOutput { .. } => "ESP32 output",
                     Action::LeashEnabled { .. } => "Leash on or off",
+                    Action::BhapticsPulse { .. } => "bHaptics pulse",
+                    Action::BhapticsEffect { .. } => "bHaptics effect",
                     _ => "Control"
                 };
                 tracing::info!("Automation {automation_id} skipped a step: {addon} is off");
@@ -262,6 +268,7 @@ fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result
             })
         }
         Action::LeashEnabled { enabled } => Ok((Effect::Leash(*enabled), None)),
+        Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => Ok((Effect::Bhaptics(action.clone()), None)),
         // App actions are handled above.
         Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => Ok((run(Phase::Run), None))
     }

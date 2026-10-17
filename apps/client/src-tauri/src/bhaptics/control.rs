@@ -71,26 +71,32 @@ pub fn run(app: &AppHandle, control: &Value, command: &Value) -> bool {
     let Some(control_id) = control.get("id").and_then(Value::as_str) else {
         return false;
     };
-    let Some(position) = command.get("position").cloned().and_then(|p| serde_json::from_value::<Position>(p).ok()) else {
-        return false;
-    };
+    let position = command.get("position").cloned().and_then(|p| serde_json::from_value::<Position>(p).ok());
     let motors: Vec<usize> = command
         .get("motors")
         .and_then(Value::as_array)
-        .map(|motors| motors.iter().filter_map(Value::as_u64).map(|m| m as usize).filter(|m| *m < position.motors()).collect())
+        .zip(position)
+        .map(|(motors, position)| motors.iter().filter_map(Value::as_u64).map(|m| m as usize).filter(|m| *m < position.motors()).collect())
         .unwrap_or_default();
     let cap = number(control, "maxIntensity").unwrap_or(1.0).clamp(0.0, 1.0);
     let level = number(command, "level").unwrap_or(cap).clamp(0.0, cap);
     let mode = control.get("spread").cloned().and_then(|s| serde_json::from_value(s).ok()).unwrap_or(Spread::Soft);
     let now = Instant::now();
 
-    match command.get("value").and_then(Value::as_str) {
-        Some("tap") if !motors.is_empty() => {
+    match (command.get("value").and_then(Value::as_str), position) {
+        (Some("tap"), Some(position)) if !motors.is_empty() => {
             let pulse = millis(control, "pulseMs", 400, 100, 2000);
             super::ask(app, &format!("tap:{control_id}"), position, spread(position, &motors, mode, level), now + pulse);
             false
         }
-        Some("hold") => {
+        (Some("effect"), _) => {
+            let effect = command.get("effect").and_then(Value::as_str).unwrap_or_default();
+            let positions: Vec<Position> =
+                control.get("positions").cloned().and_then(|p| serde_json::from_value(p).ok()).unwrap_or_default();
+            super::play_effect(app, &format!("effect:{control_id}"), effect, positions, level);
+            false
+        }
+        (Some("hold"), Some(position)) => {
             let Some(hold_id) = number(command, "holdId") else {
                 return true;
             };
