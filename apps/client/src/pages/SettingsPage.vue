@@ -41,7 +41,7 @@ const SECTIONS: Section[] = [
   { key: 'account', label: 'Account & server', description: 'Discord sign-in and server', icon: 'i-lucide-globe', component: AccountSettings },
   { key: 'startup', label: 'Startup', description: 'Tray, SteamVR and VRChat', icon: 'i-lucide-power', component: StartupSettings },
   { key: 'data', label: 'Data & logs', description: 'Activity log and bans', icon: 'i-lucide-database', component: DataSettings },
-  { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings },
+  { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings, wide: true },
   { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings, addon: 'openshock' },
   { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings, addon: 'intiface' },
   { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings, addon: 'boards' }
