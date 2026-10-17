@@ -4,6 +4,7 @@ mod automations;
 mod avatar;
 mod boards;
 mod controls;
+mod haptics;
 mod intiface;
 mod logging;
 mod net;
@@ -171,7 +172,11 @@ pub fn run() {
             toys::commands::patterns_saved_list,
             toys::commands::patterns_save,
             toys::commands::patterns_delete,
-            toys::commands::patterns_migrate
+            toys::commands::patterns_migrate,
+            // Avatar haptics
+            haptics::commands::haptics_settings,
+            haptics::commands::haptics_save,
+            haptics::commands::haptics_state
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
