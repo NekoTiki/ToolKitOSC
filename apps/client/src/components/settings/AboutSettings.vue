@@ -70,6 +70,29 @@ const formatDate = (date: string): string =>
   </FormSection>
 
   <FormSection
+    title="Credits"
+    description="ToolKitOSC builds on other people's work."
+  >
+    <RouterLink
+      to="/settings/about/credits"
+      class="flex min-h-14 items-center gap-3 rounded-field bg-(--aurora-well) px-3.5 py-2.5 transition-colors hover:bg-(--aurora-glass)"
+    >
+      <UIcon
+        name="i-lucide-heart-handshake"
+        class="size-6 shrink-0 text-primary"
+      />
+      <span class="grid min-w-0 flex-1 gap-0.5 text-sm">
+        <b class="font-semibold text-highlighted">Credits & licenses</b>
+        <small class="text-[13px] text-muted">OpenShock, Intiface, OSCLeash, OscGoesBrrr and every open-source library inside the app.</small>
+      </span>
+      <UIcon
+        name="i-lucide-chevron-right"
+        class="size-4 shrink-0 text-dimmed"
+      />
+    </RouterLink>
+  </FormSection>
+
+  <FormSection
     v-if="newerReleases.length"
     id="update-notes"
     class="scroll-mt-3.5"
@@ -107,25 +130,6 @@ const formatDate = (date: string): string =>
       </header>
       <ReleaseNotes :html="release.html" />
     </article>
-  </FormSection>
-
-  <FormSection
-    title="Thanks"
-    description="ToolKitOSC builds on other people's work."
-  >
-    <div class="flex items-center gap-3 rounded-field bg-(--aurora-well) px-3.5 py-2.5">
-      <span class="grid min-w-0 flex-1 gap-0.5 text-sm">
-        <b class="font-semibold text-highlighted">OSCLeash <span class="font-normal text-muted">by ZenithVal · MIT</span></b>
-        <small class="text-[13px] text-muted">The avatar leash uses its compass prefab and its maths.</small>
-      </span>
-      <UButton
-        icon="i-lucide-external-link"
-        color="neutral"
-        variant="ghost"
-        aria-label="OSCLeash on GitHub"
-        @click="api.openUrl('https://github.com/ZenithVal/OSCLeash')"
-      />
-    </div>
   </FormSection>
 
   <FormSection
