@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { StatusTone } from '@renderer/components/layout/StatusChip.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import type { IntifaceStatus } from '@renderer/composables/useIntiface'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import type { OpenShockStatus } from '@renderer/composables/useOpenShock'
@@ -16,6 +17,7 @@ const { status, open, close } = useWebsocketHost()
 const { connected: oscConnected } = useOscConnection()
 const { status: openShockStatus } = useOpenShock()
 const { status: intifaceStatus } = useIntiface()
+const { isOn } = useAddons()
 const router = useRouter()
 
 const serverTone = computed<StatusTone>(() =>
@@ -65,12 +67,15 @@ onBeforeUnmount(close)
       :tone="oscConnected ? 'success' : 'error'"
       @click="go('/parameters')"
     />
+    <!-- Add-on chips only while the add-on is on. -->
     <StatusChip
+      v-if="isOn('openshock')"
       label="OpenShock"
       :tone="OPENSHOCK_TONE[openShockStatus]"
       @click="go('/settings/openshock')"
     />
     <StatusChip
+      v-if="isOn('intiface')"
       label="Intiface"
       :tone="INTIFACE_TONE[intifaceStatus]"
       @click="go('/settings/intiface')"

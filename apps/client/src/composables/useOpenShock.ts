@@ -10,8 +10,8 @@ export type { OpenShockHub, OpenShockShocker } from '@renderer/lib/tauri-bridge'
 const LEGACY_TOKEN_KEY = 'openShock_token'
 const LEGACY_ENABLED_KEY = 'openShock_enabled'
 
-// 'disabled': the user has switched OpenShock off in Settings - independent of whether a token is
-// saved, same idea as Intiface's own enable toggle (see useIntiface.ts). Defaults to enabled.
+// 'disabled': the OpenShock add-on is off (Settings > Add-ons) - independent of whether a token is
+// saved.
 // 'unconfigured': enabled, but no token saved yet (or it was just cleared).
 // 'checking': a validation request against the OpenShock API is in flight.
 // 'valid'/'invalid': the last validation request succeeded/failed.
@@ -40,7 +40,7 @@ if (legacyToken !== null || legacyEnabled !== null) {
     .catch((error) => console.error('Could not move the OpenShock settings to the app:', error))
 }
 
-const enabled = computed(() => state.value?.enabled ?? true)
+const enabled = computed(() => state.value?.enabled ?? false)
 const hasToken = computed(() => state.value?.hasToken ?? false)
 const status = computed<OpenShockStatus>(() => (enabled.value ? (state.value?.status ?? 'unconfigured') : 'disabled'))
 const isAvailable = computed(() => status.value === 'valid')
@@ -73,7 +73,6 @@ export function useOpenShock(): {
   setToken: (token: string) => Promise<void>
   hasToken: ComputedRef<boolean>
   enabled: ComputedRef<boolean>
-  setEnabled: (value: boolean) => void
   status: ComputedRef<OpenShockStatus>
   isAvailable: ComputedRef<boolean>
   testConnection: () => void
@@ -89,8 +88,6 @@ export function useOpenShock(): {
     setToken: api.openShockSetToken,
     hasToken,
     enabled,
-    // OpenShock is an add-on: the registry turns it on and off (see src-tauri/src/addons).
-    setEnabled: (value) => void api.addonsSetEnabled('openshock', value),
     status,
     isAvailable,
     testConnection: () => void api.openShockRecheck(),

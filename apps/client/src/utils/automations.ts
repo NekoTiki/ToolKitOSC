@@ -325,9 +325,10 @@ export const STEP_KINDS: Record<
   }
 }
 
-export const stepKindsFor = (condition: ConditionType): AutomationStep['kind'][] =>
+// `live` leaves out the kinds of an add-on that's off (see useAddons).
+export const stepKindsFor = (condition: ConditionType, live: (kind: AutomationStep['kind']) => boolean = () => true): AutomationStep['kind'][] =>
   (Object.keys(STEP_KINDS) as AutomationStep['kind'][]).filter((kind) =>
-    STEP_KINDS[kind].runs.includes(runsFor(condition))
+    STEP_KINDS[kind].runs.includes(runsFor(condition)) && live(kind)
   )
 
 export const defaultCondition = (type: ConditionType): ParameterCondition => {

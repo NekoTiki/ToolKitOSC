@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import AddonOff from '@renderer/components/AddonOff.vue'
 import AboutSettings from '@renderer/components/settings/AboutSettings.vue'
 import AccountSettings from '@renderer/components/settings/AccountSettings.vue'
+import AddonsSettings from '@renderer/components/settings/AddonsSettings.vue'
 import AppearanceSettings from '@renderer/components/settings/AppearanceSettings.vue'
 import BoardsSettings from '@renderer/components/settings/BoardsSettings.vue'
 import ChatboxSettings from '@renderer/components/settings/ChatboxSettings.vue'
@@ -10,30 +12,61 @@ import OpenShockSettings from '@renderer/components/settings/OpenShockSettings.v
 import SharingSettings from '@renderer/components/settings/SharingSettings.vue'
 import StartupSettings from '@renderer/components/settings/StartupSettings.vue'
 import StopSettings from '@renderer/components/settings/StopSettings.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import type { Component } from 'vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 // Settings as a page with a section list, replacing the three-tab modal. Changes apply as you
 // make them, like before - there's no Save button. `/settings/<section>` deep-links a section
-// (the top bar's OpenShock and Intiface chips link to theirs).
-const SECTIONS: { key: string; label: string; description: string; icon: string; component: Component }[] = [
+// (the top bar's OpenShock and Intiface chips link to theirs). An add-on's section (`addon`) is only
+// listed while that add-on is on, under Your add-ons.
+interface Section {
+  key: string
+  label: string
+  description: string
+  icon: string
+  component: Component
+  addon?: string
+  // Takes the page's whole width instead of a reading column, e.g. a grid of cards.
+  wide?: boolean
+}
+
+const SECTIONS: Section[] = [
+  { key: 'addons', label: 'Add-ons', description: 'Turn on only what you own', icon: 'i-lucide-puzzle', component: AddonsSettings, wide: true },
   { key: 'appearance', label: 'Appearance', description: 'Theme colors and tile size', icon: 'i-lucide-palette', component: AppearanceSettings },
   { key: 'sharing', label: 'Sharing & access', description: 'Share link and who can use it', icon: 'i-lucide-share-2', component: SharingSettings },
   { key: 'chatbox', label: 'VRChat chatbox', description: 'Post viewer actions in-game', icon: 'i-lucide-message-square-text', component: ChatboxSettings },
   { key: 'stop', label: 'Stop everything', description: 'Hotkey and avatar parameter', icon: 'i-lucide-octagon-x', component: StopSettings },
   { key: 'account', label: 'Account & server', description: 'Discord sign-in and server', icon: 'i-lucide-globe', component: AccountSettings },
-  { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings },
-  { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings },
-  { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings },
   { key: 'startup', label: 'Startup', description: 'Tray, SteamVR and VRChat', icon: 'i-lucide-power', component: StartupSettings },
   { key: 'data', label: 'Data & logs', description: 'Activity log and bans', icon: 'i-lucide-database', component: DataSettings },
-  { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings }
+  { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings },
+  { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings, addon: 'openshock' },
+  { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings, addon: 'intiface' },
+  { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings, addon: 'boards' }
 ]
 
 const route = useRoute()
+const { isOn, getAddon } = useAddons()
 
+const coreSections = SECTIONS.filter((s) => !s.addon)
+const addonSections = computed(() => SECTIONS.filter((s) => s.addon && isOn(s.addon)))
+
+const navGroups = computed(() => [
+  { label: null, items: coreSections },
+  ...(addonSections.value.length ? [{ label: 'Your add-ons', items: addonSections.value }] : [])
+])
+
+// A link to an add-on's section still opens it while the add-on is off, with a Turn on button.
 const section = computed(() => SECTIONS.find((s) => s.key === route.params.section) ?? SECTIONS[0]!)
+const sectionOff = computed(() => (section.value.addon && !isOn(section.value.addon) ? section.value.addon : null))
+
+const statusDot = (addonId: string): string => {
+  const state = getAddon(addonId)?.status.state
+
+  return state === 'ok' ? 'bg-success' : state === 'error' ? 'bg-error' : state === 'off' ? 'bg-(--ui-text-dimmed)' : 'bg-warning'
+}
 </script>
 
 <template>
@@ -46,25 +79,39 @@ const section = computed(() => SECTIONS.find((s) => s.key === route.params.secti
         aria-label="Settings sections"
         class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1.5"
       >
-        <RouterLink
-          v-for="item in SECTIONS"
-          :key="item.key"
-          :to="`/settings/${item.key}`"
-          class="grid min-h-14.5 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 rounded-2xl border px-2.5 py-2 transition-colors"
-          :class="item.key === section.key ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
+        <template
+          v-for="navGroup in navGroups"
+          :key="navGroup.label ?? 'core'"
         >
           <span
-            class="row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
-            :class="item.key === section.key ? 'text-primary' : 'text-muted'"
+            v-if="navGroup.label"
+            class="px-2.5 pt-3 font-mono text-[11.5px] tracking-widest text-muted uppercase"
+          >{{ navGroup.label }}</span>
+          <RouterLink
+            v-for="item in navGroup.items"
+            :key="item.key"
+            :to="`/settings/${item.key}`"
+            class="grid min-h-14.5 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 rounded-2xl border px-2.5 py-2 transition-colors"
+            :class="item.key === section.key ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
           >
-            <UIcon
-              :name="item.icon"
-              class="size-4.5"
-            />
-          </span>
-          <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.label }}</b>
-          <small class="col-start-2 truncate text-xs text-muted">{{ item.description }}</small>
-        </RouterLink>
+            <span
+              class="relative row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
+              :class="item.key === section.key ? 'text-primary' : 'text-muted'"
+            >
+              <UIcon
+                :name="item.icon"
+                class="size-4.5"
+              />
+              <span
+                v-if="item.addon"
+                class="absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-(--ui-bg)"
+                :class="statusDot(item.addon)"
+              />
+            </span>
+            <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.label }}</b>
+            <small class="col-start-2 truncate text-xs text-muted">{{ item.addon ? getAddon(item.addon)?.status.text : item.description }}</small>
+          </RouterLink>
+        </template>
       </nav>
     </template>
 
@@ -75,8 +122,18 @@ const section = computed(() => SECTIONS.find((s) => s.key === route.params.secti
       />
     </template>
 
-    <div class="grid max-w-3xl grid-cols-1 gap-3.5">
-      <component :is="section.component" />
+    <div
+      class="grid grid-cols-1 gap-3.5"
+      :class="section.wide && !sectionOff ? undefined : 'max-w-3xl'"
+    >
+      <AddonOff
+        v-if="sectionOff"
+        :addon-id="sectionOff"
+      />
+      <component
+        :is="section.component"
+        v-else
+      />
     </div>
   </PageLayout>
 </template>

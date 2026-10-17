@@ -11,6 +11,7 @@ import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useControlEditor } from '@renderer/composables/useControlEditor'
 import { useControls } from '@renderer/composables/useControls'
@@ -58,7 +59,19 @@ interface TypeChoice {
   reason?: string
 }
 
-const typeGroups = computed<{ label: string; items: TypeChoice[] }[]>(() => [
+const { offAddonForControlType, setEnabled: setAddonEnabled } = useAddons()
+
+// The type's add-on, when it's off: the control is kept, but viewers don't get it.
+const typeAddonOff = computed(() => (type.value ? offAddonForControlType(type.value) : undefined))
+
+// Types of an add-on that's off aren't offered, except the one this control already has.
+const typeGroups = computed(() =>
+  allTypeGroups.value
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.value === type.value || !offAddonForControlType(item.value)) }))
+    .filter((group) => group.items.length)
+)
+
+const allTypeGroups = computed<{ label: string; items: TypeChoice[] }[]>(() => [
   {
     label: 'VRChat',
     items: [
@@ -341,9 +354,19 @@ onBeforeRouteLeave(async () => {
             <EnumOptionsField v-model="enumOptions" />
           </UFormField>
 
+          <UAlert
+            v-if="typeAddonOff"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-puzzle"
+            :title="`${typeAddonOff.name} is off`"
+            description="This control is kept, but it's hidden from viewers and does nothing until you turn the add-on back on."
+            :actions="[{ label: `Turn on ${typeAddonOff.name}`, icon: 'i-lucide-power', color: 'neutral', variant: 'subtle', onClick: () => void setAddonEnabled(typeAddonOff!.id, true) }]"
+          />
+
           <template v-if="type === 'open-shock-shocker'">
             <UAlert
-              v-if="!editor.openShockAvailable.value"
+              v-if="!editor.openShockAvailable.value && !typeAddonOff"
               color="warning"
               variant="subtle"
               icon="i-lucide-shield-off"
@@ -365,7 +388,7 @@ onBeforeRouteLeave(async () => {
 
           <template v-if="type === 'intiface-toy' || type === 'intiface-pattern'">
             <UAlert
-              v-if="!editor.intiface.available.value"
+              v-if="!editor.intiface.available.value && !typeAddonOff"
               color="warning"
               variant="subtle"
               icon="i-lucide-shield-off"

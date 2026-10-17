@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import AddonOff from '@renderer/components/AddonOff.vue'
 import AppRail from '@renderer/components/layout/AppRail.vue'
 import TopBar from '@renderer/components/layout/TopBar.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import { useAppUpdater } from '@renderer/composables/useAppUpdater'
 import { useAutomationRunner } from '@renderer/composables/useAutomationRunner'
 import { useLogRetention } from '@renderer/composables/useLogRetention'
@@ -13,6 +15,7 @@ import { onMounted } from 'vue'
 // The app shell: title bar, global top bar, then the navigation rail beside whichever page the
 // router shows. Pages bring their own context column and header (see layout/PageLayout.vue).
 const { loadTheme } = useTheme()
+const { isOn, loaded: addonsLoaded } = useAddons()
 
 onMounted(() => api.ready())
 onMounted(() => loadTheme())
@@ -34,8 +37,15 @@ useAutomationRunner()
         fresh draft; other pages keep their instance (the Controls page keeps its search when you
         switch groups). -->
         <RouterView v-slot="{ Component, route }">
+          <!-- A page of an add-on that's off (e.g. Patterns while Intiface toys is off). -->
+          <AddonOff
+            v-if="route.meta.addon && addonsLoaded && !isOn(route.meta.addon)"
+            :addon-id="route.meta.addon"
+            class="min-w-0 flex-1"
+          />
           <component
             :is="Component"
+            v-else
             :key="route.name === 'controls' ? 'controls' : route.fullPath"
             class="min-w-0 flex-1"
           />

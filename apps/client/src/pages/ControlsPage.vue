@@ -5,6 +5,7 @@ import CommandLine from '@renderer/components/controls/CommandLine.vue'
 import GroupListItem from '@renderer/components/controls/GroupListItem.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAddons } from '@renderer/composables/useAddons'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControlActivity } from '@renderer/composables/useControlActivity'
@@ -55,6 +56,7 @@ const { lockedControlGroups, currentLockedControlsGroup, defaultLockedControlsGr
 const { density, editMode } = useControlsView()
 const { openModal: confirm } = useAreYouSureModal()
 const { presets, applyPreset } = usePresets()
+const { offAddonForControlType, setEnabled: setAddonEnabled } = useAddons()
 const toast = useToast()
 
 // Groups are keyed by avatar id (see useControls.ts), so there's nothing to show or add to until
@@ -87,7 +89,13 @@ interface ShownControl {
   groupId: string
 }
 
-const shown = computed<ShownControl[]>(() => {
+// A control whose add-on is off is kept: Edit mode shows it greyed with a way to turn the add-on
+// on, Use mode leaves it out, like the share page does.
+const shown = computed<ShownControl[]>(() =>
+  editMode.value ? shownInGroup.value : shownInGroup.value.filter((item) => !offAddonForControlType(item.control.type))
+)
+
+const shownInGroup = computed<ShownControl[]>(() => {
   if (search.value) {
     return controls.value.flatMap((group) =>
       group.controls.filter((control) => control.name.toLowerCase().includes(search.value)).map((control) => ({ control, groupId: group.id }))
@@ -793,11 +801,24 @@ const mode = computed<'use' | 'edit'>({
                 :locked-indicator="item.control.locked"
                 :unavailable-indicator="item.control.unavailable"
                 :limited-indicator="!!item.control.limits"
+                :class="offAddonForControlType(item.control.type) && 'opacity-55 saturate-50'"
                 @edit="openEditor(item.groupId, item.control.id)"
                 @logs="openActivity(item.control.id)"
                 @delete="deleteTile(item)"
                 @command="onCommand(item, $event)"
               />
+              <UButton
+                v-if="offAddonForControlType(item.control.type)"
+                icon="i-lucide-power"
+                color="neutral"
+                variant="subtle"
+                block
+                class="mt-1.5 rounded-2xl"
+                :title="`This control is kept and hidden from viewers while ${offAddonForControlType(item.control.type)!.name} is off`"
+                @click="setAddonEnabled(offAddonForControlType(item.control.type)!.id, true)"
+              >
+                Turn on {{ offAddonForControlType(item.control.type)!.name }}
+              </UButton>
             </div>
           </VueDraggable>
         </div>

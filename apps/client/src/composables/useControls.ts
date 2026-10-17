@@ -1,4 +1,5 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
+import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useIntiface } from '@renderer/composables/useIntiface'
 import { resolvePatternRefs } from '@renderer/composables/useIntifacePatterns'
@@ -79,6 +80,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { isAvailable: openShockAvailable, hubsOffline } = useOpenShock()
   const { isAvailable: intifaceAvailable, devices: intifaceDevices } = useIntiface()
   const { getPreset } = usePresets()
+  const { offAddonForControlType } = useAddons()
 
   // The active profile's rules for each viewer group, by control id then group id. Groups that
   // were deleted are left out.
@@ -112,10 +114,13 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
         // as long as at least one of them is still present. Other control types never depend on an
         // external service, so they're always available.
         // A shocker control whose hubs are all offline is unavailable too, with its own reason.
-        ...(control.type === 'open-shock-shocker' && openShockAvailable.value && hubsOffline(control.shockers)
-          ? { unavailableReason: 'Hub offline' }
-          : {}),
-        unavailable:
+        // So is a control whose add-on is off (it's also left out of visibleControls, see below).
+        ...(offAddonForControlType(control.type)
+          ? { unavailableReason: `${offAddonForControlType(control.type)!.name} is off` }
+          : control.type === 'open-shock-shocker' && openShockAvailable.value && hubsOffline(control.shockers)
+            ? { unavailableReason: 'Hub offline' }
+            : {}),
+        unavailable: !!offAddonForControlType(control.type) || (
           control.type === 'open-shock-shocker'
             ? !openShockAvailable.value || hubsOffline(control.shockers)
             : control.type === 'intiface-toy' || control.type === 'intiface-pattern'
@@ -125,13 +130,18 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
                 )
               : control.type === 'preset'
                 ? !getPreset(control.presetId)
-                : false
+                : false)
       }))
     }))
   })
 
+  // What viewers get. A control whose add-on is off is kept, but viewers don't see it until it's
+  // back on. The server policy still gets it, as unavailable, so a command already on its way is
+  // dropped rather than accepted as an unknown control.
   const visibleControls = computed((): ControlGroup[] => {
-    return controls.value.filter((group) => !group.hidden)
+    return controls.value
+      .filter((group) => !group.hidden)
+      .map((group) => ({ ...group, controls: group.controls.filter((control) => !offAddonForControlType(control.type)) }))
   })
 
   const controlsMap = computed<Map<string, Map<string, ControlType>>>(() => {
