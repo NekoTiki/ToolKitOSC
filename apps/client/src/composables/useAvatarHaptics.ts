@@ -20,7 +20,7 @@ import { computed, ref, toRaw, watch } from 'vue'
 
 // Module-scope singletons, shared by the Haptics page and its source editor.
 const settings = ref<HapticsSettings | null>(null)
-const state = ref<HapticsState>({ avatarId: null, zones: [], outputs: [] })
+const state = ref<HapticsState>({ avatarId: null, zones: [], outputs: [], ogbHint: false })
 // Which setup the page edits: the one for every avatar, or the worn avatar's own.
 const scope = ref<'global' | 'avatar'>('global')
 

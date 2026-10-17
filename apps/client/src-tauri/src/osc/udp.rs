@@ -65,6 +65,9 @@ pub(super) enum Origin {
 pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Origin) {
     let osc_msg = codec::decode_message(&raw);
     let state = app.state::<AppState>();
+    if origin == Origin::Live {
+        crate::haptics::osc_alive(app);
+    }
 
     let (is_duplicate, previous) = {
         let mut messages = state.messages.lock().unwrap();
