@@ -30,6 +30,8 @@ const items = computed<RailItem[]>(() => [
   { key: 'presets', label: 'Presets', icon: 'i-lucide-layers', to: '/presets' },
   // Toy patterns come with the Intiface toys add-on.
   ...(isOn('intiface') ? [{ key: 'patterns', label: 'Patterns', icon: 'i-lucide-audio-waveform', to: '/patterns', addon: true }] : []),
+  // So do avatar haptics, an add-on of their own.
+  ...(isOn('haptics') ? [{ key: 'haptics', label: 'Haptics', icon: 'i-lucide-hand-heart', to: '/haptics', addon: true }] : []),
   { key: 'automations', label: 'Automations', icon: 'i-lucide-workflow', to: '/automations' },
   { key: 'profiles', label: 'Profiles', icon: 'i-lucide-lock', to: '/profiles' },
   { key: 'viewers', label: 'Viewers', icon: 'i-lucide-users', to: '/viewers', badge: uniqueClientCount.value },
@@ -50,28 +52,31 @@ const select = (item: RailItem): void => void router.push(item.to)
 <template>
   <nav
     aria-label="Pages"
-    class="flex min-h-0 w-17 shrink-0 flex-col gap-1 overflow-y-auto border-r border-default p-2"
+    class="flex min-h-0 w-17 shrink-0 flex-col border-r border-default"
   >
-    <RailButton
-      v-for="item in items"
-      :key="item.key"
-      :icon="item.icon"
-      :label="item.label"
-      :active="isActive(item)"
-      :badge="item.badge"
-      :busy="item.busy"
-      :alert="item.alert"
-      :addon="item.addon"
-      @click="select(item)"
-    />
+    <!-- The pages scroll when they don't fit, without a scrollbar; Settings stays at the bottom. -->
+    <div class="no-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+      <RailButton
+        v-for="item in items"
+        :key="item.key"
+        :icon="item.icon"
+        :label="item.label"
+        :active="isActive(item)"
+        :badge="item.badge"
+        :busy="item.busy"
+        :alert="item.alert"
+        :addon="item.addon"
+        @click="select(item)"
+      />
+    </div>
 
-    <div class="flex-1" />
-
-    <RailButton
-      :icon="settings.icon"
-      :label="settings.label"
-      :active="isActive(settings)"
-      @click="select(settings)"
-    />
+    <div class="shrink-0 p-2 pt-1">
+      <RailButton
+        :icon="settings.icon"
+        :label="settings.label"
+        :active="isActive(settings)"
+        @click="select(settings)"
+      />
+    </div>
   </nav>
 </template>

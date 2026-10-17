@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Addon, AddonState } from '@renderer/composables/useAddons'
-import { ADDON_SECTION, useAddons } from '@renderer/composables/useAddons'
+import { ADDON_SETUP, useAddons } from '@renderer/composables/useAddons'
 import { useAddonSwitch } from '@renderer/composables/useAddonSwitch'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useIntiface } from '@renderer/composables/useIntiface'
@@ -60,7 +60,7 @@ const switching = ref<string | null>(null)
 const toggle = async (addon: Addon, enabled: boolean): Promise<void> => {
   switching.value = addon.id
   try {
-    if ((await setAddon(addon, enabled)) && enabled && needsSetup(addon)) void router.push(`/settings/${ADDON_SECTION[addon.id]}`)
+    if ((await setAddon(addon, enabled)) && enabled && needsSetup(addon)) void router.push(ADDON_SETUP[addon.id] ?? '/settings/addons')
   } finally {
     switching.value = null
   }
@@ -159,7 +159,7 @@ const canLaunch = (addon: Addon): boolean =>
           class="flex flex-wrap gap-2"
         >
           <UButton
-            :to="`/settings/${ADDON_SECTION[addon.id]}`"
+            :to="ADDON_SETUP[addon.id] ?? '/settings/addons'"
             icon="i-lucide-settings-2"
             color="neutral"
             variant="subtle"

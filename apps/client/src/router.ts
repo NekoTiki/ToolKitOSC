@@ -45,6 +45,25 @@ export const router = createRouter({
       component: () => import('@renderer/pages/PatternsPage.vue'),
       meta: { addon: 'intiface' }
     },
+    { path: '/haptics', name: 'haptics', component: () => import('@renderer/pages/HapticsPage.vue'), meta: { addon: 'haptics' } },
+    {
+      path: '/haptics/priority',
+      name: 'haptics-priority',
+      component: () => import('@renderer/pages/HapticsPage.vue'),
+      meta: { addon: 'haptics' }
+    },
+    {
+      path: '/haptics/:actuator',
+      name: 'haptics-toy',
+      component: () => import('@renderer/pages/HapticsPage.vue'),
+      meta: { addon: 'haptics' }
+    },
+    {
+      path: '/haptics/:actuator/sources/:index',
+      name: 'haptics-source',
+      component: () => import('@renderer/pages/HapticsPage.vue'),
+      meta: { addon: 'haptics' }
+    },
     { path: '/automations', name: 'automations', component: () => import('@renderer/pages/AutomationsPage.vue') },
     { path: '/automations/new', name: 'automation-new', component: () => import('@renderer/pages/AutomationEditorPage.vue') },
     {

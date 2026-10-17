@@ -9,8 +9,14 @@ export type { Addon, AddonState } from '@renderer/lib/tauri-bridge'
 // off until you turn them on here. Everything they bring to the app (settings sections, control
 // types, automation steps, rail pages) is only there while they're on.
 
-// The Settings section of each add-on (`/settings/<section>`), shown only while it's on.
-export const ADDON_SECTION: Record<string, string> = { openshock: 'openshock', intiface: 'intiface', boards: 'esp32' }
+// Where each add-on is set up: its Settings section (shown only while it's on), or its own page.
+export const ADDON_SETUP: Record<string, string> = {
+  openshock: '/settings/openshock',
+  intiface: '/settings/intiface',
+  boards: '/settings/esp32',
+  // Avatar haptics have no Settings section: they're set up on their own page.
+  haptics: '/haptics'
+}
 
 // Module-scope singletons - every caller shares Rust's state, so turning one on or off is
 // reflected everywhere at once.
