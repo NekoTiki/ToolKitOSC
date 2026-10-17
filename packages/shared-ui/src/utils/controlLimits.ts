@@ -1,5 +1,5 @@
 import type { CommandWithoutIds, ControlLimits, ControlType, ViewerGroupInfo } from '../types/controls'
-import { INTIFACE_PATTERN_OFF_ID, PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS, VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '../types/controls'
+import { BHAPTICS_LAYOUT, INTIFACE_PATTERN_OFF_ID, PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS, VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '../types/controls'
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
@@ -153,6 +153,26 @@ export function sanitizeCommand(control: ControlType, command: CommandWithoutIds
     case 'open-shock-shocker':
     case 'preset':
       return { type: command.type }
+
+    case 'bhaptics': {
+      if (control.type !== 'bhaptics' || (command.value !== 'hold' && command.value !== 'tap')) return null
+      if (!control.positions.includes(command.position)) return null
+
+      const count = BHAPTICS_LAYOUT[command.position].motors
+      const { motors } = command
+
+      if (!Array.isArray(motors) || motors.length > count || !motors.every((m) => Number.isInteger(m) && m >= 0 && m < count)) return null
+      if (command.value === 'tap' && !motors.length) return null
+      if (command.value === 'hold' && !isFiniteNumber(command.holdId)) return null
+
+      // Nothing above the control's own cap or the profile's max is ever played.
+      const level = Math.min(clamp(control.maxIntensity, 0, 1), limitRange(limits).max)
+      const sorted = [...new Set(motors)].sort((a, b) => a - b)
+
+      return command.value === 'tap'
+        ? { type: command.type, value: command.value, position: command.position, motors: sorted, level }
+        : { type: command.type, value: command.value, position: command.position, motors: sorted, holdId: command.holdId, start: command.start === true, level }
+    }
 
     default:
       return null

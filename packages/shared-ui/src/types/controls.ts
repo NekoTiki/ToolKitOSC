@@ -15,6 +15,7 @@ export type ControlTypes =
   | 'intiface-toy'
   | 'intiface-pattern'
   | 'preset'
+  | 'bhaptics'
 
 // Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
 export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -39,7 +40,8 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   'open-shock-shocker': 'Shocker',
   'intiface-toy': 'Toy',
   'intiface-pattern': 'Toy Pattern',
-  preset: 'Preset'
+  preset: 'Preset',
+  bhaptics: 'bHaptics'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
@@ -56,7 +58,9 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   'intiface-pattern': 'warning',
   // Reuses 'boolean-group''s 'secondary' - same reasoning, every semantic color is already spoken
   // for by something functionally closer to it than anything left over.
-  preset: 'secondary'
+  preset: 'secondary',
+  // A body to touch, like the toy it shares a color with.
+  bhaptics: 'success'
 }
 
 // Every control type this build of shared-ui's Control.vue can render - derived from
@@ -309,6 +313,58 @@ export interface PresetControl extends BaseControl {
   presetId: string
 }
 
+// A place on the body bHaptics Player drives, named as Player names it (see the client's
+// src-tauri/src/bhaptics/model.rs).
+export type BhapticsPosition =
+  | 'Head'
+  | 'VestFront'
+  | 'VestBack'
+  | 'ForearmL'
+  | 'ForearmR'
+  | 'HandL'
+  | 'HandR'
+  | 'GloveL'
+  | 'GloveR'
+  | 'FootL'
+  | 'FootR'
+
+// How each position's motors are laid out, numbered left to right, top to bottom, as you'd see them
+// facing the wearer (or from behind, for the back).
+export const BHAPTICS_LAYOUT: Record<BhapticsPosition, { motors: number; columns: number; label: string }> = {
+  Head: { motors: 6, columns: 6, label: 'Head' },
+  VestFront: { motors: 20, columns: 4, label: 'Front' },
+  VestBack: { motors: 20, columns: 4, label: 'Back' },
+  ForearmL: { motors: 6, columns: 3, label: 'Left arm' },
+  ForearmR: { motors: 6, columns: 3, label: 'Right arm' },
+  HandL: { motors: 3, columns: 3, label: 'Left hand' },
+  HandR: { motors: 3, columns: 3, label: 'Right hand' },
+  GloveL: { motors: 8, columns: 4, label: 'Left glove' },
+  GloveR: { motors: 8, columns: 4, label: 'Right glove' },
+  FootL: { motors: 3, columns: 3, label: 'Left foot' },
+  FootR: { motors: 3, columns: 3, label: 'Right foot' }
+}
+
+// A body on the share page: viewers hold and drag across the motors of `positions` (a vest's front
+// and back, say) and the wearer feels it there. Every hold, tap and effect plays at most at
+// `maxIntensity`, and the active profile's max for the control applies on top.
+export interface BhapticsControl extends BaseControl {
+  type: 'bhaptics'
+  // The positions the tile switches between, in order.
+  positions: BhapticsPosition[]
+  // 'motors': every motor is a target. 'coarse': blocks of 2×2, easier with a VR pointer. 'side':
+  // the whole position at once.
+  grid: 'motors' | 'coarse' | 'side'
+  // How much the motors next to the one under the finger play too.
+  spread: 'off' | 'soft' | 'wide'
+  maxIntensity: number
+  // How long a quick tap plays.
+  pulseMs: number
+  // A single hold is cut off after this long, and needs a new press.
+  maxHoldMs: number
+}
+
+export const BHAPTICS_HOLD_TICK_MS = 100
+
 export type ControlType =
   | BooleanControl
   | BooleanGroupControl
@@ -320,6 +376,7 @@ export type ControlType =
   | IntifaceToyControl
   | IntifacePatternControl
   | PresetControl
+  | BhapticsControl
 
 export interface BaseControlCommand {
   groupId: string
@@ -381,6 +438,21 @@ export interface PresetControlCommand extends BaseControlCommand {
   type: 'preset'
 }
 
+// 'hold' is sent every BHAPTICS_HOLD_TICK_MS while a viewer presses, with the motors under their
+// finger: each one keeps those motors on for a moment, so a closed tab stops them by itself. An
+// empty `motors` ends the hold, and `start` marks its first message (the only one logged). 'tap' plays
+// `motors` once, for the control's pulse length. `level` (0-1) is filled in by sanitizeCommand: the
+// highest the control and the profile allow.
+export interface BhapticsControlCommand extends BaseControlCommand {
+  type: 'bhaptics'
+  value: 'hold' | 'tap'
+  position: BhapticsPosition
+  motors: number[]
+  holdId?: number
+  start?: boolean
+  level?: number
+}
+
 export type ControlCommand =
   | BooleanControlCommand
   | BooleanGroupControlCommand
@@ -392,6 +464,7 @@ export type ControlCommand =
   | IntifaceToyControlCommand
   | IntifacePatternControlCommand
   | PresetControlCommand
+  | BhapticsControlCommand
 
 export type CommandWithoutIds =
   | Omit<BooleanControlCommand, 'groupId' | 'controlId'>
@@ -404,6 +477,7 @@ export type CommandWithoutIds =
   | Omit<IntifaceToyControlCommand, 'groupId' | 'controlId'>
   | Omit<IntifacePatternControlCommand, 'groupId' | 'controlId'>
   | Omit<PresetControlCommand, 'groupId' | 'controlId'>
+  | Omit<BhapticsControlCommand, 'groupId' | 'controlId'>
 
 export interface ControlGroup {
   id: string

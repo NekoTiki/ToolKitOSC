@@ -274,8 +274,11 @@ export default defineWebSocketHandler({
           data.message = { ...data.message, ...command }
         }
 
-        // Live values while a viewer records a pattern aren't activations of their own.
-        const live = data.message.type === 'intiface-pattern' && data.message.value === VIEWER_LIVE_ID
+        // Live values while a viewer records a pattern aren't activations of their own, and neither
+        // is a bHaptics hold after its first message.
+        const live =
+          (data.message.type === 'intiface-pattern' && data.message.value === VIEWER_LIVE_ID) ||
+          (data.message.type === 'bhaptics' && data.message.value === 'hold' && data.message.start !== true)
 
         if (!live) scheduleControlActivation(roomId!, data.message.groupId, data.message.controlId, data.message.type)
       } else {

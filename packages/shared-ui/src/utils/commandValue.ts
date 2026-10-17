@@ -65,6 +65,11 @@ export const describeCommand = (control: ControlType | undefined, type: ControlT
 
     case 'preset':
       return 'applied it'
+
+    case 'bhaptics':
+      if (value === 'hold') return 'drew on it'
+      if (value === 'tap') return 'tapped it'
+      break
   }
 
   return value === undefined ? 'used it' : `set to ${formatCommandValue(value)}`

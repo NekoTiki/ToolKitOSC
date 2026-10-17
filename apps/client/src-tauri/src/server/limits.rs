@@ -5,7 +5,11 @@
 //!
 //! Controls and commands stay JSON (`serde_json::Value`), as they arrive: every control type
 //! passes through without a Rust copy of its shape.
+use std::collections::BTreeSet;
+
 use serde_json::{json, Map, Value};
+
+use crate::bhaptics::model::Position;
 
 pub const OFF_ID: &str = "off";
 pub const VIEWER_PATTERN_ID: &str = "viewer";
@@ -215,6 +219,34 @@ pub fn sanitize_command(control: &Value, command: &Value) -> Option<Value> {
             (allowed && !is_option_disabled(limits, &json!(id))).then(|| json!({ "type": kind, "value": id }))
         }
         "open-shock-shocker" | "preset" => Some(json!({ "type": kind })),
+        "bhaptics" => {
+            let action = value?.as_str()?;
+            if action != "hold" && action != "tap" {
+                return None;
+            }
+            let position_name = command.get("position")?.as_str()?;
+            let offered = control.get("positions")?.as_array()?.iter().any(|p| p.as_str() == Some(position_name));
+            let position: Position = serde_json::from_value(json!(position_name)).ok().filter(|_| offered)?;
+            let count = position.motors();
+            let list = command.get("motors")?.as_array()?;
+            if list.len() > count {
+                return None;
+            }
+            let motors: Option<BTreeSet<usize>> = list.iter().map(|m| index(Some(m)).filter(|m| *m < count)).collect();
+            let motors: Vec<usize> = motors?.into_iter().collect();
+            if action == "tap" && motors.is_empty() {
+                return None;
+            }
+            // Nothing above the control's own cap or the profile's max is ever played.
+            let cap = number(control.get("maxIntensity")).map(|cap| clamp(cap, 0.0, 1.0)).unwrap_or(f64::NAN);
+            let level = cap.min(limit_range(limits).1);
+            if action == "tap" {
+                return Some(json!({ "type": kind, "value": action, "position": position_name, "motors": motors, "level": level }));
+            }
+            let hold_id = number(command.get("holdId"))?;
+            let start = command.get("start").and_then(Value::as_bool).unwrap_or(false);
+            Some(json!({ "type": kind, "value": action, "position": position_name, "motors": motors, "holdId": hold_id, "start": start, "level": level }))
+        }
         _ => None
     }
 }

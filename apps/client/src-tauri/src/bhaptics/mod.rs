@@ -10,6 +10,7 @@
 //! `TKOSC/bHaptics` (bool) turns avatar touch on and off from your expression menu, and follows
 //! the switch in the app.
 mod arbiter;
+pub mod control;
 mod launch;
 mod link;
 pub mod model;
@@ -98,7 +99,9 @@ pub struct Bhaptics {
     /// What was sent lately, for Copy diagnostics.
     history: Mutex<VecDeque<(Instant, String)>>,
     /// Test motors is walking this position.
-    testing: Mutex<Option<(Position, tauri::async_runtime::JoinHandle<()>)>>
+    testing: Mutex<Option<(Position, tauri::async_runtime::JoinHandle<()>)>>,
+    /// Viewers' holds going on now (see `control`).
+    holds: Mutex<std::collections::HashMap<String, control::Hold>>
 }
 
 fn bhaptics(app: &AppHandle) -> &Bhaptics {
@@ -491,6 +494,7 @@ pub fn set_simulated(app: &AppHandle, simulated: bool) -> Result<(), String> {
 /// Every motor stops now: what's asked is dropped, touch lets go, and Player turns everything off.
 fn stop_all(app: &AppHandle) {
     stop_test(app);
+    bhaptics(app).holds.lock().unwrap().clear();
     bhaptics(app).leases.lock().unwrap().clear();
     bhaptics(app).arbiter.lock().unwrap().clear();
     send(app, &[Submit::TurnOffAll]);
@@ -539,7 +543,7 @@ impl crate::addons::Addon for Addon {
             // Not tried on a real vest yet: motor order and effects may still change.
             badge: Some("beta"),
             needs: &[],
-            control_types: &[],
+            control_types: &["bhaptics"],
             automation_kinds: &[],
             pages: &[]
         }

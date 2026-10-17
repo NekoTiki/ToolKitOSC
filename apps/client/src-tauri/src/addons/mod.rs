@@ -422,6 +422,7 @@ mod tests {
         assert_eq!(find_control_type(real(), "open-shock-shocker").map(|m| m.id), Some("openshock"));
         assert_eq!(find_control_type(real(), "intiface-toy").map(|m| m.id), Some("intiface"));
         assert_eq!(find_control_type(real(), "intiface-pattern").map(|m| m.id), Some("intiface"));
+        assert_eq!(find_control_type(real(), "bhaptics").map(|m| m.id), Some("bhaptics"));
         assert!(find_control_type(real(), "slider").is_none());
         assert_eq!(find_automation_kind(real(), "board-output").map(|m| m.id), Some("boards"));
         assert_eq!(find_automation_kind(real(), "leash-enabled").map(|m| m.id), Some("leash"));

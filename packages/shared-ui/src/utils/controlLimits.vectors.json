@@ -267,5 +267,59 @@
     "control": { "id": "c", "name": "C", "type": "preset", "presetId": "p" },
     "command": { "type": "preset" },
     "expected": { "type": "preset" }
+  },
+  {
+    "name": "bhaptics hold: motors sorted once, capped at the control's intensity",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "hold", "position": "VestBack", "motors": [5, 1, 5], "holdId": 7, "start": true, "level": 1, "extra": "x" },
+    "expected": { "type": "bhaptics", "value": "hold", "position": "VestBack", "motors": [1, 5], "holdId": 7, "start": true, "level": 0.6 }
+  },
+  {
+    "name": "bhaptics hold: an empty list ends it, and the profile's max applies",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000, "limits": { "max": 0.5 } },
+    "command": { "type": "bhaptics", "value": "hold", "position": "VestFront", "motors": [], "holdId": 7 },
+    "expected": { "type": "bhaptics", "value": "hold", "position": "VestFront", "motors": [], "holdId": 7, "start": false, "level": 0.5 }
+  },
+  {
+    "name": "bhaptics tap",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "tap", "position": "VestFront", "motors": [19] },
+    "expected": { "type": "bhaptics", "value": "tap", "position": "VestFront", "motors": [19], "level": 0.6 }
+  },
+  {
+    "name": "bhaptics drops a position the tile doesn't offer",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "tap", "position": "Head", "motors": [0] },
+    "expected": null
+  },
+  {
+    "name": "bhaptics drops a motor that isn't there",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "tap", "position": "VestFront", "motors": [20] },
+    "expected": null
+  },
+  {
+    "name": "bhaptics drops a fractional motor",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "hold", "position": "VestFront", "motors": [1.5], "holdId": 1 },
+    "expected": null
+  },
+  {
+    "name": "bhaptics drops an empty tap",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "tap", "position": "VestFront", "motors": [] },
+    "expected": null
+  },
+  {
+    "name": "bhaptics drops a hold without an id",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "hold", "position": "VestFront", "motors": [1], "holdId": "x" },
+    "expected": null
+  },
+  {
+    "name": "bhaptics drops an unknown action",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
+    "command": { "type": "bhaptics", "value": "shock", "position": "VestFront", "motors": [1] },
+    "expected": null
   }
 ]

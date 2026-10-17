@@ -1,6 +1,7 @@
 import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { useBhaptics } from '@renderer/composables/useBhaptics'
 import { isTouched, useIntiface } from '@renderer/composables/useIntiface'
 import { resolvePatternRefs } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
@@ -9,7 +10,7 @@ import { usePresets } from '@renderer/composables/usePresets'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { CommandWithoutIds, ControlGroup, ControlType, LastUser, ViewerGroupRule } from '@toolkitosc/shared-ui'
-import { useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
+import { useBhapticsControl, useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import type { ComputedRef } from 'vue'
 import { computed, ref, toRaw, watch } from 'vue'
@@ -20,6 +21,7 @@ const controlsList = ref<ControlGroup[]>([])
 // watches in useWebsocketHost.ts pass it on to the share page.
 api.onToyValue(({ controlId, value }) => useIntifaceControl().setValue(controlId, value))
 api.onShockValue(({ controlId, value }) => useOpenShockControl().setValue(controlId, value))
+api.onBhapticsState(({ playing, touched }) => useBhapticsControl().setState({ playing, touched }))
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
 
 // One-off migration: 'intiface-vibrator' (with a `vibrators` field) was renamed to 'intiface-toy'
@@ -81,6 +83,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { isAvailable: intifaceAvailable, devices: intifaceDevices } = useIntiface()
   const { getPreset } = usePresets()
   const { offAddonForControlType } = useAddons()
+  const { state: bhapticsState } = useBhaptics()
 
   // The active profile's rules for each viewer group, by control id then group id. Groups that
   // were deleted are left out.
@@ -132,7 +135,9 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
                 )
               : control.type === 'preset'
                 ? !getPreset(control.presetId)
-                : false)
+                : control.type === 'bhaptics'
+                  ? bhapticsState.value.status !== 'connected'
+                  : false)
       }))
     }))
   })

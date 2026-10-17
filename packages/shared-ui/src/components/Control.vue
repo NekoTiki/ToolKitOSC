@@ -2,6 +2,7 @@
 import { computed, provide } from 'vue'
 
 import type { CommandWithoutIds, ControlLimits, ControlType, LastUser, ViewerGroupInfo } from '../types/controls'
+import ControlBhaptics from './ControlBhaptics.vue'
 import ControlBoolean from './ControlBoolean.vue'
 import ControlBooleanEnum from './ControlBooleanEnum.vue'
 import ControlBooleanGroup from './ControlBooleanGroup.vue'
@@ -54,7 +55,8 @@ const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
   'open-shock-shocker': "OpenShock isn't set up",
   'intiface-toy': 'Intiface or its toys are offline',
   'intiface-pattern': 'Intiface or its toys are offline',
-  preset: 'This preset no longer exists'
+  preset: 'This preset no longer exists',
+  bhaptics: "bHaptics Player isn't connected"
 }
 
 const unavailableReason = computed(
@@ -174,6 +176,12 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :title="control.name"
       :icon="control.icon"
       @run="$emit('command', { type: 'preset' })"
+    />
+    <control-bhaptics
+      v-else-if="control.type === 'bhaptics'"
+      :control="control"
+      :limits="limits"
+      @command="$emit('command', $event)"
     />
 
     <div
