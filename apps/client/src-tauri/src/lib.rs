@@ -1,6 +1,7 @@
 mod addons;
 mod app;
 mod automations;
+mod bhaptics;
 mod avatar;
 mod boards;
 mod controls;
@@ -183,7 +184,13 @@ pub fn run() {
             leash::commands::leash_settings,
             leash::commands::leash_save,
             leash::commands::leash_state,
-            leash::commands::leash_test_pull
+            leash::commands::leash_test_pull,
+            // bHaptics
+            bhaptics::commands::bhaptics_settings,
+            bhaptics::commands::bhaptics_save,
+            bhaptics::commands::bhaptics_state,
+            bhaptics::commands::bhaptics_launch_player,
+            bhaptics::commands::bhaptics_simulate
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

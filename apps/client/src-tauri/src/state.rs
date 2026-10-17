@@ -9,6 +9,7 @@ use vrchat_osc::VRChatOSC;
 
 use crate::addons::Addons;
 use crate::automations::Automations;
+use crate::bhaptics::Bhaptics;
 use crate::boards::Boards;
 use crate::haptics::Haptics;
 use crate::osc::cache::CacheThrottle;
@@ -77,7 +78,9 @@ pub struct AppState {
     /// Avatar contacts and the toys they drive (see `haptics`).
     pub haptics: Haptics,
     /// Avatar leash pulls and the movement they send (see `leash`).
-    pub leash: Leash
+    pub leash: Leash,
+    /// bHaptics Player's connection and what each motor plays (see `bhaptics`).
+    pub bhaptics: Bhaptics
 }
 
 impl Default for AppState {
@@ -104,7 +107,8 @@ impl Default for AppState {
             patterns: Patterns::default(),
             saved_patterns: Saved::default(),
             haptics: Haptics::default(),
-            leash: Leash::default()
+            leash: Leash::default(),
+            bhaptics: Bhaptics::default()
         }
     }
 }
