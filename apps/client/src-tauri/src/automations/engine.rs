@@ -128,7 +128,9 @@ pub enum Effect {
     /// Turns "Leash moves me" on or off.
     Leash(bool),
     /// A bHaptics pulse or effect step.
-    Bhaptics(Action)
+    Bhaptics(Action),
+    /// An OWO sensation step.
+    Owo(Action)
 }
 
 #[derive(Default)]
@@ -366,6 +368,7 @@ impl State {
             },
             Action::LeashEnabled { enabled } => effects.push(Effect::Leash(*enabled)),
             Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => effects.push(Effect::Bhaptics(action.clone())),
+            Action::OwoSensation { .. } => effects.push(Effect::Owo(action.clone())),
             Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => {}
         }
     }
