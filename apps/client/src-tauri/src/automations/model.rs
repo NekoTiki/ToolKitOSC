@@ -272,6 +272,14 @@ pub enum Action {
         positions: Vec<crate::bhaptics::model::Position>,
         /// 0–1.
         intensity: f64
+    },
+    /// Plays one of the built-in OWO sensations on `muscles`.
+    #[serde(rename_all = "camelCase")]
+    OwoSensation {
+        sensation: String,
+        muscles: Vec<crate::owo::model::Muscle>,
+        /// 0–1.
+        intensity: f64
     }
 }
 
@@ -676,6 +684,17 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
                 return Err("The intensity must be within 0–100 %.".into());
             }
         }
+        Action::OwoSensation { sensation, muscles, intensity } => {
+            if !crate::owo::sensations::exists(sensation) {
+                return Err("Pick a sensation.".into());
+            }
+            if muscles.is_empty() {
+                return Err("Pick where it plays.".into());
+            }
+            if !(0.0..=1.0).contains(intensity) {
+                return Err("The intensity must be within 0–100 %.".into());
+            }
+        }
         Action::Chatbox { text } => {
             if text.trim().is_empty() {
                 return Err("Write the chatbox message.".into());
@@ -926,6 +945,18 @@ mod tests {
         assert_eq!(chatbox_text("Lamp", BoardNote::On), "Lamp activated");
         assert_eq!(chatbox_text("Lamp", BoardNote::Off), "Lamp turned off");
         assert_eq!(chatbox_text(&"x".repeat(200), BoardNote::On).chars().count(), CHATBOX_MAX);
+    }
+
+    #[test]
+    fn owo_steps_read_as_the_webview_writes_them() {
+        use crate::owo::model::Muscle;
+        let step: Step = serde_json::from_str(r#"{"kind":"owo-sensation","sensation":"pulse","muscles":["LumbarR","LumbarL"],"intensity":0.3}"#).unwrap();
+        assert_eq!(step.action, Action::OwoSensation { sensation: "pulse".into(), muscles: vec![Muscle::LumbarR, Muscle::LumbarL], intensity: 0.3 });
+        assert!(validate_step(&step, Runs::Moment, None).is_ok());
+        let step: Step = serde_json::from_str(r#"{"kind":"owo-sensation","sensation":"explode","muscles":["ArmL"],"intensity":0.3}"#).unwrap();
+        assert!(validate_step(&step, Runs::Moment, None).is_err());
+        let step: Step = serde_json::from_str(r#"{"kind":"owo-sensation","sensation":"tap","muscles":[],"intensity":0.3}"#).unwrap();
+        assert!(validate_step(&step, Runs::Moment, None).is_err());
     }
 
     #[test]

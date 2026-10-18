@@ -58,6 +58,7 @@ fn addon_off(app: &AppHandle, action: &Action) -> Option<&'static str> {
         Action::LeashEnabled { .. } => crate::addons::owner_of_automation_kind("leash-enabled"),
         Action::BhapticsPulse { .. } => crate::addons::owner_of_automation_kind("bhaptics-pulse"),
         Action::BhapticsEffect { .. } => crate::addons::owner_of_automation_kind("bhaptics-effect"),
+        Action::OwoSensation { .. } => crate::addons::owner_of_automation_kind("owo-sensation"),
         Action::Control { control_type, .. } => crate::addons::owner_of_control_type(control_type),
         _ => None
     };
@@ -113,6 +114,8 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
             Effect::Leash(enabled) => crate::leash::set_enabled(app, enabled),
             Effect::Bhaptics(_) if !crate::addons::is_on(app, "bhaptics") => {}
             Effect::Bhaptics(action) => crate::bhaptics::run_step(app, &action),
+            Effect::Owo(_) if !crate::addons::is_on(app, "owo") => {}
+            Effect::Owo(action) => crate::owo::run_step(app, &action),
             Effect::Parameter { address, value_type, value } => {
                 if let Err(err) = crate::osc::send(&app.state::<AppState>(), &parameter_command(&address, value_type, value)) {
                     tracing::debug!("Couldn't set {address}: {err}");
@@ -142,6 +145,7 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                     Action::LeashEnabled { .. } => "Leash on or off",
                     Action::BhapticsPulse { .. } => "bHaptics pulse",
                     Action::BhapticsEffect { .. } => "bHaptics effect",
+                    Action::OwoSensation { .. } => "OWO sensation",
                     _ => "Control"
                 };
                 tracing::info!("Automation {automation_id} skipped a step: {addon} is off");
@@ -269,6 +273,7 @@ fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result
         }
         Action::LeashEnabled { enabled } => Ok((Effect::Leash(*enabled), None)),
         Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => Ok((Effect::Bhaptics(action.clone()), None)),
+        Action::OwoSensation { .. } => Ok((Effect::Owo(action.clone()), None)),
         // App actions are handled above.
         Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => Ok((run(Phase::Run), None))
     }

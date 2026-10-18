@@ -16,7 +16,7 @@ import type {
   ParameterValueType
 } from '@renderer/lib/tauri-bridge'
 import type { ControlType, ControlTypes } from '@toolkitosc/shared-ui'
-import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT } from '@toolkitosc/shared-ui'
+import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
 
 // What each kind of "when" and "do" means, for the editor and the list. The backend checks the
 // same rules (src-tauri/src/automations/model.rs `validate`); this only keeps the editor from
@@ -342,6 +342,12 @@ export const STEP_KINDS: Record<
     description: 'Play a heartbeat, rain or a sweep on your gear.',
     icon: 'i-lucide-audio-waveform',
     runs: ['moment']
+  },
+  'owo-sensation': {
+    label: 'OWO sensation',
+    description: 'Fire muscles of your OWO Skin with a tap, pulse, punch or heartbeat.',
+    icon: 'i-lucide-zap',
+    runs: ['moment']
   }
 }
 
@@ -467,6 +473,8 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
       return { kind, position: 'VestFront', motors: [], intensity: 0.6, ms: 1000, delayMs: 0 }
     case 'bhaptics-effect':
       return { kind, effect: 'heartbeat', positions: ['VestFront', 'VestBack'], intensity: 0.6, delayMs: 0 }
+    case 'owo-sensation':
+      return { kind, sensation: 'tap', muscles: ['PectoralR', 'PectoralL'], intensity: 0.3, delayMs: 0 }
     default:
       return { kind, delayMs: 0 }
   }
@@ -688,6 +696,9 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
       break
     case 'bhaptics-effect':
       what = `bHaptics ${BHAPTICS_EFFECTS.find((e) => e.id === step.effect)?.label.toLowerCase() ?? 'effect'}`
+      break
+    case 'owo-sensation':
+      what = `OWO ${OWO_SENSATIONS.find((s) => s.id === step.sensation)?.label.toLowerCase() ?? 'sensation'} at ${Math.round(step.intensity * 100)}%`
       break
     default:
       what = 'stop everything'

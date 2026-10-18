@@ -268,6 +268,16 @@ pub fn play_sensation(app: &AppHandle, id: &str, sensation: &str, muscles: Vec<M
     owo(app).sensations.lock().unwrap().insert(id.to_owned(), (run, task));
 }
 
+/// Runs an OWO automation step. Each gets its own lease, so steps close together overlap rather
+/// than cut each other short.
+pub fn run_step(app: &AppHandle, action: &crate::automations::model::Action) {
+    static STEPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    if let crate::automations::model::Action::OwoSensation { sensation, muscles, intensity } = action {
+        let id = format!("automation:{}", STEPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        play_sensation(app, &id, sensation, muscles.clone(), *intensity, Duration::MAX);
+    }
+}
+
 /// Walks every muscle, one at a time, so you can feel each one is where it should be.
 pub fn test_muscles(app: &AppHandle) -> Result<(), String> {
     if crate::automations::is_paused(app) {
@@ -507,7 +517,7 @@ impl crate::addons::Addon for Addon {
             needs: &[],
             needs_any: &[],
             control_types: &["owo"],
-            automation_kinds: &[],
+            automation_kinds: &["owo-sensation"],
             pages: &[]
         }
     }

@@ -1,7 +1,7 @@
 // Automations - src-tauri/src/automations/.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { BhapticsPosition } from '@toolkitosc/shared-ui'
+import type { BhapticsPosition, OwoMuscle } from '@toolkitosc/shared-ui'
 
 // Automations - mirrors src-tauri/src/automations/model.rs. "When" and "do" are tagged on `kind`
 // so other kinds (app events, chatbox...) can be added next to these.
@@ -136,6 +136,8 @@ export type LeashEnabledAction = { kind: 'leash-enabled'; enabled: boolean }
 // a built-in effect across several. `intensity` is 0-1.
 export type BhapticsPulseAction = { kind: 'bhaptics-pulse'; position: BhapticsPosition; motors: number[]; intensity: number; ms: number }
 export type BhapticsEffectAction = { kind: 'bhaptics-effect'; effect: string; positions: BhapticsPosition[]; intensity: number }
+// The OWO add-on: a built-in sensation (OWO_SENSATIONS id) on some muscles. `intensity` is 0-1.
+export type OwoSensationAction = { kind: 'owo-sensation'; sensation: string; muscles: OwoMuscle[]; intensity: number }
 
 export type AutomationAction =
   | BoardOutputAction
@@ -147,6 +149,7 @@ export type AutomationAction =
   | LeashEnabledAction
   | BhapticsPulseAction
   | BhapticsEffectAction
+  | OwoSensationAction
 
 // The backend asking the app to carry out a step (see useAutomationRunner.ts). `start` and `stop`
 // bracket a hold; `follow` carries the trigger's value, 0-1.
