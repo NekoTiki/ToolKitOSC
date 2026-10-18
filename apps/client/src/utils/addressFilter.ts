@@ -9,6 +9,8 @@ const NOISY_ADDRESS_PREFIXES = [
   'bOSC/',
   'bHapticsOSC_',
   'bHaptics_',
+  'owo_suit_',
+  'owo_intensity',
   'Go/',
   'FT/',
   '_ShockButton',

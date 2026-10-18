@@ -625,7 +625,7 @@ impl crate::addons::Addon for Addon {
             group: "toys",
             pitch: "Shockers your viewers can fire, with the limits you set",
             platforms: &["windows", "linux"],
-            badge: Some("shocks"),
+            badges: &["shocks"],
             needs: &[],
             needs_any: &[],
             control_types: &["open-shock-shocker"],

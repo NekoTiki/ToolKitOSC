@@ -68,6 +68,7 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Ori
     if origin == Origin::Live {
         crate::haptics::osc_alive(app);
         crate::bhaptics::osc_alive(app);
+        crate::owo::osc_alive(app);
     }
 
     let (is_duplicate, previous) = {
@@ -106,6 +107,7 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Ori
         crate::haptics::on_parameter(app, &osc_msg);
         crate::leash::on_parameter(app, &osc_msg);
         crate::bhaptics::on_parameter(app, &osc_msg);
+        crate::owo::on_parameter(app, &osc_msg);
     }
 
     let avatar_id = state.avatar_details.lock().unwrap().as_ref().map(|d| d.id.clone());
@@ -137,6 +139,7 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
     crate::haptics::avatar_changed(app);
     crate::leash::avatar_changed(app);
     crate::bhaptics::avatar_changed(app);
+    crate::owo::avatar_changed(app);
     *state.unresolved_avatar.lock().unwrap() = None;
 
     *state.avatar_details.lock().unwrap() = Some(details.clone());

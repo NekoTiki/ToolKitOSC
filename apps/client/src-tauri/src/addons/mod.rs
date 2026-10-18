@@ -30,8 +30,8 @@ pub struct Manifest {
     /// One line on what it does, shown while it's off.
     pub pitch: &'static str,
     pub platforms: &'static [&'static str],
-    /// A safety note shown as a badge, e.g. `shocks`.
-    pub badge: Option<&'static str>,
+    /// Notes shown as badges: safety (`shocks`, `electrical`) or `beta`.
+    pub badges: &'static [&'static str],
     /// Add-ons it can't work without.
     pub needs: &'static [&'static str],
     /// Add-ons it needs at least one of (avatar haptics: Intiface or bHaptics).
@@ -88,7 +88,7 @@ pub trait Addon: Sync {
 }
 
 /// Every add-on, in the order the Add-ons page lists them.
-static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::bhaptics::Addon, &crate::boards::Addon];
+static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::bhaptics::Addon, &crate::owo::Addon, &crate::boards::Addon];
 
 /// Whether it runs on this OS. One that doesn't is left out everywhere: never listed, offered or
 /// started (bHaptics on Linux, where there's no bHaptics Player).
@@ -375,7 +375,7 @@ mod tests {
             group: "toys",
             pitch: "",
             platforms: &[],
-            badge: None,
+            badges: &[],
             needs,
             needs_any: &[],
             control_types: &[],
@@ -419,6 +419,7 @@ mod tests {
             Addon::manifest(&crate::haptics::Addon),
             Addon::manifest(&crate::leash::Addon),
             Addon::manifest(&crate::bhaptics::Addon),
+            Addon::manifest(&crate::owo::Addon),
             Addon::manifest(&crate::boards::Addon)
         ]
     }

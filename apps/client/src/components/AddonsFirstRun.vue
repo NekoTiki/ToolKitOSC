@@ -82,8 +82,8 @@ const done = async (turnOn: string[]): Promise<void> => {
           </span>
           <span class="text-sm text-muted">{{ addon.pitch }}</span>
           <UBadge
-            v-if="addon.badge === 'shocks'"
-            label="Shocks"
+            v-if="addon.badges.includes('shocks') || addon.badges.includes('electrical')"
+            :label="addon.badges.includes('shocks') ? 'Shocks' : 'Electrical'"
             color="error"
             variant="subtle"
             class="w-fit rounded-full"

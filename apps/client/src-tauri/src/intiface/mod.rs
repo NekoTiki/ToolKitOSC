@@ -432,7 +432,7 @@ impl crate::addons::Addon for Addon {
             group: "toys",
             pitch: "Toys through Intiface Central, with patterns your viewers can play",
             platforms: &["windows", "linux"],
-            badge: None,
+            badges: &[],
             needs: &[],
             needs_any: &[],
             control_types: &["intiface-toy", "intiface-pattern"],

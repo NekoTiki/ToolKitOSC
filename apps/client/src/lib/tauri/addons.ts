@@ -11,8 +11,8 @@ export interface AddonManifest {
   // One line on what it does, shown while it's off.
   pitch: string
   platforms: string[]
-  // A safety note shown as a badge, e.g. 'shocks'.
-  badge: string | null
+  // Notes shown as badges: safety ('shocks', 'electrical') or 'beta'.
+  badges: string[]
   // Add-ons it can't work without.
   needs: string[]
   // Add-ons it needs at least one of (avatar haptics: Intiface toys or bHaptics).

@@ -625,7 +625,7 @@ impl crate::addons::Addon for Addon {
             pitch: "Your bHaptics vest, Tactal and sleeves play avatar touch, through bHaptics Player",
             platforms: &["windows"],
             // Not tried on a real vest yet: motor order and effects may still change.
-            badge: Some("beta"),
+            badges: &["beta"],
             needs: &[],
             needs_any: &[],
             control_types: &["bhaptics"],
