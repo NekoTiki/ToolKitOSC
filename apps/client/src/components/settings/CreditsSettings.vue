@@ -44,6 +44,18 @@ const THANKS = [
     links: [{ label: 'GitHub', url: 'https://github.com/HerpDerpinstine/bHapticsLib' }]
   },
   {
+    name: 'owo-skin-rs',
+    by: 'MrMineO5 · MIT',
+    text: 'Shows how to talk to the OWO app, which the OWO add-on does the same way.',
+    links: [{ label: 'GitHub', url: 'https://github.com/MrMineO5/owo-skin-rs' }]
+  },
+  {
+    name: 'vrc-owo-suit',
+    by: 'shadorki',
+    text: 'The OWO add-on reads the same avatar parameters, so avatars set up for it work as they are.',
+    links: [{ label: 'GitHub', url: 'https://github.com/shadorki/vrc-owo-suit' }]
+  },
+  {
     name: 'OscGoesBrrr',
     by: 'SenkyDragon',
     text: 'Avatar haptics read the same OGB contacts, so avatars set up for it work as they are.',

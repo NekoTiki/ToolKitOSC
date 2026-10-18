@@ -11,6 +11,7 @@ import CreditsSettings from '@renderer/components/settings/CreditsSettings.vue'
 import DataSettings from '@renderer/components/settings/DataSettings.vue'
 import IntifaceSettings from '@renderer/components/settings/IntifaceSettings.vue'
 import OpenShockSettings from '@renderer/components/settings/OpenShockSettings.vue'
+import OwoSettings from '@renderer/components/settings/OwoSettings.vue'
 import SharingSettings from '@renderer/components/settings/SharingSettings.vue'
 import StartupSettings from '@renderer/components/settings/StartupSettings.vue'
 import StopSettings from '@renderer/components/settings/StopSettings.vue'
@@ -49,6 +50,7 @@ const SECTIONS: Section[] = [
   { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings, addon: 'openshock' },
   { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings, addon: 'intiface' },
   { key: 'bhaptics', label: 'bHaptics', description: 'Player and your gear · beta', icon: 'i-lucide-shirt', component: BhapticsSettings, addon: 'bhaptics' },
+  { key: 'owo', label: 'OWO', description: 'The OWO app and your suit · beta', icon: 'i-lucide-zap', component: OwoSettings, addon: 'owo' },
   { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings, addon: 'boards' }
 ]
 
