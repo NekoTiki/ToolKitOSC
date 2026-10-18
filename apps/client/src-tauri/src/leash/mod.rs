@@ -432,6 +432,7 @@ impl crate::addons::Addon for Addon {
             platforms: &["windows", "linux"],
             badge: None,
             needs: &[],
+            needs_any: &[],
             control_types: &[],
             // Its step, and its When.
             automation_kinds: &["leash-enabled", "leash"],

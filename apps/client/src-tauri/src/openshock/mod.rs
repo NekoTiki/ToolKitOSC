@@ -627,6 +627,7 @@ impl crate::addons::Addon for Addon {
             platforms: &["windows", "linux"],
             badge: Some("shocks"),
             needs: &[],
+            needs_any: &[],
             control_types: &["open-shock-shocker"],
             automation_kinds: &[],
             pages: &[]

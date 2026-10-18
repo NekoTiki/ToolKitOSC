@@ -36,7 +36,8 @@ use crate::types::{OscArg, OscCommand, OscMessage};
 use arbiter::{Arbiter, Leases, PRIORITY};
 use model::{Position, TouchSource};
 use protocol::Submit;
-use touch::{Levels, Touch};
+pub use touch::Levels;
+use touch::Touch;
 
 const TICK: Duration = Duration::from_millis(100);
 /// `bhaptics-state` goes out at most this often.
@@ -103,6 +104,8 @@ pub struct Bhaptics {
     testing: Mutex<Option<(Position, tauri::async_runtime::JoinHandle<()>)>>,
     /// Viewers' holds going on now (see `control`).
     holds: Mutex<std::collections::HashMap<String, control::Hold>>,
+    /// What avatar haptics' SPS zones play on your gear (see `crate::haptics`).
+    zones: Mutex<Levels>,
     /// Effects playing now, by who started them.
     effects: Mutex<std::collections::HashMap<String, (u64, tauri::async_runtime::JoinHandle<()>)>>
 }
@@ -218,6 +221,11 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
         return;
     }
     bhaptics(app).touch.lock().unwrap().on_parameter(name, value, Instant::now());
+}
+
+/// Avatar haptics' levels for your gear this tick, from SPS zones. They count as avatar touch.
+pub fn set_zones(app: &AppHandle, levels: Levels) {
+    *bhaptics(app).zones.lock().unwrap() = levels;
 }
 
 /// Another avatar: every motor stops.
@@ -428,11 +436,20 @@ fn tick(app: &AppHandle) {
     send_switch(app, settings.enabled);
     // Stop everything keeps every motor still until you resume.
     let paused = crate::automations::is_paused(app);
-    let touch = if !paused && settings.enabled && settings.touch_source == TouchSource::Toolkitosc {
+    let mut touch = if !paused && settings.enabled && settings.touch_source == TouchSource::Toolkitosc {
         bhaptics(app).touch.lock().unwrap().levels(settings.touch_from, now)
     } else {
         Levels::new()
     };
+    // SPS zones are ours to play whoever reads bHaptics' own touch: Player doesn't know them.
+    if !paused && settings.enabled {
+        for (position, levels) in bhaptics(app).zones.lock().unwrap().iter() {
+            let motors = touch.entry(*position).or_insert_with(|| vec![0.0; position.motors()]);
+            for (motor, level) in motors.iter_mut().zip(levels) {
+                *motor = motor.max(*level);
+            }
+        }
+    }
     let asks = {
         let mut leases = bhaptics(app).leases.lock().unwrap();
         if paused {
@@ -610,6 +627,7 @@ impl crate::addons::Addon for Addon {
             // Not tried on a real vest yet: motor order and effects may still change.
             badge: Some("beta"),
             needs: &[],
+            needs_any: &[],
             control_types: &["bhaptics"],
             automation_kinds: &["bhaptics-pulse", "bhaptics-effect"],
             pages: &[]

@@ -154,7 +154,8 @@ pub fn devices_changed(app: &AppHandle) {
                 actuator_index: actuator.index,
                 actuator_type: actuator.actuator_type,
                 device_name: device.name.clone(),
-                actuator_description: actuator.description
+                actuator_description: actuator.description,
+                bhaptics: None
             })
         })
         .collect();
@@ -210,7 +211,7 @@ fn tick(app: &AppHandle) {
         outputs
             .iter()
             .zip(&levels)
-            .filter(|(output, _)| !output.sources.is_empty())
+            .filter(|(output, _)| !output.sources.is_empty() && output.actuator.bhaptics.is_none())
             .map(|(output, level)| crate::toys::Touch {
                 actuator: crate::toys::ActuatorRef {
                     device_index: output.actuator.device_index,
@@ -225,7 +226,21 @@ fn tick(app: &AppHandle) {
         threshold: settings.priority.threshold.clamp(0.0, 1.0),
         grace: Duration::from_millis(settings.priority.grace_ms)
     };
-    let strongest = touches.iter().map(|touch| touch.level).fold(0.0, f64::max);
+    // Parts of your bHaptics gear, merged per motor.
+    let mut vest = crate::bhaptics::Levels::new();
+    if !crate::automations::is_paused(app) {
+        for (output, level) in outputs.iter().zip(&levels) {
+            let Some(target) = output.actuator.bhaptics.filter(|_| !output.sources.is_empty()) else {
+                continue;
+            };
+            let motors = vest.entry(target.position).or_insert_with(|| vec![0.0; target.position.motors()]);
+            for (motor, value) in motors.iter_mut().zip(target.levels(level.level, output.max_strength.clamp(0.0, 1.0))) {
+                *motor = motor.max(value);
+            }
+        }
+    }
+    let strongest = touches.iter().map(|touch| touch.level).chain(levels.iter().filter(|l| l.bhaptics.is_some()).map(|l| l.level)).fold(0.0, f64::max);
+    crate::bhaptics::set_zones(app, vest);
     crate::toys::set_touch(app, touches, priority);
     send_level(app, strongest);
 
@@ -340,13 +355,15 @@ fn stop(app: &AppHandle) {
     haptics(app).levels.lock().unwrap().clear();
     send_app_enabled(app, false);
     *haptics(app).switch_sent.lock().unwrap() = None;
-    // Touch lets go of every toy.
+    // Touch lets go of every toy, and of your bHaptics gear.
     crate::toys::set_touch(app, Vec::new(), crate::toys::Priority { threshold: 1.0, grace: Duration::ZERO });
+    crate::bhaptics::set_zones(app, crate::bhaptics::Levels::new());
     emit_view(app, true);
     emit_touched(app);
 }
 
-/// Avatar haptics as an add-on (see `crate::addons`). It drives Intiface toys, so it needs them.
+/// Avatar haptics as an add-on (see `crate::addons`). It drives Intiface toys or bHaptics gear, so it
+/// needs one of them.
 pub struct Addon;
 
 impl crate::addons::Addon for Addon {
@@ -355,10 +372,11 @@ impl crate::addons::Addon for Addon {
             id: "haptics",
             name: "Avatar haptics",
             group: "toys",
-            pitch: "Your toys respond when someone touches your SPS avatar, like OscGoesBrrr",
+            pitch: "Your toys and bHaptics gear respond when someone touches your SPS avatar, like OscGoesBrrr",
             platforms: &["windows", "linux"],
             badge: None,
-            needs: &["intiface"],
+            needs: &[],
+            needs_any: &["intiface", "bhaptics"],
             control_types: &[],
             automation_kinds: &[],
             pages: &["haptics"]
@@ -383,7 +401,7 @@ impl crate::addons::Addon for Addon {
         let zones = haptics(app).engine.lock().unwrap().zones().len();
         match (set_up, zones) {
             (_, _) if !settings.enabled => Status::new(State::Warn, "Turned off"),
-            (false, _) => Status::new(State::Ok, "No toy follows your avatar yet"),
+            (false, _) => Status::new(State::Ok, "Nothing follows your avatar yet"),
             (true, 0) => Status::new(State::Ok, "Waiting for avatar contacts"),
             (true, zones) => Status::new(State::Ok, format!("{zones} zone{} on this avatar", if zones == 1 { "" } else { "s" }))
         }

@@ -15,6 +15,8 @@ export interface AddonManifest {
   badge: string | null
   // Add-ons it can't work without.
   needs: string[]
+  // Add-ons it needs at least one of (avatar haptics: Intiface toys or bHaptics).
+  needsAny: string[]
   controlTypes: string[]
   automationKinds: string[]
   // Rail pages it brings, by route name.

@@ -29,6 +29,9 @@ pub struct ZoneView {
 pub struct OutputLevel {
     pub device_index: u32,
     pub actuator_index: u32,
+    /// Set for a part of your bHaptics gear.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bhaptics: Option<super::model::BhapticsTarget>,
     pub level: f64,
     pub sources: Vec<f64>
 }
@@ -112,6 +115,7 @@ impl Engine {
                 OutputLevel {
                     device_index: output.actuator.device_index,
                     actuator_index: output.actuator.actuator_index,
+                    bhaptics: output.actuator.bhaptics,
                     level: strongest.min(output.max_strength.clamp(0.0, 1.0)),
                     sources
                 }
