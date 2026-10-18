@@ -12,7 +12,7 @@ import { computed, onMounted, ref } from 'vue'
 // Update results (up to date, update available with an Update & Restart action, failures) are
 // shown as toasts by useAppUpdater itself.
 const { checking, installing, pendingUpdate, installPendingUpdate, checkForUpdates } = useAppUpdater()
-const { releases, currentVersion, loading, error, load } = useChangelog()
+const { releases, currentVersion, loading, error, load, betaUpdates, setBetaUpdates } = useChangelog()
 const version = ref<string>()
 
 // A dev build never installs an update (see useAppUpdater.ts), so it doesn't offer the button.
@@ -41,6 +41,13 @@ const accordionValue = computed({
   set: (value: string[]) => (openReleases.value = value)
 })
 
+// Turning it on looks for a beta right away. Turning it off never downgrades: you stay on the beta
+// until a newer stable version comes out.
+function toggleBetaUpdates(value: boolean): void {
+  setBetaUpdates(value)
+  if (value) void checkForUpdates()
+}
+
 const formatDate = (date: string): string =>
   date ? new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : ''
 </script>
@@ -67,6 +74,12 @@ const formatDate = (date: string): string =>
         Check for updates
       </UButton>
     </div>
+    <USwitch
+      :model-value="betaUpdates"
+      label="Beta updates"
+      description="Get early versions before everyone else. They may have bugs."
+      @update:model-value="toggleBetaUpdates(!!$event)"
+    />
   </FormSection>
 
   <FormSection

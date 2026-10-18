@@ -1,6 +1,7 @@
 // The app itself: opening links, the tray, and the SteamVR and VRCX auto-launch integrations -
 // src-tauri/src/app.rs, steamvr/ and vrcx/.
 import { invoke } from '@tauri-apps/api/core'
+import type { Update } from '@tauri-apps/plugin-updater'
 
 // Whether an optional integration (SteamVR, VRCX) can be offered here - mirrors `Availability` in
 // src-tauri/src/app.rs. 'unsupported' means it can't work on this OS at all, 'not-installed'
@@ -20,5 +21,8 @@ export const appApi = {
   vrcxGetAutoLaunch: (): Promise<boolean> => invoke('vrcx_get_auto_launch'),
   setMinimizeToTray: (enabled: boolean): void => {
     void invoke('set_minimize_to_tray', { enabled })
-  }
+  },
+  // The update in one release's latest.json (Beta updates), as `new Update(...)` takes it.
+  updaterCheckTag: (tag: string): Promise<ConstructorParameters<typeof Update>[0] | null> =>
+    invoke('updater_check_tag', { tag })
 }

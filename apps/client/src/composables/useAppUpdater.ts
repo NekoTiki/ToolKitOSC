@@ -1,6 +1,7 @@
+import { TAG_PREFIX, useChangelog } from '@renderer/composables/useChangelog'
+import { api } from '@renderer/lib/tauri-bridge'
 import { router } from '@renderer/router'
-import type { Update } from '@tauri-apps/plugin-updater'
-import { check } from '@tauri-apps/plugin-updater'
+import { check, Update } from '@tauri-apps/plugin-updater'
 import type { Ref, ShallowRef } from 'vue'
 import { nextTick, onMounted, ref, shallowRef } from 'vue'
 
@@ -85,6 +86,19 @@ function installUpdate(update: Update, toast: ReturnType<typeof useToast>): void
     })
 }
 
+// With Beta updates on, the newest client release (beta or stable) instead of the stable-only
+// endpoint in tauri.conf.json. The release list already includes prereleases then.
+async function checkLatest(): Promise<Update | null> {
+  const { betaUpdates, releases, load, error } = useChangelog()
+  if (!betaUpdates.value) return check()
+  await load({ force: true })
+  if (error.value) throw new Error('Could not load the releases')
+  const newest = releases.value[0]
+  if (!newest) return null
+  const metadata = await api.updaterCheckTag(`${TAG_PREFIX}${newest.version}`)
+  return metadata ? new Update(metadata) : null
+}
+
 // Called both unconditionally from App.vue (silent - see useLogRetention.ts for the same
 // call-once-on-mount pattern) and on demand from Settings → About's "Check for updates" button
 // (not silent - that click deserves feedback even when there's nothing to install).
@@ -145,7 +159,7 @@ export function useAppUpdater(): {
 
     let update
     try {
-      update = await check()
+      update = await checkLatest()
     } catch (err) {
       console.error('Failed to check for updates', err)
       if (!options.silent) {

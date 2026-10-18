@@ -7,7 +7,8 @@ import { ref } from 'vue'
 // latest.json points at). Shown in Settings › About, and reached from the "Update available" toast
 // so you can read what changed before restarting.
 const RELEASES_URL = 'https://api.github.com/repos/NekoTiki/ToolKitOSC/releases?per_page=30'
-const TAG_PREFIX = 'client-v'
+export const TAG_PREFIX = 'client-v'
+const BETA_STORAGE_KEY = 'betaUpdates'
 
 export interface ChangelogRelease {
   version: string
@@ -71,9 +72,26 @@ const currentVersion = ref<string>()
 const loading = ref(false)
 const error = ref(false)
 let loaded = false
+// The fetch in flight, so a caller that needs the list (the beta update check) waits for it.
+let inFlight: Promise<void> | undefined
 
-async function load(options: { force?: boolean } = {}): Promise<void> {
-  if (loading.value || (loaded && !options.force)) return
+// Settings › About's Beta updates: prereleases show up here, and update checks include them.
+const betaUpdates = ref(localStorage.getItem(BETA_STORAGE_KEY) === 'true')
+
+function setBetaUpdates(value: boolean): void {
+  betaUpdates.value = value
+  localStorage.setItem(BETA_STORAGE_KEY, String(value))
+  void load({ force: true })
+}
+
+function load(options: { force?: boolean } = {}): Promise<void> {
+  if (inFlight) return inFlight
+  if (loaded && !options.force) return Promise.resolve()
+  inFlight = fetchReleases().finally(() => (inFlight = undefined))
+  return inFlight
+}
+
+async function fetchReleases(): Promise<void> {
   loading.value = true
   error.value = false
 
@@ -85,12 +103,12 @@ async function load(options: { force?: boolean } = {}): Promise<void> {
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`)
     const data = (await response.json()) as GithubRelease[]
 
-    // Prereleases only show up for people already running one.
-    const onPrerelease = parseVersion(version).pre !== ''
+    // Prereleases only show up with Beta updates on, or for people already running one.
+    const showPrereleases = betaUpdates.value || parseVersion(version).pre !== ''
 
     currentVersion.value = version
     releases.value = data
-      .filter((r) => r.tag_name.startsWith(TAG_PREFIX) && !r.draft && (onPrerelease || !r.prerelease))
+      .filter((r) => r.tag_name.startsWith(TAG_PREFIX) && !r.draft && (showPrereleases || !r.prerelease))
       .map((r) => {
         const releaseVersion = r.tag_name.slice(TAG_PREFIX.length)
         return {
@@ -117,6 +135,8 @@ export function useChangelog(): {
   loading: Ref<boolean>
   error: Ref<boolean>
   load: (options?: { force?: boolean }) => Promise<void>
+  betaUpdates: Ref<boolean>
+  setBetaUpdates: (value: boolean) => void
 } {
-  return { releases, currentVersion, loading, error, load }
+  return { releases, currentVersion, loading, error, load, betaUpdates, setBetaUpdates }
 }

@@ -107,6 +107,7 @@ pub fn run() {
             vrcx::commands::vrcx_set_auto_launch,
             vrcx::commands::vrcx_get_auto_launch,
             app::set_minimize_to_tray,
+            app::updater_check_tag,
             // OSC and presets
             osc::commands::send_osc_message,
             osc::commands::ready,
