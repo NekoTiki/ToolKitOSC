@@ -96,7 +96,7 @@ const formatDate = (date: string): string =>
       />
       <span class="grid min-w-0 flex-1 gap-0.5 text-sm">
         <b class="font-semibold text-highlighted">Credits & licenses</b>
-        <small class="text-[13px] text-muted">OpenShock, Intiface, OSCLeash, bHapticsLib, OscGoesBrrr and every open-source library inside the app.</small>
+        <small class="text-[13px] text-muted">OpenShock, Intiface, OSCLeash, bHapticsLib, owo-skin-rs, vrc-owo-suit, OscGoesBrrr and every open-source library inside the app.</small>
       </span>
       <UIcon
         name="i-lucide-chevron-right"

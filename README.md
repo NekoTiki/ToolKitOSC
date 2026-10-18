@@ -198,7 +198,9 @@ the **GNU General Public License v3.0 or later**. See [`LICENSE`](LICENSE) for t
 The avatar leash is based on [OSCLeash](https://github.com/ZenithVal/OSCLeash) by ZenithVal
 (MIT): avatars use its compass prefab, and the app uses its maths and defaults. The bHaptics
 add-on talks to bHaptics Player the way [bHapticsLib](https://github.com/HerpDerpinstine/bHapticsLib)
-by HerpDerpinstine (MIT) does.
+by HerpDerpinstine (MIT) does. The OWO add-on speaks the OWO app's protocol the way
+[owo-skin-rs](https://github.com/MrMineO5/owo-skin-rs) by MrMineO5 (MIT) does, and reads the avatar
+parameters [vrc-owo-suit](https://github.com/shadorki/vrc-owo-suit) by shadorki puts on avatars.
 
 Thanks as well to [OpenShock](https://openshock.org), [Intiface](https://intiface.com) and
 [OscGoesBrrr](https://osc.toys), and to every library the app is built on. Settings > About &
