@@ -15,6 +15,7 @@ import type {
   IntifacePatternControl,
   IntifaceToyControl,
   OpenShockControl,
+  OwoControl,
   PresetControl,
   SliderControl,
   StepEnumControl
@@ -43,7 +44,8 @@ type AnyDraft = Partial<
     Fields<IntifaceToyControl> &
     Fields<IntifacePatternControl> &
     Fields<PresetControl> &
-    Fields<BhapticsControl>
+    Fields<BhapticsControl> &
+    Fields<OwoControl>
 > & {
   type?: ControlType['type']
   inputs?: BooleanGroupControl['inputs'] | BooleanEnumControl['inputs']
@@ -84,6 +86,15 @@ const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
     m.pulseMs = 400
     m.maxHoldMs = 10_000
     m.effects = ['heartbeat']
+  },
+  // Electrical: a shocker's care by default.
+  owo: (m) => {
+    m.muscles = ['PectoralR', 'PectoralL', 'AbdominalR', 'AbdominalL', 'ArmR', 'ArmL', 'DorsalR', 'DorsalL', 'LumbarR', 'LumbarL']
+    m.maxIntensity = 0.3
+    m.maxDurationMs = 500
+    m.sensations = ['tap']
+    m.cooldown = 2000
+    m.signedInOnly = true
   }
 }
 
@@ -104,7 +115,7 @@ export interface ShockerOption {
   value: string
 }
 
-export type EditorErrors = Partial<Record<'name' | 'address' | 'options' | 'inputs' | 'shockers' | 'range' | 'actuators' | 'patterns' | 'preset' | 'positions', string>>
+export type EditorErrors = Partial<Record<'name' | 'address' | 'options' | 'inputs' | 'shockers' | 'range' | 'actuators' | 'patterns' | 'preset' | 'positions' | 'muscles', string>>
 
 export interface ControlEditor {
   model: Ref<AnyDraft>
@@ -254,6 +265,10 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
         break
       case 'bhaptics':
         if (!m.positions?.length) next.positions = 'Pick a device.'
+        break
+      case 'owo':
+        if (!m.muscles?.length) next.muscles = 'Pick at least one muscle.'
+        else if (!m.sensations?.length) next.muscles = 'Pick at least one sensation.'
         break
     }
 

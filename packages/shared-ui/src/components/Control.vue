@@ -10,6 +10,7 @@ import ControlEnum from './ControlEnum.vue'
 import ControlIntifacePattern from './ControlIntifacePattern.vue'
 import ControlIntifaceToy from './ControlIntifaceToy.vue'
 import ControlOpenShock from './ControlOpenShock.vue'
+import ControlOwo from './ControlOwo.vue'
 import ControlPreset from './ControlPreset.vue'
 import ControlSlider from './ControlSlider.vue'
 import ControlStepEnum from './ControlStepEnum.vue'
@@ -39,6 +40,9 @@ type Props = {
   // ControlIntifacePattern.vue), and whether the one playing is theirs.
   patternMaker?: 'allowed' | 'sign-in'
   minePattern?: boolean
+  // Share page: this viewer isn't signed in with Discord, so controls kept to signed-in viewers
+  // are blocked. Absent (the host's own tiles): nothing is.
+  signedOut?: boolean
 }
 
 const props = defineProps<Props>()
@@ -56,7 +60,8 @@ const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
   'intiface-toy': 'Intiface or its toys are offline',
   'intiface-pattern': 'Intiface or its toys are offline',
   preset: 'This preset no longer exists',
-  bhaptics: "bHaptics Player isn't connected"
+  bhaptics: "bHaptics Player isn't connected",
+  owo: "The OWO app isn't connected"
 }
 
 const unavailableReason = computed(
@@ -181,6 +186,13 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       v-else-if="control.type === 'bhaptics'"
       :control="control"
       :limits="limits"
+      @command="$emit('command', $event)"
+    />
+    <control-owo
+      v-else-if="control.type === 'owo'"
+      :control="control"
+      :limits="limits"
+      :signed-out="signedOut"
       @command="$emit('command', $event)"
     />
 

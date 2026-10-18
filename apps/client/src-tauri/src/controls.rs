@@ -24,7 +24,8 @@ pub struct Outcome {
     pub shock: Option<Value>,
     /// The run number of a pattern it started (`pattern-ended` carries it).
     pub pattern_run: Option<u64>,
-    /// It only kept something going (a bHaptics hold): nothing to log, announce or show.
+    /// It only kept something going (a bHaptics hold), or was dropped during an OWO control's
+    /// cooldown: nothing to log, announce or show.
     pub live: bool
 }
 
@@ -129,6 +130,7 @@ pub fn run(app: &AppHandle, control: &Value, command: &Value, viewer_name: Optio
             outcome.pattern_run = run_pattern(app, control, command, control_id, viewer_name);
         }
         "bhaptics" => outcome.live = crate::bhaptics::control::run(app, control, command),
+        "owo" => outcome.live = crate::owo::control::run(app, control, command),
         _ => {}
     }
 

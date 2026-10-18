@@ -3,16 +3,19 @@
 //! muscle is touched (see `touch`), and the tick sends that to the OWO app (see `protocol`,
 //! `link`). It replaces vrc-owo-suit: close that, since ToolKitOSC already has VRChat's OSC.
 //!
-//! Every writer goes through `arbiter`, which merges them into one sensation per tick: a new one
-//! replaces the one playing. Sensations last 0.3 s and the tick sends one every 0.25 s while
-//! something plays, so the suit goes quiet on its own if the app hangs.
+//! Every writer goes through `arbiter`, which merges them into one sensation: a new one replaces
+//! the one playing. It goes out as soon as what plays changes (so viewers' sensations keep their
+//! shape), and again every 0.25 s. Each lasts 0.3 s, so the suit goes quiet on its own if the app
+//! hangs, and a STOP ends it at once when nothing plays anymore.
 //!
 //! `TKOSC/OWO` (bool) turns avatar touch on and off from your expression menu, and follows the
 //! switch in the app.
 mod arbiter;
+pub mod control;
 mod link;
 pub mod model;
 mod protocol;
+pub mod sensations;
 #[cfg(debug_assertions)]
 mod simulator;
 mod store;
@@ -30,13 +33,15 @@ use tokio::time::{interval, MissedTickBehavior};
 
 use crate::state::AppState;
 use crate::types::{OscArg, OscCommand, OscMessage};
-use arbiter::{Arbiter, Leases, PRIORITY};
+use arbiter::{Arbiter, Leases, Pace, PRIORITY};
 use model::{Muscle, Side};
 use protocol::Packet;
 pub use touch::Levels;
 use touch::Touch;
 
-const TICK: Duration = Duration::from_millis(250);
+const TICK: Duration = Duration::from_millis(50);
+/// What plays goes out again this often, even unchanged.
+const RESEND: Duration = Duration::from_millis(250);
 /// How long each sensation lasts, in tenths of a second: a little longer than the tick.
 const SENSATION_TENTHS: u8 = 3;
 /// `owo-state` goes out at most this often.
@@ -95,7 +100,13 @@ pub struct Owo {
     /// The worn avatar's check, by avatar id.
     detected: Mutex<Option<(String, touch::Detected)>>,
     /// Test each muscle is on this muscle.
-    testing: Mutex<Option<(Muscle, tauri::async_runtime::JoinHandle<()>)>>
+    testing: Mutex<Option<(Muscle, tauri::async_runtime::JoinHandle<()>)>>,
+    /// When the last packet went out, and what it played.
+    pace: Mutex<Pace>,
+    /// Sensations playing now, by who started them.
+    sensations: Mutex<std::collections::HashMap<String, (u64, tauri::async_runtime::JoinHandle<()>)>>,
+    /// When each control's cooldown ends (see `control`).
+    cooldowns: Mutex<std::collections::HashMap<String, Instant>>
 }
 
 fn owo(app: &AppHandle) -> &Owo {
@@ -217,6 +228,46 @@ pub fn let_go(app: &AppHandle, id: &str) {
     owo(app).leases.lock().unwrap().remove(id);
 }
 
+/// Plays `sensation` on `muscles` at up to `level`, cut short after `longest`, under `id`: one
+/// already playing under the same id stops first. Held back on a side touch drives, like anything
+/// else asked.
+pub fn play_sensation(app: &AppHandle, id: &str, sensation: &str, muscles: Vec<Muscle>, level: f64, longest: Duration) {
+    if !sensations::exists(sensation) || muscles.is_empty() {
+        return;
+    }
+    static RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let run = RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if let Some((_, old)) = owo(app).sensations.lock().unwrap().remove(id) {
+        old.abort();
+    }
+    let task = {
+        let (app, id, sensation) = (app.clone(), id.to_owned(), sensation.to_owned());
+        let level = level.clamp(0.0, 1.0);
+        tauri::async_runtime::spawn(async move {
+            let started = Instant::now();
+            let mut ticker = interval(TICK);
+            ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                let now = Instant::now();
+                let t = now.duration_since(started);
+                let Some(part) = sensations::level(&sensation, t).filter(|_| t < longest) else {
+                    break;
+                };
+                // Lasts past the next tick, so the sensation doesn't flicker between them.
+                ask(&app, &id, muscles.iter().map(|muscle| (*muscle, part * level)).collect(), now + TICK * 2);
+            }
+            let_go(&app, &id);
+            // Unless another run has taken its place since.
+            let mut playing = owo(&app).sensations.lock().unwrap();
+            if playing.get(&id).is_some_and(|(other, _)| *other == run) {
+                playing.remove(&id);
+            }
+        })
+    };
+    owo(app).sensations.lock().unwrap().insert(id.to_owned(), (run, task));
+}
+
 /// Walks every muscle, one at a time, so you can feel each one is where it should be.
 pub fn test_muscles(app: &AppHandle) -> Result<(), String> {
     if crate::automations::is_paused(app) {
@@ -300,12 +351,11 @@ fn tick(app: &AppHandle) {
         }
         leases.levels(now)
     };
-    let playing: Vec<(Muscle, f64)> = {
-        let mut arbiter = owo(app).arbiter.lock().unwrap();
-        arbiter.tick(&touch, &asks, |muscle| settings.strength(muscle), PRIORITY, now).iter().map(|(m, l)| (*m, *l)).collect()
-    };
-    if let Some(packet) = protocol::sensation(settings.frequency, SENSATION_TENTHS, &playing) {
-        send(app, packet);
+    let playing = owo(app).arbiter.lock().unwrap().tick(&touch, &asks, |muscle| settings.strength(muscle), PRIORITY, now).clone();
+    match owo(app).pace.lock().unwrap().due(&playing, RESEND, now) {
+        Some(arbiter::Send::Play) => send(app, protocol::sensation(settings.frequency, SENSATION_TENTHS, &playing).unwrap_or(Packet::Stop)),
+        Some(arbiter::Send::Stop) => send(app, Packet::Stop),
+        None => {}
     }
     emit_view(app, false);
 }
@@ -403,8 +453,12 @@ pub fn tester_log() -> Vec<simulator::Entry> {
 /// Every muscle stops now: what's asked is dropped, touch lets go, and the OWO app stops what plays.
 fn stop_all(app: &AppHandle) {
     stop_test(app);
+    for (_, (_, task)) in owo(app).sensations.lock().unwrap().drain() {
+        task.abort();
+    }
     owo(app).leases.lock().unwrap().clear();
     owo(app).arbiter.lock().unwrap().clear();
+    owo(app).pace.lock().unwrap().clear();
     send(app, Packet::Stop);
     emit_view(app, true);
 }
@@ -452,7 +506,7 @@ impl crate::addons::Addon for Addon {
             badges: &["electrical", "beta"],
             needs: &[],
             needs_any: &[],
-            control_types: &[],
+            control_types: &["owo"],
             automation_kinds: &[],
             pages: &[]
         }

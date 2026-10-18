@@ -16,6 +16,7 @@ export type ControlTypes =
   | 'intiface-pattern'
   | 'preset'
   | 'bhaptics'
+  | 'owo'
 
 // Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
 export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -41,7 +42,8 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   'intiface-toy': 'Toy',
   'intiface-pattern': 'Toy Pattern',
   preset: 'Preset',
-  bhaptics: 'bHaptics'
+  bhaptics: 'bHaptics',
+  owo: 'OWO'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
@@ -60,7 +62,9 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   // for by something functionally closer to it than anything left over.
   preset: 'secondary',
   // A body to touch, like the toy it shares a color with.
-  bhaptics: 'success'
+  bhaptics: 'success',
+  // Electrical, like the shocker.
+  owo: 'error'
 }
 
 // Every control type this build of shared-ui's Control.vue can render - derived from
@@ -375,6 +379,62 @@ export const BHAPTICS_EFFECTS: { id: string; label: string }[] = [
 
 export const BHAPTICS_HOLD_TICK_MS = 100
 
+// The OWO Skin's muscle groups, as the client's src-tauri/src/owo/model.rs names them, in the order
+// of OWO's protocol: the front first, then the back.
+export type OwoMuscle =
+  | 'PectoralR'
+  | 'PectoralL'
+  | 'AbdominalR'
+  | 'AbdominalL'
+  | 'ArmR'
+  | 'ArmL'
+  | 'DorsalR'
+  | 'DorsalL'
+  | 'LumbarR'
+  | 'LumbarL'
+
+export const OWO_MUSCLES: Record<OwoMuscle, { label: string; short: string; side: 'front' | 'back' }> = {
+  PectoralR: { label: 'Right chest', short: 'Chest R', side: 'front' },
+  PectoralL: { label: 'Left chest', short: 'Chest L', side: 'front' },
+  AbdominalR: { label: 'Right belly', short: 'Belly R', side: 'front' },
+  AbdominalL: { label: 'Left belly', short: 'Belly L', side: 'front' },
+  ArmR: { label: 'Right arm', short: 'Arm R', side: 'front' },
+  ArmL: { label: 'Left arm', short: 'Arm L', side: 'front' },
+  DorsalR: { label: 'Right upper back', short: 'Upper R', side: 'back' },
+  DorsalL: { label: 'Left upper back', short: 'Upper L', side: 'back' },
+  LumbarR: { label: 'Right lower back', short: 'Lower R', side: 'back' },
+  LumbarL: { label: 'Left lower back', short: 'Lower L', side: 'back' }
+}
+
+// The built-in sensations (see the client's src-tauri/src/owo/sensations.rs).
+export const OWO_SENSATIONS: { id: string; label: string }[] = [
+  { id: 'tap', label: 'Tap' },
+  { id: 'pulse', label: 'Pulse' },
+  { id: 'punch', label: 'Punch' },
+  { id: 'heartbeat', label: 'Heartbeat' }
+]
+
+// No viewer tap comes sooner than this after the last one on the same control.
+export const OWO_MIN_COOLDOWN_MS = 2000
+
+// The OWO Skin on the share page: viewers pick muscles and play a sensation there. It's electrical,
+// so it's kept like a shocker: a low cap, a cooldown and signed-in viewers by default. The active
+// profile's max for the control applies on top of `maxIntensity`.
+export interface OwoControl extends BaseControl {
+  type: 'owo'
+  // The muscles viewers can reach. The tile shows the side switch only when both sides have some.
+  muscles: OwoMuscle[]
+  maxIntensity: number
+  // Longer sensations are cut short.
+  maxDurationMs: number
+  // OWO_SENSATIONS ids viewers get a button for.
+  sensations: string[]
+  // At least OWO_MIN_COOLDOWN_MS.
+  cooldown: number
+  // Only viewers signed in with Discord can use it.
+  signedInOnly: boolean
+}
+
 export type ControlType =
   | BooleanControl
   | BooleanGroupControl
@@ -387,6 +447,7 @@ export type ControlType =
   | IntifacePatternControl
   | PresetControl
   | BhapticsControl
+  | OwoControl
 
 export interface BaseControlCommand {
   groupId: string
@@ -465,6 +526,15 @@ export interface BhapticsControlCommand extends BaseControlCommand {
   level?: number
 }
 
+// Plays the sensation `value` (an OWO_SENSATIONS id) on `muscles`. `level` (0-1) is filled in by
+// sanitizeCommand: the highest the control and the profile allow.
+export interface OwoControlCommand extends BaseControlCommand {
+  type: 'owo'
+  value: string
+  muscles: OwoMuscle[]
+  level?: number
+}
+
 export type ControlCommand =
   | BooleanControlCommand
   | BooleanGroupControlCommand
@@ -477,6 +547,7 @@ export type ControlCommand =
   | IntifacePatternControlCommand
   | PresetControlCommand
   | BhapticsControlCommand
+  | OwoControlCommand
 
 export type CommandWithoutIds =
   | Omit<BooleanControlCommand, 'groupId' | 'controlId'>
@@ -490,6 +561,7 @@ export type CommandWithoutIds =
   | Omit<IntifacePatternControlCommand, 'groupId' | 'controlId'>
   | Omit<PresetControlCommand, 'groupId' | 'controlId'>
   | Omit<BhapticsControlCommand, 'groupId' | 'controlId'>
+  | Omit<OwoControlCommand, 'groupId' | 'controlId'>
 
 export interface ControlGroup {
   id: string

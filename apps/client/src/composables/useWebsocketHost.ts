@@ -18,7 +18,7 @@ import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { ClientListEntry, ControlTypes, ViewerGroupsMessage } from '@toolkitosc/shared-ui'
-import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl } from '@toolkitosc/shared-ui'
+import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import type { ComputedRef } from 'vue'
 import { watch } from 'vue'
@@ -143,6 +143,7 @@ export function useWebsocketHost(): {
   const { lastUpdate: intifaceLastUpdate } = useIntifaceControl()
   const { lastUpdate: intifacePatternLastUpdate } = useIntifacePatternControl()
   const { state: bhapticsState } = useBhapticsControl()
+  const { state: owoState } = useOwoControl()
   const { clientType } = useClientType()
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
@@ -366,6 +367,8 @@ export function useWebsocketHost(): {
 
   // Rust sends it only when it changes, at most every 100 ms (see bhaptics/mod.rs).
   watch(bhapticsState, (state) => sendMessage('bhaptics-value-update', state))
+  // The same for the OWO Skin (see owo/mod.rs).
+  watch(owoState, (state) => sendMessage('owo-value-update', state))
 
   watch([selectedPrimary, selectedSecondary], () => sendTheme())
 

@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use serde_json::{json, Map, Value};
 
 use crate::bhaptics::model::Position;
+use crate::owo::model::Muscle;
 
 pub const OFF_ID: &str = "off";
 pub const VIEWER_PATTERN_ID: &str = "viewer";
@@ -251,6 +252,24 @@ pub fn sanitize_command(control: &Value, command: &Value) -> Option<Value> {
             let hold_id = number(command.get("holdId"))?;
             let start = command.get("start").and_then(Value::as_bool).unwrap_or(false);
             Some(json!({ "type": kind, "value": action, "position": position_name, "motors": motors, "holdId": hold_id, "start": start, "level": level }))
+        }
+        "owo" => {
+            let sensation = value?.as_str()?;
+            let offered = control.get("sensations")?.as_array()?.iter().any(|s| s.as_str() == Some(sensation));
+            if !offered || !crate::owo::sensations::exists(sensation) {
+                return None;
+            }
+            let reachable = control.get("muscles")?.as_array()?;
+            let list = command.get("muscles")?.as_array()?;
+            if list.is_empty() || !list.iter().all(|muscle| reachable.contains(muscle)) {
+                return None;
+            }
+            // In OWO's order, each once.
+            let muscles: Vec<Value> = Muscle::ALL.iter().map(|muscle| json!(muscle)).filter(|muscle| list.contains(muscle)).collect();
+            // Nothing above the control's own cap or the profile's max is ever played.
+            let cap = number(control.get("maxIntensity")).map(|cap| clamp(cap, 0.0, 1.0)).unwrap_or(f64::NAN);
+            let level = cap.min(limit_range(limits).1);
+            Some(json!({ "type": kind, "value": sensation, "muscles": muscles, "level": level }))
         }
         _ => None
     }

@@ -8,6 +8,8 @@ import EnumOptionsField from '@renderer/components/control-modal/EnumOptionsFiel
 import IntifaceFields from '@renderer/components/control-modal/IntifaceFields.vue'
 import IntifacePatternFields from '@renderer/components/control-modal/IntifacePatternFields.vue'
 import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.vue'
+import type { OwoOptions } from '@renderer/components/control-modal/OwoFields.vue'
+import OwoFields from '@renderer/components/control-modal/OwoFields.vue'
 import PresetField from '@renderer/components/control-modal/PresetField.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
@@ -111,13 +113,17 @@ const allTypeGroups = computed<{ label: string; items: TypeChoice[] }[]>(() => [
     items: [{ value: 'bhaptics', icon: 'i-lucide-shirt', description: 'Viewers draw on your vest, head or arms · Beta' }]
   },
   {
+    label: 'OWO',
+    items: [{ value: 'owo', icon: 'i-lucide-zap', description: 'Viewers fire a muscle on your OWO Skin · Beta' }]
+  },
+  {
     label: 'Presets',
     items: [{ value: 'preset', icon: 'i-lucide-play', description: 'Apply a saved preset in one tap', disabled: !editor.hasPresets.value, reason: 'Create a preset first' }]
   }
 ])
 
 // Option pickers size themselves from their option count (see shared-ui's controlTileSpan).
-const sizeable = computed(() => !['enum', 'boolean-enum', 'intiface-pattern', 'bhaptics'].includes(model.value.type ?? ''))
+const sizeable = computed(() => !['enum', 'boolean-enum', 'intiface-pattern', 'bhaptics', 'owo'].includes(model.value.type ?? ''))
 
 const tileWidth = computed<'normal' | 'wide'>({
   get: () => (model.value.size === 'wide' ? 'wide' : 'normal'),
@@ -165,6 +171,18 @@ const bhapticsOptions = computed<BhapticsOptions>({
   set: (value) => Object.assign(model.value, value)
 })
 
+const owoOptions = computed<OwoOptions>({
+  get: () => ({
+    muscles: model.value.muscles ?? [],
+    maxIntensity: model.value.maxIntensity ?? 0.3,
+    maxDurationMs: model.value.maxDurationMs ?? 500,
+    sensations: model.value.sensations ?? ['tap'],
+    cooldown: model.value.cooldown ?? 2000,
+    signedInOnly: model.value.signedInOnly ?? true
+  }),
+  set: (value) => Object.assign(model.value, value)
+})
+
 const openShockModes = [
   { label: 'Shock', value: 'Shock' as const },
   { label: 'Vibrate', value: 'Vibrate' as const }
@@ -174,7 +192,7 @@ const openShockModes = [
 // (its options scroll), so the preview is capped at medium.
 const previewDensity = computed(() => (density.value === 'l' ? 'm' : density.value))
 // A bHaptics body keeps its 2×2: it can't be drawn on one row.
-const previewSpan = computed(() => (preview.value.type === 'bhaptics' ? 'l' : controlTileSpan(preview.value) === 's' ? 's' : 'm'))
+const previewSpan = computed(() => (preview.value.type === 'bhaptics' || preview.value.type === 'owo' ? 'l' : controlTileSpan(preview.value) === 's' ? 's' : 'm'))
 
 const preview = computed(() => ({ ...model.value, id: model.value.id ?? 'preview', name: model.value.name || 'Untitled control' }) as ControlType)
 
@@ -304,7 +322,7 @@ onBeforeRouteLeave(async () => {
             </UFormField>
             <UFormField
               label="Tile width"
-              :description="sizeable ? undefined : type === 'bhaptics' ? 'Always 2×2, with room to draw.' : 'Automatic: two cells, or 2×2 above 8 options.'"
+              :description="sizeable ? undefined : type === 'bhaptics' || type === 'owo' ? 'Always 2×2, with room for the body.' : 'Automatic: two cells, or 2×2 above 8 options.'"
             >
               <SegmentedControl
                 v-if="sizeable"
@@ -439,6 +457,13 @@ onBeforeRouteLeave(async () => {
             :error="errors.positions"
           >
             <BhapticsFields v-model="bhapticsOptions" />
+          </UFormField>
+
+          <UFormField
+            v-if="type === 'owo'"
+            :error="errors.muscles"
+          >
+            <OwoFields v-model="owoOptions" />
           </UFormField>
 
           <UFormField

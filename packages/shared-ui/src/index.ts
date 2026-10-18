@@ -12,6 +12,7 @@ export { default as ControlIntifacePattern } from './components/ControlIntifaceP
 export { default as ControlIntifaceToy } from './components/ControlIntifaceToy.vue'
 export { default as ControlOpenShock } from './components/ControlOpenShock.vue'
 export { default as ControlOptions } from './components/ControlOptions.vue'
+export { default as ControlOwo } from './components/ControlOwo.vue'
 export { default as ControlPreset } from './components/ControlPreset.vue'
 export { default as ControlSlider } from './components/ControlSlider.vue'
 export { default as ControlSliderBase } from './components/ControlSliderBase.vue'
@@ -27,6 +28,8 @@ export { useIntifacePatternControl } from './composables/useIntifacePatternContr
 export type { OpenShockControlValue } from './composables/useOpenShockControl'
 export { useOpenShockControl } from './composables/useOpenShockControl'
 export { args, useOscMessages } from './composables/useOscMessages'
+export type { OwoControlState } from './composables/useOwoControl'
+export { useOwoControl } from './composables/useOwoControl'
 export type { ColorFamily, ColorFamilyWithoutNeutral } from './composables/useTheme'
 export {
   applyThemeColor,

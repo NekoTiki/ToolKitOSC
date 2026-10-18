@@ -26,7 +26,7 @@ function optionCount(control: ControlType): number | null {
 // everything else is one cell unless the user asked for a wide tile.
 export function controlTileSpan(control: ControlType): TileSpan {
   // A body needs the room to draw on.
-  if (control.type === 'bhaptics') return 'l'
+  if (control.type === 'bhaptics' || control.type === 'owo') return 'l'
 
   const options = optionCount(control)
 

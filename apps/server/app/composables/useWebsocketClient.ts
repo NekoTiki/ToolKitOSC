@@ -5,6 +5,7 @@ import { useClientTheme } from '~/composables/useClientTheme'
 import { useIntifaceControl } from '~/composables/useIntifaceControl'
 import { useIntifacePatternControl } from '~/composables/useIntifacePatternControl'
 import { useOpenShockControl } from '~/composables/useOpenShockControl'
+import { useOwoControl } from '~/composables/useOwoControl'
 
 export function useWebsocketClient(roomId: string) {
   const sendMessage = (type: string, message: unknown) => {
@@ -23,6 +24,7 @@ export function useWebsocketClient(roomId: string) {
   const { setValue } = useOpenShockControl()
   const { setValue: setIntifaceValue } = useIntifaceControl()
   const { setState: setBhapticsState } = useBhapticsControl()
+  const { setState: setOwoState } = useOwoControl()
   const { setValue: setIntifacePatternValue } = useIntifacePatternControl()
   const { setTheme } = useClientTheme()
   const controlGroups = ref<ControlGroup[]>([])
@@ -77,6 +79,8 @@ export function useWebsocketClient(roomId: string) {
         setIntifacePatternValue(controlId, value, by || endsAt ? { by, endsAt } : undefined)
       } else if (data.type === 'bhaptics-value-update') {
         setBhapticsState({ playing: data.message.playing ?? {}, touched: data.message.touched ?? [] })
+      } else if (data.type === 'owo-value-update') {
+        setOwoState({ playing: data.message.playing ?? {}, touched: data.message.touched ?? [] })
       } else if (data.type === 'client-invalid') {
         // The wire type is the full ClientType union ('everyone' | 'username' | 'discord'), but
         // checkClient() (see apps/client/src/utils/checkClient.ts) never fails validation when

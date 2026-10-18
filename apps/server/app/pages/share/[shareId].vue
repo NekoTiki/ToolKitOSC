@@ -405,6 +405,7 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
                 :offline="hostOffline"
                 :pattern-maker="patternMaker(control)"
                 :mine-pattern="minePatterns.has(control.id)"
+                :signed-out="!(loggedIn && user?.discord)"
                 @command="sendCommand(groupId, control, $event)"
                 @make-pattern="recorderFor = { groupId, controlId: control.id }"
               />

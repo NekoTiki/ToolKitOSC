@@ -2,7 +2,7 @@
 // hand-parsed independently in useWebsocketHost.ts (client), useWebsocketClient.ts (server app),
 // and the Nitro routes server/routes/host.ts + server/routes/ws/[ws].ts. Shapes below are taken
 // directly from those call sites, not guessed.
-import type { BhapticsPosition, ControlCommand, ControlGroup, ControlTypes, ViewerGroupInfo } from './controls'
+import type { BhapticsPosition, ControlCommand, ControlGroup, ControlTypes, OwoMuscle, ViewerGroupInfo } from './controls'
 import type { OpenShockCommandResult, OpenShockControlValue } from './openShock'
 import type { OSCArg } from './osc'
 import type { ColorFamilyWithoutNeutral } from './theme'
@@ -45,6 +45,8 @@ export interface WsEnvelope<Type extends string, Message> {
 // Additive, no bump: the 'bhaptics' control type and its commands, and 'bhaptics-value-update'
 // (host -> server -> viewers). An older server drops both (its sanitizeCommand doesn't know the
 // type) and an older viewer page can't draw the tile, so viewers need an updated server for it.
+//
+// Additive, no bump: the 'owo' control type and its commands, and 'owo-value-update', the same way.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
@@ -156,6 +158,15 @@ export interface BhapticsValueUpdateMessage {
   playing: Partial<Record<BhapticsPosition, number[]>>
   // Positions avatar touch drives: viewers' taps there wait.
   touched: BhapticsPosition[]
+}
+
+// What the host's OWO Skin plays right now, for every OWO tile (see useOwoControl.ts). Sent only
+// when it changes, at most every 100 ms.
+export interface OwoValueUpdateMessage {
+  // 0-100, for the muscles that play.
+  playing: Partial<Record<OwoMuscle, number>>
+  // Sides avatar touch drives: viewers' taps there wait.
+  touched: ('front' | 'back')[]
 }
 
 // The value a command was run with, as the host logs it: the command's own value, or for a
@@ -297,6 +308,7 @@ export type HostToServerMessage =
   | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'bhaptics-value-update', BhapticsValueUpdateMessage>
+  | WsEnvelope<'owo-value-update', OwoValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'rate-limited', RateLimitedMessage>
@@ -330,6 +342,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'bhaptics-value-update', BhapticsValueUpdateMessage>
+  | WsEnvelope<'owo-value-update', OwoValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'rate-limited', RateLimitedMessage>
