@@ -17,10 +17,11 @@ const { boards } = useBoards()
 const { installed: intifaceInstalled, launch: launchIntiface } = useIntiface()
 const router = useRouter()
 
-const GROUPS: Record<string, string> = { toys: 'Toys and shockers', movement: 'Movement' }
+const GROUPS: Record<string, string> = { toys: 'Toys and shockers', movement: 'Movement', gear: 'Haptic gear' }
 
-const BADGES: Record<string, { label: string; color: 'error' | 'warning' | 'neutral' }> = {
-  shocks: { label: 'Shocks', color: 'error' }
+const BADGES: Record<string, { label: string; color: 'error' | 'warning' | 'info' | 'neutral' }> = {
+  shocks: { label: 'Shocks', color: 'error' },
+  beta: { label: 'Beta', color: 'info' }
 }
 
 const DOT: Record<AddonState, string> = {
@@ -114,7 +115,7 @@ const canLaunch = (addon: Addon): boolean =>
           />
         </div>
 
-        <!-- The status (or what it does, while off), with its safety and platform badges on the right. -->
+        <!-- The status (or what it does, while off), with its badge on the right. Add-ons this OS can't run aren't listed at all. -->
         <div class="flex items-start justify-between gap-3">
           <div
             v-if="addon.enabled"
@@ -134,20 +135,12 @@ const canLaunch = (addon: Addon): boolean =>
           </p>
 
           <div
-            v-if="addon.badge || addon.platforms.length === 1"
+            v-if="addon.badge"
             class="flex shrink-0 flex-wrap justify-end gap-1.5"
           >
             <UBadge
-              v-if="addon.badge"
               :label="BADGES[addon.badge]?.label ?? addon.badge"
               :color="BADGES[addon.badge]?.color ?? 'neutral'"
-              variant="subtle"
-              class="rounded-full"
-            />
-            <UBadge
-              v-if="addon.platforms.length === 1"
-              :label="`${addon.platforms[0] === 'windows' ? 'Windows' : 'Linux'} only`"
-              color="neutral"
               variant="subtle"
               class="rounded-full"
             />

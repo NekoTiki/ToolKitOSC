@@ -86,10 +86,21 @@ pub trait Addon: Sync {
 }
 
 /// Every add-on, in the order the Add-ons page lists them.
-static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::boards::Addon];
+static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::bhaptics::Addon, &crate::boards::Addon];
+
+/// Whether it runs on this OS. One that doesn't is left out everywhere: never listed, offered or
+/// started (bHaptics on Linux, where there's no bHaptics Player).
+fn supported(manifest: &Manifest) -> bool {
+    manifest.platforms.contains(&std::env::consts::OS)
+}
+
+/// The add-ons this OS can run, in the order the Add-ons page lists them.
+fn available() -> impl Iterator<Item = &'static dyn Addon> {
+    ADDONS.iter().copied().filter(|addon| supported(&addon.manifest()))
+}
 
 fn find(id: &str) -> Option<&'static dyn Addon> {
-    ADDONS.iter().copied().find(|addon| addon.manifest().id == id)
+    available().find(|addon| addon.manifest().id == id)
 }
 
 pub struct Addons {
@@ -112,8 +123,7 @@ fn addons(app: &AppHandle) -> &Addons {
 /// from what you already use the first time), then starts the add-ons that are on.
 pub fn start(app: &AppHandle) {
     let file = store::load(app).unwrap_or_else(|| {
-        let kept: Vec<String> = ADDONS
-            .iter()
+        let kept: Vec<String> = available()
             .filter(|addon| addon.was_in_use(app))
             .map(|addon| addon.manifest().id.to_owned())
             .collect();
@@ -134,7 +144,7 @@ pub fn start(app: &AppHandle) {
     }
     let on: HashSet<String> = addons(app).file.lock().unwrap().enabled_ids();
 
-    let manifests: Vec<Manifest> = ADDONS.iter().map(|addon| addon.manifest()).collect();
+    let manifests: Vec<Manifest> = available().map(|addon| addon.manifest()).collect();
     for id in start_order(&manifests, &on) {
         if let Some(addon) = find(&id) {
             tracing::info!("Starting add-on {id}");
@@ -166,8 +176,9 @@ fn start_order(manifests: &[Manifest], on: &HashSet<String>) -> Vec<String> {
     }
 }
 
+/// On, and runs on this OS.
 pub fn is_on(app: &AppHandle, id: &str) -> bool {
-    addons(app).file.lock().unwrap().is_enabled(id)
+    addons(app).file.lock().unwrap().is_enabled(id) && find(id).is_some()
 }
 
 fn manifests() -> Vec<Manifest> {
@@ -232,8 +243,7 @@ pub fn view(app: &AppHandle) -> AddonsView {
         (file.enabled_ids(), file.setup_done, file.kept.clone())
     };
     AddonsView {
-        addons: ADDONS
-            .iter()
+        addons: available()
             .map(|addon| {
                 let manifest = addon.manifest();
                 let on = enabled.contains(manifest.id);
@@ -336,8 +346,7 @@ pub struct StopFailure {
 
 /// Stop everything, for every add-on that's on. Returns the ones that couldn't be reached.
 pub async fn stop_everything(app: &AppHandle) -> Vec<StopFailure> {
-    let stops: Vec<(&'static str, StopFuture)> = ADDONS
-        .iter()
+    let stops: Vec<(&'static str, StopFuture)> = available()
         .filter(|addon| is_on(app, addon.manifest().id))
         .map(|addon| (addon.manifest().id, addon.stop_everything(app)))
         .collect();
@@ -396,8 +405,16 @@ mod tests {
             Addon::manifest(&crate::intiface::Addon),
             Addon::manifest(&crate::haptics::Addon),
             Addon::manifest(&crate::leash::Addon),
+            Addon::manifest(&crate::bhaptics::Addon),
             Addon::manifest(&crate::boards::Addon)
         ]
+    }
+
+    #[test]
+    fn add_ons_this_os_cant_run_are_left_out() {
+        let bhaptics = Addon::manifest(&crate::bhaptics::Addon);
+        assert_eq!(supported(&bhaptics), cfg!(target_os = "windows"), "no bHaptics Player on Linux");
+        assert!(supported(&Addon::manifest(&crate::intiface::Addon)));
     }
 
     #[test]
