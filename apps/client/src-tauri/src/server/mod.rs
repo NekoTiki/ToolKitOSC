@@ -272,6 +272,8 @@ enum After {
 fn on_message(app: &AppHandle, id: u64, text: String) -> After {
     let value = serde_json::from_str::<serde_json::Value>(&text).unwrap_or_default();
     let kind = value.get("type").and_then(serde_json::Value::as_str).map(str::to_owned);
+    let mut joined = Vec::new();
+    let mut watching = 0;
 
     {
         let mut inner = server(app).inner.lock().unwrap();
@@ -284,8 +286,14 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
                 inner.auth_success = Some(text.clone());
             }
             Some("client-list") => {
-                inner.client_list = Some(text.clone());
-                inner.clients = value.get("message").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
+                // The first list after connecting isn't anyone joining.
+                let first = inner.client_list.replace(text.clone()).is_none();
+                let clients = value.get("message").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
+                if !first {
+                    joined = clients.iter().filter(|client| !inner.clients.iter().any(|old| old.get("peerId") == client.get("peerId"))).filter_map(viewer::describe).map(|viewer| viewer.display_name).collect();
+                }
+                watching = clients.len();
+                inner.clients = clients;
             }
             Some("update-username") => {
                 let from = value.get("from").and_then(serde_json::Value::as_str);
@@ -300,6 +308,10 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
             }
             _ => {}
         }
+    }
+
+    if !joined.is_empty() {
+        crate::overlay::viewers_joined(app, joined, watching);
     }
 
     if kind.as_deref() == Some("command") {

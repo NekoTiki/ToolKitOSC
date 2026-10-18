@@ -16,6 +16,7 @@ use crate::osc::cache::CacheThrottle;
 use crate::intiface::Intiface;
 use crate::leash::Leash;
 use crate::openshock::OpenShock;
+use crate::overlay::Overlay;
 use crate::owo::Owo;
 use crate::server::Server;
 use crate::toys::patterns::Patterns;
@@ -83,7 +84,9 @@ pub struct AppState {
     /// bHaptics Player's connection and what each motor plays (see `bhaptics`).
     pub bhaptics: Bhaptics,
     /// The OWO app's connection and what each muscle plays (see `owo`).
-    pub owo: Owo
+    pub owo: Owo,
+    /// Toasts in the headset (see `overlay`).
+    pub overlay: Overlay
 }
 
 impl Default for AppState {
@@ -112,7 +115,8 @@ impl Default for AppState {
             haptics: Haptics::default(),
             leash: Leash::default(),
             bhaptics: Bhaptics::default(),
-            owo: Owo::default()
+            owo: Owo::default(),
+            overlay: Overlay::default()
         }
     }
 }

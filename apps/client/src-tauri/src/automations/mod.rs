@@ -131,6 +131,9 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 let _ = app.emit("automation-activity", activity);
             }
             Effect::Ran(id) => {
+                if let Some(automation) = list(app).into_iter().find(|a| a.id == id) {
+                    crate::overlay::automation_ran(app, &automation.name);
+                }
                 let _ = app.emit("automation-ran", id);
             }
             Effect::Skipped { automation_id, action } => {
@@ -326,6 +329,7 @@ pub fn is_paused(app: &AppHandle) -> bool {
 pub fn set_paused(app: &AppHandle, paused: bool) {
     let effects = automations(app).state.lock().unwrap().set_paused(paused);
     apply(app, effects);
+    crate::overlay::paused(app, paused);
 }
 
 pub fn leash_event(app: &AppHandle, event: model::LeashEvent) {

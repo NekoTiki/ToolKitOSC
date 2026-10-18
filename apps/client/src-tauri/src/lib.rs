@@ -12,6 +12,7 @@ mod logging;
 mod net;
 mod openshock;
 mod owo;
+mod overlay;
 mod osc;
 mod presets;
 mod secrets;
@@ -200,7 +201,11 @@ pub fn run() {
             owo::commands::owo_state,
             owo::commands::owo_simulate,
             owo::commands::owo_test_muscles,
-            owo::commands::owo_tester_log
+            owo::commands::owo_tester_log,
+            // VR overlay
+            overlay::commands::overlay_settings,
+            overlay::commands::overlay_save,
+            overlay::commands::overlay_test_toast
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
