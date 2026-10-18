@@ -1,4 +1,11 @@
+<script lang="ts">
+// Each page's sidebar scroll, kept across instances (see below).
+const scrolled = new WeakMap<object, number>()
+</script>
+
 <script setup lang="ts">
+import { getCurrentInstance, onBeforeUnmount, onMounted, useTemplateRef } from 'vue'
+
 // The frame every page renders into, to the right of AppRail: an optional context column (a
 // page's own list - groups, presets, viewers, settings sections...) and the page itself, with a
 // fixed header, a scrolling body and an optional sticky footer (Save/Cancel bars).
@@ -10,6 +17,21 @@ defineSlots<{
   bar?(): unknown
   footer?(): unknown
 }>()
+
+// Pages with a draft per item (Presets, Patterns, Profiles) get a fresh instance per path, so their
+// sidebar list would jump back to the top on every pick. Its scroll is kept per page instead.
+const page = getCurrentInstance()?.parent?.type
+const aside = useTemplateRef('aside')
+const list = (): Element | null | undefined => aside.value?.querySelector('.overflow-y-auto')
+
+onMounted(() => {
+  const el = list()
+  if (el && page) el.scrollTop = scrolled.get(page) ?? 0
+})
+onBeforeUnmount(() => {
+  const el = list()
+  if (el && page) scrolled.set(page, el.scrollTop)
+})
 </script>
 
 <template>
@@ -19,6 +41,7 @@ defineSlots<{
   >
     <aside
       v-if="$slots.sidebar"
+      ref="aside"
       class="flex min-h-0 min-w-0 flex-col gap-2.5 border-r border-default p-3.5"
     >
       <slot name="sidebar" />

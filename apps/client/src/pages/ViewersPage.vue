@@ -115,7 +115,10 @@ const activity = useLiveQuery(selected, commandsFor, { count: 0, recent: [] as C
 
 const showIp = ref(false)
 
-watch(selectedId, () => (showIp.value = false))
+watch(selectedId, () => {
+  showIp.value = false
+  stopViewerPatternPreview()
+})
 
 // Most recent first. Hidden by default, since the page may be on stream.
 const maskedIps = computed(() =>
