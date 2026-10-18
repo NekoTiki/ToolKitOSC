@@ -2,15 +2,18 @@ import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { BHAPTICS_POSITIONS, useBhaptics } from '@renderer/composables/useBhaptics'
 import { useIntiface } from '@renderer/composables/useIntiface'
+import { useOwo } from '@renderer/composables/useOwo'
 import type {
   AvatarHaptics,
   BhapticsPosition,
   HapticsBhapticsTarget,
   HapticsOutput,
+  HapticsOwoTarget,
   HapticsSettings,
   HapticsSource,
   HapticsState,
-  HapticsZoneKind
+  HapticsZoneKind,
+  OwoMuscle
 } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import _ from 'lodash'
@@ -63,9 +66,23 @@ const save = (): void => {
   }, SAVE_DELAY_MS)
 }
 
-// "device-actuator", as the page's routes use it, or "b-<position>-<region>" for bHaptics gear.
-export const actuatorKey = (actuator: { deviceIndex: number; actuatorIndex: number; bhaptics?: HapticsBhapticsTarget }): string =>
-  actuator.bhaptics ? `b-${actuator.bhaptics.position}-${actuator.bhaptics.region}` : `${actuator.deviceIndex}-${actuator.actuatorIndex}`
+// "device-actuator", as the page's routes use it, "b-<position>-<region>" for bHaptics gear, or
+// "o-<region>" for OWO muscles.
+export const actuatorKey = (actuator: { deviceIndex: number; actuatorIndex: number; bhaptics?: HapticsBhapticsTarget; owo?: HapticsOwoTarget }): string =>
+  actuator.bhaptics
+    ? `b-${actuator.bhaptics.position}-${actuator.bhaptics.region}`
+    : actuator.owo
+      ? `o-${actuator.owo.region}`
+      : `${actuator.deviceIndex}-${actuator.actuatorIndex}`
+
+// Each OWO region, the muscles it fires and what it's called.
+export const OWO_REGIONS: Record<HapticsOwoTarget['region'], { label: string; muscles: OwoMuscle[] }> = {
+  chest: { label: 'Chest', muscles: ['PectoralR', 'PectoralL'] },
+  belly: { label: 'Belly', muscles: ['AbdominalR', 'AbdominalL'] },
+  arms: { label: 'Arms', muscles: ['ArmR', 'ArmL'] },
+  'upper-back': { label: 'Upper back', muscles: ['DorsalR', 'DorsalL'] },
+  'lower-back': { label: 'Lower back', muscles: ['LumbarR', 'LumbarL'] }
+}
 
 // The parts of each bHaptics position a source can drive: a vest side's top two rows, the three
 // under them, or all of it. Everything else only whole.
@@ -151,6 +168,8 @@ export interface HapticsToy {
   oneOfMany: boolean
   // Part of your bHaptics gear rather than a toy.
   bhaptics?: HapticsBhapticsTarget
+  // Muscles of your OWO Skin rather than a toy.
+  owo?: HapticsOwoTarget
 }
 
 export function useAvatarHaptics(): {
@@ -179,6 +198,7 @@ export function useAvatarHaptics(): {
   const { avatarDetails } = useAvatarDetails()
   const { devices } = useIntiface()
   const { state: bhapticsState } = useBhaptics()
+  const { state: owoState } = useOwo()
 
   const avatarId = computed(() => avatarDetails.value?.id ?? null)
   const avatarName = computed(() => avatarDetails.value?.name ?? 'This avatar')
@@ -234,6 +254,25 @@ export function useAvatarHaptics(): {
       }
     }
 
+    // The OWO Skin's muscles while the OWO app is connected.
+    if (isOn('owo') && owoState.value.status === 'connected') {
+      for (const region of Object.keys(OWO_REGIONS) as HapticsOwoTarget['region'][]) {
+        const target: HapticsOwoTarget = { region }
+
+        list.push({
+          key: actuatorKey({ deviceIndex: 0, actuatorIndex: 0, owo: target }),
+          deviceIndex: 0,
+          actuatorIndex: 0,
+          actuatorType: 'OWO',
+          deviceName: OWO_REGIONS[region].label,
+          actuatorDescription: '',
+          connected: true,
+          oneOfMany: false,
+          owo: target
+        })
+      }
+    }
+
     const saved = [...(settings.value?.outputs ?? []), ...(avatar.value?.outputs ?? [])]
 
     for (const { actuator } of saved) {
@@ -245,6 +284,7 @@ export function useAvatarHaptics(): {
         key,
         ...actuator,
         ...(actuator.bhaptics && { actuatorType: 'bHaptics', deviceName: bhapticsTargetName(actuator.bhaptics) }),
+        ...(actuator.owo && { actuatorType: 'OWO', deviceName: OWO_REGIONS[actuator.owo.region].label }),
         connected: false,
         oneOfMany: false
       })
@@ -289,7 +329,7 @@ export function useAvatarHaptics(): {
   }
 
   const outputToEdit = (target: HapticsSettings, toy: HapticsToy): HapticsOutput => {
-    const actuator = _.pick(toy, ['deviceIndex', 'actuatorIndex', 'actuatorType', 'deviceName', 'actuatorDescription', 'bhaptics'])
+    const actuator = _.pick(toy, ['deviceIndex', 'actuatorIndex', 'actuatorType', 'deviceName', 'actuatorDescription', 'bhaptics', 'owo'])
     const fresh = (): HapticsOutput => ({ actuator, sources: [], maxStrength: 1 })
 
     if (scope.value === 'avatar' && avatarId.value) {

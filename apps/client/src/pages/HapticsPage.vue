@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BhapticsMotors from '@renderer/components/bhaptics/BhapticsMotors.vue'
 import HapticsSourceEditor from '@renderer/components/haptics/HapticsSourceEditor.vue'
+import OwoMuscles from '@renderer/components/owo/OwoMuscles.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
@@ -15,6 +16,7 @@ import {
   ZONE_KIND_LABEL} from '@renderer/composables/useAvatarHaptics'
 import { useBhaptics } from '@renderer/composables/useBhaptics'
 import { isTouched } from '@renderer/composables/useIntiface'
+import { useOwo } from '@renderer/composables/useOwo'
 import type { HapticsBhapticsTarget, HapticsSource } from '@renderer/lib/tauri-bridge'
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -47,12 +49,14 @@ const {
 } = useAvatarHaptics()
 const { isOn } = useAddons()
 const { state: bhapticsState } = useBhaptics()
+const { state: owoState } = useOwo()
 
-// The sidebar's two lists: toys, then parts of your bHaptics gear.
+// The sidebar's lists: toys, parts of your bHaptics gear, then your OWO Skin's muscles.
 const toyGroups = computed(() =>
   [
-    { key: 'toys', label: 'Toys', items: toys.value.filter((item) => !item.bhaptics), empty: isOn('intiface') ? 'No toys yet. Connect one in Intiface Central.' : null },
-    { key: 'bhaptics', label: 'bHaptics', items: toys.value.filter((item) => item.bhaptics), empty: isOn('bhaptics') ? 'Nothing connected. Pair your gear in bHaptics Player.' : null }
+    { key: 'toys', label: 'Toys', items: toys.value.filter((item) => !item.bhaptics && !item.owo), empty: isOn('intiface') ? 'No toys yet. Connect one in Intiface Central.' : null },
+    { key: 'bhaptics', label: 'bHaptics', items: toys.value.filter((item) => item.bhaptics), empty: isOn('bhaptics') ? 'Nothing connected. Pair your gear in bHaptics Player.' : null },
+    { key: 'owo', label: 'OWO', items: toys.value.filter((item) => item.owo), empty: isOn('owo') ? 'Not connected. Connect ToolKitOSC in the OWO app.' : null }
   ].filter((group) => group.items.length || group.empty)
 )
 
@@ -246,7 +250,7 @@ const setAvatarEnabled = (enabled: boolean): void =>
             <span class="flex min-w-0 items-center gap-2">
               <b class="flex-1 truncate text-[14.5px] font-semibold text-highlighted">{{ toyName(item) }}</b>
               <span
-                v-if="item.bhaptics ? bhapticsState.touched.includes(item.bhaptics.position) : isTouched([item])"
+                v-if="item.bhaptics ? bhapticsState.touched.includes(item.bhaptics.position) : item.owo ? owoState.touched.includes(item.owo.region.endsWith('back') ? 'back' : 'front') : isTouched([item])"
                 class="shrink-0 rounded-full bg-secondary/15 px-2 py-0.5 text-[11.5px] font-medium text-secondary"
               >Touch</span>
               <span
@@ -567,9 +571,26 @@ const setAvatarEnabled = (enabled: boolean): void =>
       </FormSection>
 
       <FormSection
+        v-if="toy.owo"
+        title="On your suit"
+        description="Both muscles fire at the level, under each one's strength in Settings > OWO. Below the dead zone nothing plays."
+      >
+        <div class="flex flex-wrap gap-4">
+          <OwoMuscles
+            side="front"
+            :levels="owoState.playing"
+          />
+          <OwoMuscles
+            side="back"
+            :levels="owoState.playing"
+          />
+        </div>
+      </FormSection>
+
+      <FormSection
         v-if="shown"
         title="Max strength"
-        :description="toy.bhaptics ? 'These motors never go past it from haptics, whatever its sources say.' : 'This toy never goes past it from haptics, whatever its sources say.'"
+        :description="toy.bhaptics || toy.owo ? 'These never go past it from haptics, whatever its sources say.' : 'This toy never goes past it from haptics, whatever its sources say.'"
       >
         <div class="grid gap-2">
           <div class="flex justify-end text-sm">

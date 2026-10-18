@@ -57,7 +57,13 @@ export interface HapticsBhapticsTarget {
   fill: 'all' | 'depth'
 }
 
-// A toy motor, or with `bhaptics`, part of your bHaptics gear (then the other fields are unused).
+// A pair of OWO muscle groups. Mirrors `OwoTarget` in haptics/model.rs.
+export interface HapticsOwoTarget {
+  region: 'chest' | 'belly' | 'arms' | 'upper-back' | 'lower-back'
+}
+
+// A toy motor, or with `bhaptics`, part of your bHaptics gear, or with `owo`, muscles of your OWO
+// Skin (then the other fields are unused).
 export interface HapticsActuator {
   deviceIndex: number
   actuatorIndex: number
@@ -65,6 +71,7 @@ export interface HapticsActuator {
   deviceName: string
   actuatorDescription: string
   bhaptics?: HapticsBhapticsTarget
+  owo?: HapticsOwoTarget
 }
 
 export interface HapticsOutput {
@@ -105,6 +112,7 @@ export interface HapticsOutputLevel {
   deviceIndex: number
   actuatorIndex: number
   bhaptics?: HapticsBhapticsTarget
+  owo?: HapticsOwoTarget
   level: number
   // Each source's level, in order.
   sources: number[]
