@@ -199,7 +199,7 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
     let Some(name) = message.address.strip_prefix("/avatar/parameters/") else {
         return;
     };
-    if !name.starts_with("bOSC/") && !name.starts_with("bHaptics") && name != SWITCH_PARAMETER {
+    if !name.starts_with("bOSC") && !name.starts_with("bHaptics") && name != SWITCH_PARAMETER {
         return;
     }
     let value = match message.args.first() {

@@ -40,7 +40,7 @@ export interface BhapticsDeviceCheck {
 export interface BhapticsAvatarCheck {
   id: string
   name: string
-  schemes: ('v2' | 'v2m' | 'legacy')[]
+  schemes: ('v2' | 'v2m' | 'v1' | 'legacy')[]
   devices: BhapticsDeviceCheck[]
   spsZones: number
   switch: boolean

@@ -56,7 +56,7 @@ const ours = computed(() => settings.value?.touchSource === 'toolkitosc')
 const doubled = computed(() => ours.value && state.value.otherKeys.length > 0)
 
 const avatar = computed(() => state.value.avatar)
-const SCHEMES = { v2: 'bOSC/v2', v2m: 'bOSC/v2m (Quest)', legacy: 'bHapticsOSC (older avatars)' }
+const SCHEMES = { v2: 'bOSC/v2', v2m: 'bOSC/v2m (Quest)', v1: 'bOSC v1 (older avatars)', legacy: 'bHapticsOSC (older avatars)' }
 
 interface CheckRow {
   key: string

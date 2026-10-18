@@ -5,8 +5,10 @@
 //!   `bOSC/v2m/…` on the Quest-compatible prefabs. `n` starts at 0. The receivers name the
 //!   devices like Player does: `Head`, `VestFront`, `VestBack`, `ForearmL`, `HandL`, `GloveL`,
 //!   `FootL` and the `R` ones (`ArmLeft`, `HandLeft`… are read too).
-//! - The original bHapticsOSC app's avatars: `bHaptics_<Device>_<n>_bool` and
-//!   `bHapticsOSC_<Device>_<n>_int` (0–100), with `Vest_Front`, `Arm_Left`… and `n` from 1.
+//! - The package's first version: `bOSC_v1_<Device>_<n>`, the same devices and motors as v2,
+//!   without telling hands apart.
+//! - The original bHapticsOSC app's avatars: `bHapticsOSC_<Device>_<n>` (and `bHaptics_…_bool`),
+//!   or `bHapticsOSC_<Device>_<n>_int` (0–100), with `Vest_Front`, `Arm_Left`… and `n` from 1.
 //!   That app numbered the vest's front rows, the head and the right foot the other way round,
 //!   so those are flipped here to land on the same motors.
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -45,6 +47,8 @@ pub enum Scheme {
     V2,
     #[serde(rename = "v2m")]
     V2Mobile,
+    #[serde(rename = "v1")]
+    V1,
     #[serde(rename = "legacy")]
     Legacy
 }
@@ -120,10 +124,21 @@ pub fn parse(name: &str) -> Option<(Contact, Kind, Scheme)> {
         }
         return Some((Contact { position, motor, who }, Kind::OnOff, scheme));
     }
+    if let Some(rest) = name.strip_prefix("bOSC_v1_") {
+        let (device, motor) = rest.rsplit_once('_')?;
+        let position = v2_device(device)?;
+        let motor: usize = motor.parse().ok()?;
+        if motor >= position.motors() {
+            return None;
+        }
+        return Some((Contact { position, motor, who: Who::Either }, Kind::OnOff, Scheme::V1));
+    }
 
     let (rest, kind) = if let Some(rest) = name.strip_prefix("bHapticsOSC_").and_then(|r| r.strip_suffix("_int")) {
         (rest, Kind::Intensity)
     } else if let Some(rest) = name.strip_prefix("bHaptics_").and_then(|r| r.strip_suffix("_bool")) {
+        (rest, Kind::OnOff)
+    } else if let Some(rest) = name.strip_prefix("bHapticsOSC_") {
         (rest, Kind::OnOff)
     } else {
         return None;
@@ -283,6 +298,17 @@ mod tests {
         assert_eq!(parse("bHapticsOSC_Arm_Right_6_int"), Some((contact(Position::ForearmR, 5, Who::Either), Kind::Intensity, Scheme::Legacy)));
         assert_eq!(parse("bHaptics_Head_0_bool"), None, "the old app counted from 1");
         assert_eq!(parse("bHaptics_Head_7_bool"), None);
+        assert_eq!(parse("bHapticsOSC_Vest_Front_1"), Some((contact(Position::VestFront, 3, Who::Either), Kind::OnOff, Scheme::Legacy)), "the receivers themselves");
+        assert_eq!(parse("bHapticsOSC_Vest_Back_20").map(|p| p.0.motor), Some(19));
+        assert_eq!(parse("bHapticsOSC_Vest_Back_21"), None);
+    }
+
+    #[test]
+    fn reads_the_first_package() {
+        assert_eq!(parse("bOSC_v1_VestFront_0"), Some((contact(Position::VestFront, 0, Who::Either), Kind::OnOff, Scheme::V1)));
+        assert_eq!(parse("bOSC_v1_ForearmR_5").map(|p| p.0.position), Some(Position::ForearmR));
+        assert_eq!(parse("bOSC_v1_Head_6"), None, "the head has 6 motors");
+        assert_eq!(parse("bOSC_v1_Vest_0"), None);
     }
 
     #[test]
