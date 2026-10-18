@@ -2,9 +2,9 @@
 //! true while a contact overlaps that motor's receiver.
 //!
 //! - Current package (github.com/bhaptics/VRChatOSC): `bOSC/v2/<Device>/<n>/self` and `…/others`,
-//!   `bOSC/v2m/…` on the Quest-compatible prefabs. `n` starts at 0. The devices are named
-//!   `Head`, `VestFront`, `VestBack`, `ArmLeft`, `HandLeft`, `GloveLeft`, `FootLeft` and the
-//!   `Right` ones.
+//!   `bOSC/v2m/…` on the Quest-compatible prefabs. `n` starts at 0. The receivers name the
+//!   devices like Player does: `Head`, `VestFront`, `VestBack`, `ForearmL`, `HandL`, `GloveL`,
+//!   `FootL` and the `R` ones (`ArmLeft`, `HandLeft`… are read too).
 //! - The original bHapticsOSC app's avatars: `bHaptics_<Device>_<n>_bool` and
 //!   `bHapticsOSC_<Device>_<n>_int` (0–100), with `Vest_Front`, `Arm_Left`… and `n` from 1.
 //!   That app numbered the vest's front rows, the head and the right foot the other way round,
@@ -54,14 +54,14 @@ fn v2_device(name: &str) -> Option<Position> {
         "Head" => Position::Head,
         "VestFront" => Position::VestFront,
         "VestBack" => Position::VestBack,
-        "ArmLeft" => Position::ForearmL,
-        "ArmRight" => Position::ForearmR,
-        "HandLeft" => Position::HandL,
-        "HandRight" => Position::HandR,
-        "GloveLeft" => Position::GloveL,
-        "GloveRight" => Position::GloveR,
-        "FootLeft" => Position::FootL,
-        "FootRight" => Position::FootR,
+        "ForearmL" | "ArmLeft" => Position::ForearmL,
+        "ForearmR" | "ArmRight" => Position::ForearmR,
+        "HandL" | "HandLeft" => Position::HandL,
+        "HandR" | "HandRight" => Position::HandR,
+        "GloveL" | "GloveLeft" => Position::GloveL,
+        "GloveR" | "GloveRight" => Position::GloveR,
+        "FootL" | "FootLeft" => Position::FootL,
+        "FootR" | "FootRight" => Position::FootR,
         _ => return None
     })
 }
@@ -261,6 +261,9 @@ mod tests {
         assert_eq!(parse("bOSC/v2/VestFront/6/others"), Some((contact(Position::VestFront, 6, Who::Others), Kind::OnOff, Scheme::V2)));
         assert_eq!(parse("bOSC/v2m/ArmLeft/0/self"), Some((contact(Position::ForearmL, 0, Who::Own), Kind::OnOff, Scheme::V2Mobile)));
         assert_eq!(parse("bOSC/v2/GloveRight/7/others").map(|p| p.0.position), Some(Position::GloveR));
+        assert_eq!(parse("bOSC/v2/ForearmL/0/others"), Some((contact(Position::ForearmL, 0, Who::Others), Kind::OnOff, Scheme::V2)), "the prefabs' own names");
+        assert_eq!(parse("bOSC/v2/GloveR/7/self").map(|p| p.0), Some(contact(Position::GloveR, 7, Who::Own)));
+        assert_eq!(parse("bOSC/v2m/FootL/2/self").map(|p| p.0.position), Some(Position::FootL));
         assert_eq!(parse("bOSC/v2/VestFront/20/others"), None, "a vest side has 20 motors");
         assert_eq!(parse("bOSC/v2/Tail/0/others"), None);
         assert_eq!(parse("bOSC/v2/Head/0/everyone"), None);
