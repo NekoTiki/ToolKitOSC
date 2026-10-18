@@ -20,7 +20,7 @@ mod store;
 mod touch;
 pub mod commands;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -42,6 +42,12 @@ const VIEW_EVERY: Duration = Duration::from_millis(100);
 /// No OSC from VRChat for this long and touch lets go: VRChat closed, or OSC stopped mid-touch.
 const STALE_AFTER: Duration = Duration::from_secs(15);
 const SWITCH_PARAMETER: &str = "TKOSC/bHaptics";
+/// Copy diagnostics keeps what was sent this long.
+const HISTORY: Duration = Duration::from_secs(30);
+/// Test motors plays each motor this long, at this level.
+const TEST_STEP: Duration = Duration::from_millis(400);
+const TEST_LEVEL: f64 = 0.6;
+const TEST_ID: &str = "test";
 
 /// - `connecting`: an attempt is in flight.
 /// - `connected`: Player answered. Frames only go out then.
@@ -86,7 +92,13 @@ pub struct Bhaptics {
     /// The last `bhaptics-state` sent, and when.
     sent: Mutex<Option<(Instant, View)>>,
     /// The last `TKOSC/bHaptics` sent. `None` sends it once the worn avatar has it.
-    switch_sent: Mutex<Option<bool>>
+    switch_sent: Mutex<Option<bool>>,
+    /// The worn avatar's check, by avatar id.
+    detected: Mutex<Option<(String, touch::Detected)>>,
+    /// What was sent lately, for Copy diagnostics.
+    history: Mutex<VecDeque<(Instant, String)>>,
+    /// Test motors is walking this position.
+    testing: Mutex<Option<(Position, tauri::async_runtime::JoinHandle<()>)>>
 }
 
 fn bhaptics(app: &AppHandle) -> &Bhaptics {
@@ -103,13 +115,42 @@ pub struct View {
     pub simulated: bool,
     /// Player's names for what's connected: `Vest`, `Head`, `ForearmL`…
     pub devices: Vec<String>,
+    /// The positions those devices play.
+    pub connected: Vec<Position>,
     /// 0–100 per motor, for positions that play now.
     pub playing: BTreeMap<Position, Vec<u8>>,
     /// Positions avatar touch drives now.
     pub touched: Vec<Position>,
     /// Keys another app plays on Player right now. While we read touch, that's usually Player's
     /// own VRChat handling, and the vest gets every touch twice.
-    pub other_keys: Vec<String>
+    pub other_keys: Vec<String>,
+    /// The worn avatar and what it has for bHaptics.
+    pub avatar: Option<AvatarCheck>,
+    /// The position Test motors is walking.
+    pub testing: Option<Position>
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvatarCheck {
+    pub id: String,
+    pub name: String,
+    #[serde(flatten)]
+    pub detected: touch::Detected
+}
+
+/// The worn avatar's check, worked out again only when the avatar changes.
+fn avatar_check(app: &AppHandle) -> Option<AvatarCheck> {
+    let (id, name, detected) = {
+        let details = app.state::<AppState>().avatar_details.lock().unwrap().clone()?;
+        let mut cached = bhaptics(app).detected.lock().unwrap();
+        if cached.as_ref().is_none_or(|(id, _)| *id != details.id) {
+            let names = details.parameters.iter().map(|parameter| parameter.name.as_str());
+            *cached = Some((details.id.clone(), touch::detect(names, SWITCH_PARAMETER)));
+        }
+        (details.id, details.name, cached.as_ref().unwrap().1.clone())
+    };
+    Some(AvatarCheck { id, name, detected })
 }
 
 pub fn view(app: &AppHandle) -> View {
@@ -118,8 +159,11 @@ pub fn view(app: &AppHandle) -> View {
         let other_keys = inner.player.active_keys.iter().filter(|key| !key.starts_with("TKOSC_")).cloned().collect();
         (inner.status.unwrap_or(Status::Disabled), inner.installed, inner.simulated, inner.player.connected_positions.clone(), other_keys)
     };
+    let connected = Position::ALL.into_iter().filter(|position| devices.iter().any(|device| device == position.device())).collect();
+    let avatar = avatar_check(app);
+    let testing = bhaptics(app).testing.lock().unwrap().as_ref().map(|(position, _)| *position);
     let arbiter = bhaptics(app).arbiter.lock().unwrap();
-    View { status, installed, simulated, devices, playing: arbiter.playing().clone(), touched: arbiter.touched(), other_keys }
+    View { status, installed, simulated, devices, connected, playing: arbiter.playing().clone(), touched: arbiter.touched(), other_keys, avatar, testing }
 }
 
 fn emit_view(app: &AppHandle, now: bool) {
@@ -188,10 +232,115 @@ pub fn let_go(app: &AppHandle, id: &str) {
     bhaptics(app).leases.lock().unwrap().remove(id);
 }
 
+/// Walks every motor of `position`, one at a time, so you can feel the order is right. Starting
+/// again on another position stops the first.
+pub fn test_motors(app: &AppHandle, position: Position) -> Result<(), String> {
+    if crate::automations::is_paused(app) {
+        return Err("Stop everything is on".into());
+    }
+    let task = {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            for motor in 0..position.motors() {
+                let mut levels = vec![0.0; position.motors()];
+                levels[motor] = TEST_LEVEL;
+                let_go(&app, TEST_ID);
+                ask(&app, TEST_ID, position, levels, Instant::now() + TEST_STEP);
+                tokio::time::sleep(TEST_STEP).await;
+            }
+            let_go(&app, TEST_ID);
+            bhaptics(&app).testing.lock().unwrap().take();
+            emit_view(&app, true);
+        })
+    };
+    if let Some((_, old)) = bhaptics(app).testing.lock().unwrap().replace((position, task)) {
+        old.abort();
+    }
+    emit_view(app, true);
+    Ok(())
+}
+
+fn stop_test(app: &AppHandle) {
+    if let Some((_, task)) = bhaptics(app).testing.lock().unwrap().take() {
+        task.abort();
+    }
+    let_go(app, TEST_ID);
+}
+
+/// One line per submit, for Copy diagnostics: `VestFront 6:70 9:35`, `turnOff Head`.
+fn describe(submit: &Submit) -> String {
+    match submit {
+        Submit::Frame { position, intensities } => {
+            let dots: Vec<String> = intensities.iter().enumerate().filter(|(_, i)| **i > 0).map(|(m, i)| format!("{m}:{i}")).collect();
+            format!("{} {}", position.name(), dots.join(" "))
+        }
+        Submit::TurnOff(position) => format!("turnOff {}", position.name()),
+        Submit::TurnOffAll => "turnOffAll".into()
+    }
+}
+
+fn remember(app: &AppHandle, submits: &[Submit]) {
+    let now = Instant::now();
+    let mut history = bhaptics(app).history.lock().unwrap();
+    history.extend(submits.iter().map(|submit| (now, describe(submit))));
+    while history.front().is_some_and(|(at, _)| now.duration_since(*at) > HISTORY) {
+        history.pop_front();
+    }
+}
+
+/// What a problem found at someone else's place needs to be fixed back home: Player's answers,
+/// the settings, the worn avatar's check and the last 30 s of frames.
+pub fn diagnostics(app: &AppHandle) -> String {
+    let view = view(app);
+    let player = bhaptics(app).inner.lock().unwrap().player.clone();
+    let settings = store::get(app);
+    let now = Instant::now();
+    let history: Vec<String> = bhaptics(app)
+        .history
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(at, line)| format!("  -{:>5} ms  {line}", now.duration_since(*at).as_millis()))
+        .collect();
+    format!(
+        "ToolKitOSC {} · bHaptics
+
+Status: {:?}{}
+Player: {} device(s), positions {:?}, active keys {:?}
+(Player's version isn't reported on this API.)
+
+Settings:
+{}
+
+Avatar:
+{}
+
+Sent in the last 30 s ({} lines):
+{}
+",
+        app.package_info().version,
+        view.status,
+        if view.simulated { " (simulated Player)" } else { "" },
+        player.connected_device_count,
+        player.connected_positions,
+        player.active_keys,
+        pretty(&settings),
+        pretty(&view.avatar),
+        history.len(),
+        history.join("
+")
+    )
+}
+
+fn pretty(value: &impl Serialize) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_default()
+}
+
 fn send(app: &AppHandle, submits: &[Submit]) {
     if submits.is_empty() {
         return;
     }
+    remember(app, submits);
     let inner = bhaptics(app).inner.lock().unwrap();
     if inner.status != Some(Status::Connected) {
         return;
@@ -341,6 +490,7 @@ pub fn set_simulated(app: &AppHandle, simulated: bool) -> Result<(), String> {
 
 /// Every motor stops now: what's asked is dropped, touch lets go, and Player turns everything off.
 fn stop_all(app: &AppHandle) {
+    stop_test(app);
     bhaptics(app).leases.lock().unwrap().clear();
     bhaptics(app).arbiter.lock().unwrap().clear();
     send(app, &[Submit::TurnOffAll]);

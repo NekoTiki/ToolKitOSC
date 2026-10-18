@@ -4,6 +4,7 @@ import AboutSettings from '@renderer/components/settings/AboutSettings.vue'
 import AccountSettings from '@renderer/components/settings/AccountSettings.vue'
 import AddonsSettings from '@renderer/components/settings/AddonsSettings.vue'
 import AppearanceSettings from '@renderer/components/settings/AppearanceSettings.vue'
+import BhapticsSettings from '@renderer/components/settings/BhapticsSettings.vue'
 import BoardsSettings from '@renderer/components/settings/BoardsSettings.vue'
 import ChatboxSettings from '@renderer/components/settings/ChatboxSettings.vue'
 import CreditsSettings from '@renderer/components/settings/CreditsSettings.vue'
@@ -47,6 +48,7 @@ const SECTIONS: Section[] = [
   { key: 'about', label: 'About & updates', description: 'Version and updates', icon: 'i-lucide-info', component: AboutSettings, wide: true, subpages: { credits: { label: 'Credits', component: CreditsSettings } } },
   { key: 'openshock', label: 'OpenShock', description: 'API key and shockers', icon: 'material-symbols:electric-bolt', component: OpenShockSettings, addon: 'openshock' },
   { key: 'intiface', label: 'Intiface', description: 'Connection and toys', icon: 'mdi:vibrate', component: IntifaceSettings, addon: 'intiface' },
+  { key: 'bhaptics', label: 'bHaptics', description: 'Player and your gear · beta', icon: 'i-lucide-shirt', component: BhapticsSettings, addon: 'bhaptics' },
   { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings, addon: 'boards' }
 ]
 

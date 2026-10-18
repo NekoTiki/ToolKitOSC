@@ -9,8 +9,10 @@
 //!   `bHapticsOSC_<Device>_<n>_int` (0–100), with `Vest_Front`, `Arm_Left`… and `n` from 1.
 //!   That app numbered the vest's front rows, the head and the right foot the other way round,
 //!   so those are flipped here to land on the same motors.
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{Duration, Instant};
+
+use serde::Serialize;
 
 use super::model::{Position, TouchFrom};
 
@@ -37,10 +39,13 @@ pub struct Contact {
 }
 
 /// Which package a parameter comes from, for the avatar check.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Scheme {
+    #[serde(rename = "v2")]
     V2,
+    #[serde(rename = "v2m")]
     V2Mobile,
+    #[serde(rename = "legacy")]
     Legacy
 }
 
@@ -127,6 +132,63 @@ pub fn parse(name: &str) -> Option<(Contact, Kind, Scheme)> {
     let position = LEGACY_DEVICES.iter().find(|(name, _)| *name == device)?.1;
     let motor = legacy_motor(position, n.parse().ok()?)?;
     Some((Contact { position, motor, who: Who::Either }, kind, Scheme::Legacy))
+}
+
+/// One device's receivers on the worn avatar.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceCheck {
+    pub position: Position,
+    /// Motors the avatar has a receiver for.
+    pub receivers: usize,
+    pub motors: usize,
+    /// Whether it tells your own hands and other people's apart (the current package does).
+    pub own: bool,
+    pub others: bool
+}
+
+/// What the worn avatar has for bHaptics, from its parameter names.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Detected {
+    pub schemes: Vec<Scheme>,
+    pub devices: Vec<DeviceCheck>,
+    /// SPS, OGB or VRCFury Haptics zones, which could drive the vest instead.
+    pub sps_zones: usize,
+    /// Whether it has `TKOSC/bHaptics`.
+    pub switch: bool
+}
+
+pub fn detect<'a>(names: impl IntoIterator<Item = &'a str>, switch_parameter: &str) -> Detected {
+    let mut schemes = BTreeSet::new();
+    let mut motors: BTreeMap<Position, (BTreeSet<usize>, bool, bool)> = BTreeMap::new();
+    let mut zones = BTreeSet::new();
+    let mut switch = false;
+    for name in names {
+        if name == switch_parameter {
+            switch = true;
+        }
+        if let Some((zone, _)) = crate::haptics::zones::parse(name) {
+            zones.insert(zone);
+        }
+        let Some((contact, _, scheme)) = parse(name) else {
+            continue;
+        };
+        schemes.insert(scheme);
+        let entry = motors.entry(contact.position).or_default();
+        entry.0.insert(contact.motor);
+        entry.1 |= contact.who == Who::Own;
+        entry.2 |= contact.who == Who::Others;
+    }
+    Detected {
+        schemes: schemes.into_iter().collect(),
+        devices: motors
+            .into_iter()
+            .map(|(position, (found, own, others))| DeviceCheck { position, receivers: found.len(), motors: position.motors(), own, others })
+            .collect(),
+        sps_zones: zones.len(),
+        switch
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -273,6 +335,25 @@ mod tests {
         let mut touch = Touch::default();
         touch.on_parameter("bHapticsOSC_Vest_Back_2_int", 40.0, now);
         assert_eq!(touch.levels(OTHERS, now)[&Position::VestBack][1], 0.4);
+    }
+
+    #[test]
+    fn checks_what_the_avatar_has() {
+        let mut names: Vec<String> = (0..20).map(|n| format!("bOSC/v2/VestFront/{n}/others")).collect();
+        names.extend((0..19).map(|n| format!("bOSC/v2/VestBack/{n}/self")));
+        names.push("bHaptics_Head_1_bool".into());
+        names.push("OGB/Touch/Chest/Others".into());
+        names.push("OGB/Touch/Chest/Self".into());
+        names.push("TKOSC/bHaptics".into());
+        let detected = detect(names.iter().map(String::as_str), "TKOSC/bHaptics");
+        assert_eq!(detected.schemes, [Scheme::V2, Scheme::Legacy]);
+        assert_eq!(detected.devices.len(), 3);
+        assert_eq!(detected.devices[0], DeviceCheck { position: Position::Head, receivers: 1, motors: 6, own: false, others: false });
+        assert_eq!(detected.devices[1], DeviceCheck { position: Position::VestFront, receivers: 20, motors: 20, own: false, others: true });
+        assert_eq!(detected.devices[2].receivers, 19);
+        assert_eq!(detected.sps_zones, 1);
+        assert!(detected.switch);
+        assert_eq!(detect(["Go/Float"], "TKOSC/bHaptics"), Detected::default());
     }
 
     #[test]
