@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub use crate::bhaptics::model::Position;
+use crate::owo::model::Muscle;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -56,7 +57,8 @@ impl Default for AvatarHaptics {
 }
 
 /// A toy motor, as controls store it (`IntifaceActuatorRef`): the names are for display. Or, with
-/// `bhaptics`, a part of your bHaptics gear: then the Intiface fields are unused.
+/// `bhaptics`, a part of your bHaptics gear, or with `owo`, muscles of your OWO Skin: then the
+/// Intiface fields are unused.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Actuator {
@@ -66,21 +68,56 @@ pub struct Actuator {
     pub device_name: String,
     pub actuator_description: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub bhaptics: Option<BhapticsTarget>
+    pub bhaptics: Option<BhapticsTarget>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owo: Option<OwoTarget>
 }
 
 /// Which actuator an output is for, to match a global output with an avatar's own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActuatorKey {
     Intiface(u32, u32),
-    Bhaptics(Position, Region)
+    Bhaptics(Position, Region),
+    Owo(OwoRegion)
 }
 
 impl Actuator {
     pub fn key(&self) -> ActuatorKey {
         match &self.bhaptics {
             Some(target) => ActuatorKey::Bhaptics(target.position, target.region),
-            None => ActuatorKey::Intiface(self.device_index, self.actuator_index)
+            None => match &self.owo {
+                Some(target) => ActuatorKey::Owo(target.region),
+                None => ActuatorKey::Intiface(self.device_index, self.actuator_index)
+            }
+        }
+    }
+}
+
+/// A pair of OWO muscle groups, both sides of the body's middle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OwoRegion {
+    Chest,
+    Belly,
+    Arms,
+    UpperBack,
+    LowerBack
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OwoTarget {
+    pub region: OwoRegion
+}
+
+impl OwoTarget {
+    pub fn muscles(&self) -> [Muscle; 2] {
+        match self.region {
+            OwoRegion::Chest => [Muscle::PectoralR, Muscle::PectoralL],
+            OwoRegion::Belly => [Muscle::AbdominalR, Muscle::AbdominalL],
+            OwoRegion::Arms => [Muscle::ArmR, Muscle::ArmL],
+            OwoRegion::UpperBack => [Muscle::DorsalR, Muscle::DorsalL],
+            OwoRegion::LowerBack => [Muscle::LumbarR, Muscle::LumbarL]
         }
     }
 }
@@ -450,6 +487,14 @@ mod tests {
         assert_ne!(actuator.key(), Actuator::default().key());
         let toy = serde_json::to_value(Actuator::default()).unwrap();
         assert!(toy.get("bhaptics").is_none(), "toys are saved as before");
+    }
+
+    #[test]
+    fn owo_muscles_read_and_key_apart() {
+        let actuator: Actuator = serde_json::from_str(r#"{ "owo": { "region": "lower-back" } }"#).unwrap();
+        assert_eq!(actuator.key(), ActuatorKey::Owo(OwoRegion::LowerBack));
+        assert_eq!(actuator.owo.unwrap().muscles(), [Muscle::LumbarR, Muscle::LumbarL]);
+        assert!(serde_json::to_value(Actuator::default()).unwrap().get("owo").is_none());
     }
 
     #[test]

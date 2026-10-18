@@ -155,7 +155,8 @@ pub fn devices_changed(app: &AppHandle) {
                 actuator_type: actuator.actuator_type,
                 device_name: device.name.clone(),
                 actuator_description: actuator.description,
-                bhaptics: None
+                bhaptics: None,
+                owo: None
             })
         })
         .collect();
@@ -211,7 +212,7 @@ fn tick(app: &AppHandle) {
         outputs
             .iter()
             .zip(&levels)
-            .filter(|(output, _)| !output.sources.is_empty() && output.actuator.bhaptics.is_none())
+            .filter(|(output, _)| !output.sources.is_empty() && output.actuator.bhaptics.is_none() && output.actuator.owo.is_none())
             .map(|(output, level)| crate::toys::Touch {
                 actuator: crate::toys::ActuatorRef {
                     device_index: output.actuator.device_index,
@@ -239,8 +240,24 @@ fn tick(app: &AppHandle) {
             }
         }
     }
-    let strongest = touches.iter().map(|touch| touch.level).chain(levels.iter().filter(|l| l.bhaptics.is_some()).map(|l| l.level)).fold(0.0, f64::max);
+    // Muscles of your OWO Skin, the strongest per muscle. Below the dead zone a level is 0 and
+    // nothing plays.
+    let mut muscles = crate::owo::Levels::new();
+    if !crate::automations::is_paused(app) {
+        for (output, level) in outputs.iter().zip(&levels) {
+            let Some(target) = output.actuator.owo.filter(|_| !output.sources.is_empty()) else {
+                continue;
+            };
+            for muscle in target.muscles() {
+                let out = muscles.entry(muscle).or_default();
+                *out = out.max(level.level);
+            }
+        }
+    }
+    let gear = levels.iter().filter(|l| l.bhaptics.is_some() || l.owo.is_some()).map(|l| l.level);
+    let strongest = touches.iter().map(|touch| touch.level).chain(gear).fold(0.0, f64::max);
     crate::bhaptics::set_zones(app, vest);
+    crate::owo::set_zones(app, muscles);
     crate::toys::set_touch(app, touches, priority);
     send_level(app, strongest);
 
@@ -358,12 +375,13 @@ fn stop(app: &AppHandle) {
     // Touch lets go of every toy, and of your bHaptics gear.
     crate::toys::set_touch(app, Vec::new(), crate::toys::Priority { threshold: 1.0, grace: Duration::ZERO });
     crate::bhaptics::set_zones(app, crate::bhaptics::Levels::new());
+    crate::owo::set_zones(app, crate::owo::Levels::new());
     emit_view(app, true);
     emit_touched(app);
 }
 
-/// Avatar haptics as an add-on (see `crate::addons`). It drives Intiface toys or bHaptics gear, so it
-/// needs one of them.
+/// Avatar haptics as an add-on (see `crate::addons`). It drives Intiface toys, bHaptics gear or the
+/// OWO Skin, so it needs one of them.
 pub struct Addon;
 
 impl crate::addons::Addon for Addon {
@@ -372,11 +390,11 @@ impl crate::addons::Addon for Addon {
             id: "haptics",
             name: "Avatar haptics",
             group: "toys",
-            pitch: "Your toys and bHaptics gear respond when someone touches your SPS avatar, like OscGoesBrrr",
+            pitch: "Your toys, bHaptics gear and OWO Skin respond when someone touches your SPS avatar, like OscGoesBrrr",
             platforms: &["windows", "linux"],
             badges: &[],
             needs: &[],
-            needs_any: &["intiface", "bhaptics"],
+            needs_any: &["intiface", "bhaptics", "owo"],
             control_types: &[],
             automation_kinds: &[],
             pages: &["haptics"]

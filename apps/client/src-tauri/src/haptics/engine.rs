@@ -32,6 +32,9 @@ pub struct OutputLevel {
     /// Set for a part of your bHaptics gear.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bhaptics: Option<super::model::BhapticsTarget>,
+    /// Set for muscles of your OWO Skin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owo: Option<super::model::OwoTarget>,
     pub level: f64,
     pub sources: Vec<f64>
 }
@@ -116,6 +119,7 @@ impl Engine {
                     device_index: output.actuator.device_index,
                     actuator_index: output.actuator.actuator_index,
                     bhaptics: output.actuator.bhaptics,
+                    owo: output.actuator.owo,
                     level: strongest.min(output.max_strength.clamp(0.0, 1.0)),
                     sources
                 }

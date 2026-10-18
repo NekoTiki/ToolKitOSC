@@ -106,7 +106,9 @@ pub struct Owo {
     /// Sensations playing now, by who started them.
     sensations: Mutex<std::collections::HashMap<String, (u64, tauri::async_runtime::JoinHandle<()>)>>,
     /// When each control's cooldown ends (see `control`).
-    cooldowns: Mutex<std::collections::HashMap<String, Instant>>
+    cooldowns: Mutex<std::collections::HashMap<String, Instant>>,
+    /// What avatar haptics' SPS zones play on your muscles (see `crate::haptics`).
+    zones: Mutex<Levels>
 }
 
 fn owo(app: &AppHandle) -> &Owo {
@@ -208,6 +210,11 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
         return;
     }
     owo(app).touch.lock().unwrap().on_parameter(name, on, Instant::now());
+}
+
+/// Avatar haptics' levels for your muscles this tick, from SPS zones. They count as avatar touch.
+pub fn set_zones(app: &AppHandle, levels: Levels) {
+    *owo(app).zones.lock().unwrap() = levels;
 }
 
 /// Another avatar: every muscle stops.
@@ -348,12 +355,18 @@ fn tick(app: &AppHandle) {
     send_switch(app, settings.enabled);
     // Stop everything keeps every muscle still until you resume.
     let paused = crate::automations::is_paused(app);
-    let touch = if !paused && settings.enabled {
+    let mut touch = if !paused && settings.enabled {
         let level = avatar_intensity(app, &settings);
         owo(app).touch.lock().unwrap().levels(level, now)
     } else {
         Levels::new()
     };
+    if !paused && settings.enabled {
+        for (muscle, level) in owo(app).zones.lock().unwrap().iter() {
+            let out = touch.entry(*muscle).or_default();
+            *out = out.max(*level);
+        }
+    }
     let asks = {
         let mut leases = owo(app).leases.lock().unwrap();
         if paused {
