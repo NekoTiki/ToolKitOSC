@@ -1,5 +1,5 @@
 import type { CommandWithoutIds, ControlLimits, ControlType, ViewerGroupInfo } from '../types/controls'
-import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, INTIFACE_PATTERN_OFF_ID, PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS, VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '../types/controls'
+import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, INTIFACE_PATTERN_OFF_ID, OWO_MUSCLES, OWO_SENSATIONS, PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS, VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '../types/controls'
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
@@ -180,6 +180,22 @@ export function sanitizeCommand(control: ControlType, command: CommandWithoutIds
       return command.value === 'tap'
         ? { type: command.type, value: command.value, position: command.position, motors: sorted, level }
         : { type: command.type, value: command.value, position: command.position, motors: sorted, holdId: command.holdId, start: command.start === true, level }
+    }
+
+    case 'owo': {
+      if (control.type !== 'owo') return null
+
+      const known = OWO_SENSATIONS.some((sensation) => sensation.id === command.value)
+
+      if (!known || !control.sensations.includes(command.value)) return null
+      if (!Array.isArray(command.muscles) || !command.muscles.length || !command.muscles.every((m) => control.muscles.includes(m))) return null
+
+      // Nothing above the control's own cap or the profile's max is ever played.
+      const level = Math.min(clamp(control.maxIntensity, 0, 1), limitRange(limits).max)
+      // In OWO's order, each once.
+      const muscles = (Object.keys(OWO_MUSCLES) as (keyof typeof OWO_MUSCLES)[]).filter((m) => command.muscles.includes(m))
+
+      return { type: command.type, value: command.value, muscles, level }
     }
 
     default:

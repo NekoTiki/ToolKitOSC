@@ -5,7 +5,8 @@
 //! 2. The control is looked up and the command checked against it for this viewer (their groups
 //!    open it up). An unknown control is still logged and accepted, without running anything; a
 //!    command the checks refuse is dropped.
-//! 3. A viewer's own pattern may need them signed in, and a hidden group is never reachable.
+//! 3. A viewer's own pattern and an OWO control may need them signed in, and a hidden group is
+//!    never reachable.
 //! 4. Ban, then "who can use your controls", then the rate limit, each with its own reply.
 //! 5. A live recording only moves the toy. Anything else runs, is accepted (shown to every
 //!    viewer as the last action), may start automations, and goes to the webview to be logged and
@@ -81,7 +82,10 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
     let pattern_id = command.as_ref().and_then(|c| text(c, "value"));
     let viewer_pattern = kind == Some("intiface-pattern") && matches!(pattern_id, Some(VIEWER_PATTERN_ID | VIEWER_LIVE_ID));
     let signed_in_only = control.as_ref().and_then(|c| c.pointer("/viewerPatterns/signedInOnly")).and_then(Value::as_bool).unwrap_or(false);
-    if (viewer_pattern && signed_in_only && viewer.discord_id.is_none()) || policy.is_group_hidden(group_id) {
+    // The OWO Skin is kept to signed-in viewers unless the control says otherwise.
+    let owo_signed_in_only = kind == Some("owo") && control.as_ref().and_then(|c| c.get("signedInOnly")).and_then(Value::as_bool).unwrap_or(true);
+    let needs_sign_in = (viewer_pattern && signed_in_only) || owo_signed_in_only;
+    if (needs_sign_in && viewer.discord_id.is_none()) || policy.is_group_hidden(group_id) {
         return;
     }
 

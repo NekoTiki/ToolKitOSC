@@ -14,7 +14,7 @@ const MAX_LENGTH = 144
 // are merged into the next message.
 const MIN_INTERVAL_MS = 3000
 
-export type ChatboxKind = 'toggles' | 'options' | 'sliders' | 'toys' | 'patterns' | 'shocks' | 'presets' | 'bhaptics'
+export type ChatboxKind = 'toggles' | 'options' | 'sliders' | 'toys' | 'patterns' | 'shocks' | 'presets' | 'bhaptics' | 'owo'
 
 export const CHATBOX_KINDS: { value: ChatboxKind; label: string; types: ControlTypes[] }[] = [
   { value: 'toggles', label: 'Toggles', types: ['boolean', 'boolean-group'] },
@@ -24,7 +24,8 @@ export const CHATBOX_KINDS: { value: ChatboxKind; label: string; types: ControlT
   { value: 'patterns', label: 'Toy patterns', types: ['intiface-pattern'] },
   { value: 'shocks', label: 'Shocks and vibrations', types: ['open-shock-shocker'] },
   { value: 'presets', label: 'Presets', types: ['preset'] },
-  { value: 'bhaptics', label: 'bHaptics', types: ['bhaptics'] }
+  { value: 'bhaptics', label: 'bHaptics', types: ['bhaptics'] },
+  { value: 'owo', label: 'OWO', types: ['owo'] }
 ]
 
 const readKinds = (): ChatboxKind[] => {

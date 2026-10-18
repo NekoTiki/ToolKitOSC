@@ -6,11 +6,12 @@ import { isTouched, useIntiface } from '@renderer/composables/useIntiface'
 import { resolvePatternRefs } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
+import { useOwo } from '@renderer/composables/useOwo'
 import { usePresets } from '@renderer/composables/usePresets'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { CommandWithoutIds, ControlGroup, ControlType, LastUser, ViewerGroupRule } from '@toolkitosc/shared-ui'
-import { useBhapticsControl, useIntifaceControl, useOpenShockControl } from '@toolkitosc/shared-ui'
+import { useBhapticsControl, useIntifaceControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import type { ComputedRef } from 'vue'
 import { computed, ref, toRaw, watch } from 'vue'
@@ -22,6 +23,7 @@ const controlsList = ref<ControlGroup[]>([])
 api.onToyValue(({ controlId, value }) => useIntifaceControl().setValue(controlId, value))
 api.onShockValue(({ controlId, value }) => useOpenShockControl().setValue(controlId, value))
 api.onBhapticsState(({ playing, touched }) => useBhapticsControl().setState({ playing, touched }))
+api.onOwoState(({ playing, touched }) => useOwoControl().setState({ playing, touched }))
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
 
 // One-off migration: 'intiface-vibrator' (with a `vibrators` field) was renamed to 'intiface-toy'
@@ -84,6 +86,7 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   const { getPreset } = usePresets()
   const { offAddonForControlType } = useAddons()
   const { state: bhapticsState } = useBhaptics()
+  const { state: owoState } = useOwo()
 
   // The active profile's rules for each viewer group, by control id then group id. Groups that
   // were deleted are left out.
@@ -137,7 +140,9 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
                 ? !getPreset(control.presetId)
                 : control.type === 'bhaptics'
                   ? bhapticsState.value.status !== 'connected'
-                  : false)
+                  : control.type === 'owo'
+                    ? owoState.value.status !== 'connected'
+                    : false)
       }))
     }))
   })

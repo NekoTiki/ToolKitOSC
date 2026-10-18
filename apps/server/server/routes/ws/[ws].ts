@@ -270,6 +270,8 @@ export default defineWebSocketHandler({
           const viewerPattern = command.type === 'intiface-pattern' && (command.value === VIEWER_PATTERN_ID || command.value === VIEWER_LIVE_ID)
 
           if (viewerPattern && control.type === 'intiface-pattern' && control.viewerPatterns?.signedInOnly && !user?.discord?.id) return
+          // So can the OWO Skin, unless the control says otherwise.
+          if (control.type === 'owo' && control.signedInOnly !== false && !user?.discord?.id) return
 
           data.message = { ...data.message, ...command }
         }

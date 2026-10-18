@@ -339,5 +339,47 @@
     "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000, "effects": ["heartbeat", "made-up"] },
     "command": { "type": "bhaptics", "value": "effect", "effect": "made-up" },
     "expected": null
+  },
+  {
+    "name": "owo: muscles in OWO's order, once, capped at the control's intensity",
+    "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true },
+    "command": { "type": "owo", "value": "pulse", "muscles": ["LumbarL", "PectoralL", "LumbarL"], "level": 1, "extra": "x" },
+    "expected": { "type": "owo", "value": "pulse", "muscles": ["PectoralL", "LumbarL"], "level": 0.3 }
+  },
+  {
+    "name": "owo: the profile's max applies",
+    "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true, "limits": { "max": 0.2 } },
+    "command": { "type": "owo", "value": "tap", "muscles": ["LumbarR"] },
+    "expected": { "type": "owo", "value": "tap", "muscles": ["LumbarR"], "level": 0.2 }
+  },
+  {
+    "name": "owo drops a muscle the control doesn't reach",
+    "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true },
+    "command": { "type": "owo", "value": "tap", "muscles": ["LumbarR", "ArmL"] },
+    "expected": null
+  },
+  {
+    "name": "owo drops an unknown muscle",
+    "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true },
+    "command": { "type": "owo", "value": "tap", "muscles": ["Tail"] },
+    "expected": null
+  },
+  {
+    "name": "owo drops no muscles",
+    "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true },
+    "command": { "type": "owo", "value": "tap", "muscles": [] },
+    "expected": null
+  },
+  {
+    "name": "owo drops a sensation the control doesn't offer",
+    "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true },
+    "command": { "type": "owo", "value": "heartbeat", "muscles": ["LumbarR"] },
+    "expected": null
+  },
+  {
+    "name": "owo drops a sensation the app doesn't have",
+    "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true },
+    "command": { "type": "owo", "value": "made-up", "muscles": ["LumbarR"] },
+    "expected": null
   }
 ]

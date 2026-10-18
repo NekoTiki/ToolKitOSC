@@ -105,6 +105,40 @@ impl Arbiter {
     }
 }
 
+/// What the tick sends this time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Send {
+    /// What plays now, as one sensation.
+    Play,
+    /// Everything just went quiet: stop at once rather than let the last sensation run out.
+    Stop
+}
+
+/// When to send: as soon as what plays changes (a sensation's next step, a new touch), and again
+/// before the last sensation runs out.
+#[derive(Debug, Default)]
+pub struct Pace {
+    last: Option<(Instant, Levels)>
+}
+
+impl Pace {
+    pub fn due(&mut self, playing: &Levels, resend: Duration, now: Instant) -> Option<Send> {
+        let send = match &self.last {
+            _ if playing.is_empty() => self.last.as_ref().is_some_and(|(_, last)| !last.is_empty()).then_some(Send::Stop),
+            Some((at, last)) if last == playing && now.duration_since(*at) < resend => None,
+            _ => Some(Send::Play)
+        };
+        if send.is_some() {
+            self.last = Some((now, playing.clone()));
+        }
+        send
+    }
+
+    pub fn clear(&mut self) {
+        self.last = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +185,23 @@ mod tests {
         assert_eq!(leases.levels(start + Duration::from_millis(300)), Levels::from([(Muscle::DorsalL, 0.5)]));
         leases.remove("automation:1");
         assert!(leases.levels(start).is_empty());
+    }
+
+    #[test]
+    fn sends_on_change_and_before_it_runs_out() {
+        let mut pace = Pace::default();
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
+        let resend = Duration::from_millis(250);
+        let chest = Levels::from([(Muscle::PectoralL, 1.0)]);
+        let both = Levels::from([(Muscle::PectoralL, 1.0), (Muscle::LumbarL, 0.5)]);
+        assert_eq!(pace.due(&Levels::new(), resend, at(0)), None, "nothing to stop yet");
+        assert_eq!(pace.due(&chest, resend, at(0)), Some(Send::Play));
+        assert_eq!(pace.due(&chest, resend, at(200)), None);
+        assert_eq!(pace.due(&both, resend, at(220)), Some(Send::Play), "a change goes out at once");
+        assert_eq!(pace.due(&both, resend, at(470)), Some(Send::Play), "and again before it runs out");
+        assert_eq!(pace.due(&Levels::new(), resend, at(480)), Some(Send::Stop));
+        assert_eq!(pace.due(&Levels::new(), resend, at(800)), None, "stopped once");
     }
 
     #[test]

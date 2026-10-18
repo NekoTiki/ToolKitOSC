@@ -7,6 +7,7 @@
 //! - A sensation is `<game>*SENSATION*<freq>,<tenths>,<intensity>,<ramp up ms>,<ramp down ms>,<exit
 //!   tenths>,<name>|<muscle>%<percent>,…`. A new one replaces the one playing.
 use super::model::Muscle;
+use super::touch::Levels;
 
 pub const PORT: u16 = 54020;
 /// Anonymous. Registering a game with OWO would only change this.
@@ -111,7 +112,7 @@ impl Packet {
 
 /// One sensation playing `levels` (0–1 per muscle): the strongest sets the intensity, and each
 /// muscle gets its share of it. None when nothing plays.
-pub fn sensation(frequency: u8, tenths: u8, levels: &[(Muscle, f64)]) -> Option<Packet> {
+pub fn sensation(frequency: u8, tenths: u8, levels: &Levels) -> Option<Packet> {
     let strongest = levels.iter().map(|(_, level)| level.clamp(0.0, 1.0)).fold(0.0, f64::max);
     let intensity = (strongest * 100.0).round() as u8;
     if intensity == 0 {
@@ -185,10 +186,10 @@ mod tests {
 
     #[test]
     fn levels_become_one_sensation() {
-        let packet = sensation(100, 3, &[(Muscle::PectoralL, 0.6), (Muscle::LumbarL, 0.3), (Muscle::ArmR, 0.0)]);
+        let packet = sensation(100, 3, &Levels::from([(Muscle::PectoralL, 0.6), (Muscle::LumbarL, 0.3), (Muscle::ArmR, 0.0)]));
         assert_eq!(packet.unwrap().text(), "0*SENSATION*100,3,60,0,0,0,TKOSC|1%100,9%50");
-        assert_eq!(sensation(100, 3, &[(Muscle::PectoralL, 0.0)]), None);
-        assert_eq!(sensation(100, 3, &[]), None);
+        assert_eq!(sensation(100, 3, &Levels::from([(Muscle::PectoralL, 0.0)])), None);
+        assert_eq!(sensation(100, 3, &Levels::new()), None);
     }
 
     #[test]

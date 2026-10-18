@@ -1,5 +1,5 @@
 import type { ControlType, ControlTypes } from '../types/controls'
-import { INTIFACE_PATTERN_OFF_ID, VIEWER_PATTERN_ID } from '../types/controls'
+import { INTIFACE_PATTERN_OFF_ID, OWO_SENSATIONS, VIEWER_PATTERN_ID } from '../types/controls'
 import type { OpenShockCommandResult } from '../types/openShock'
 import type { CommandValue } from '../types/protocol'
 
@@ -71,6 +71,13 @@ export const describeCommand = (control: ControlType | undefined, type: ControlT
       if (value === 'tap') return 'tapped it'
       if (value === 'effect') return 'played an effect'
       break
+
+    case 'owo': {
+      const sensation = OWO_SENSATIONS.find((s) => s.id === value)
+
+      if (sensation) return `played ${sensation.label}`
+      break
+    }
   }
 
   return value === undefined ? 'used it' : `set to ${formatCommandValue(value)}`
