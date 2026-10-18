@@ -531,7 +531,7 @@ export const parameterFamily = (address: string): string | null => {
   const name = parameterName(address)
   if (name.startsWith('VFH/')) return 'VRCFury Haptics'
   if (name.startsWith('OGB/')) return 'OSC Goes Brrr'
-  if (name.startsWith('bOSC/') || name.startsWith('bHapticsOSC_') || name.startsWith('bHaptics_')) return 'bHaptics'
+  if (name.startsWith('bOSC/') || name.startsWith('bOSC_v1_') || name.startsWith('bHapticsOSC_') || name.startsWith('bHaptics_')) return 'bHaptics'
   if (name.startsWith('owo_suit_') || name === 'owo_intensity') return 'OWO'
   const suffix = Object.keys(PHYSBONE_SUFFIXES).find((s) => name.endsWith(s))
   return suffix ? PHYSBONE_SUFFIXES[suffix]! : null

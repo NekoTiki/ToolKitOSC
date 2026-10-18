@@ -7,6 +7,7 @@ const NOISY_ADDRESS_PREFIXES = [
   'WH Lollipop/',
   'OGB/',
   'bOSC/',
+  'bOSC_v1_',
   'bHapticsOSC_',
   'bHaptics_',
   'owo_suit_',
