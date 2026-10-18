@@ -11,6 +11,7 @@ mod intiface;
 mod logging;
 mod net;
 mod openshock;
+mod owo;
 mod osc;
 mod presets;
 mod secrets;
@@ -193,7 +194,13 @@ pub fn run() {
             bhaptics::commands::bhaptics_launch_player,
             bhaptics::commands::bhaptics_simulate,
             bhaptics::commands::bhaptics_test_motors,
-            bhaptics::commands::bhaptics_diagnostics
+            bhaptics::commands::bhaptics_diagnostics,
+            owo::commands::owo_settings,
+            owo::commands::owo_save,
+            owo::commands::owo_state,
+            owo::commands::owo_simulate,
+            owo::commands::owo_test_muscles,
+            owo::commands::owo_tester_log
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

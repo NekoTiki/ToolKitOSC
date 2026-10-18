@@ -16,6 +16,7 @@ use crate::osc::cache::CacheThrottle;
 use crate::intiface::Intiface;
 use crate::leash::Leash;
 use crate::openshock::OpenShock;
+use crate::owo::Owo;
 use crate::server::Server;
 use crate::toys::patterns::Patterns;
 use crate::toys::saved::Saved;
@@ -80,7 +81,9 @@ pub struct AppState {
     /// Avatar leash pulls and the movement they send (see `leash`).
     pub leash: Leash,
     /// bHaptics Player's connection and what each motor plays (see `bhaptics`).
-    pub bhaptics: Bhaptics
+    pub bhaptics: Bhaptics,
+    /// The OWO app's connection and what each muscle plays (see `owo`).
+    pub owo: Owo
 }
 
 impl Default for AppState {
@@ -108,7 +111,8 @@ impl Default for AppState {
             saved_patterns: Saved::default(),
             haptics: Haptics::default(),
             leash: Leash::default(),
-            bhaptics: Bhaptics::default()
+            bhaptics: Bhaptics::default(),
+            owo: Owo::default()
         }
     }
 }

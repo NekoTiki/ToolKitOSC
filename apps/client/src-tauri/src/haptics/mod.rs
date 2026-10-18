@@ -374,7 +374,7 @@ impl crate::addons::Addon for Addon {
             group: "toys",
             pitch: "Your toys and bHaptics gear respond when someone touches your SPS avatar, like OscGoesBrrr",
             platforms: &["windows", "linux"],
-            badge: None,
+            badges: &[],
             needs: &[],
             needs_any: &["intiface", "bhaptics"],
             control_types: &[],

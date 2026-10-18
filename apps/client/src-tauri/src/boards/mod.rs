@@ -485,7 +485,7 @@ impl crate::addons::Addon for Addon {
             group: "toys",
             pitch: "Your own boards driving lights, motors and outputs from your avatar",
             platforms: &["windows", "linux"],
-            badge: None,
+            badges: &[],
             needs: &[],
             needs_any: &[],
             control_types: &[],

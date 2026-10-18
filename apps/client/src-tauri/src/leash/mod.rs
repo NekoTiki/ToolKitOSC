@@ -430,7 +430,7 @@ impl crate::addons::Addon for Addon {
             group: "movement",
             pitch: "Someone pulls the leash on your avatar and you walk toward them, like OSCLeash",
             platforms: &["windows", "linux"],
-            badge: None,
+            badges: &[],
             needs: &[],
             needs_any: &[],
             control_types: &[],

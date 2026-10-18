@@ -21,6 +21,7 @@ const GROUPS: Record<string, string> = { toys: 'Toys and shockers', movement: 'M
 
 const BADGES: Record<string, { label: string; color: 'error' | 'warning' | 'info' | 'neutral' }> = {
   shocks: { label: 'Shocks', color: 'error' },
+  electrical: { label: 'Electrical', color: 'error' },
   beta: { label: 'Beta', color: 'info' }
 }
 
@@ -135,12 +136,14 @@ const canLaunch = (addon: Addon): boolean =>
           </p>
 
           <div
-            v-if="addon.badge"
+            v-if="addon.badges.length"
             class="flex shrink-0 flex-wrap justify-end gap-1.5"
           >
             <UBadge
-              :label="BADGES[addon.badge]?.label ?? addon.badge"
-              :color="BADGES[addon.badge]?.color ?? 'neutral'"
+              v-for="badge in addon.badges"
+              :key="badge"
+              :label="BADGES[badge]?.label ?? badge"
+              :color="BADGES[badge]?.color ?? 'neutral'"
               variant="subtle"
               class="rounded-full"
             />
