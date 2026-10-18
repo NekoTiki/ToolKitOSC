@@ -11,6 +11,7 @@
 - Releases are cut from `origin/master` by pushing tags: `client-vX.Y.Z` and `server-vX.Y.Z` (annotated, message `client vX.Y.Z` / `server vX.Y.Z`). The two can share a version number.
 - The version comes from the tag. `package.json`, `tauri.conf.json` and `Cargo.toml` are not bumped.
 - `client-v*` runs `release-client.yml`. It creates a **draft** GitHub release named `ToolKitOSC vX.Y.Z` with auto-generated notes, builds Windows (nsis) and Linux (deb + AppImage), then publishes the draft. Publishing only flips `draft=false`, so you can rewrite the notes while the builds run (`gh release edit client-vX.Y.Z --notes-file ...`).
+- Betas: a `client-vX.Y.Z-beta.N` tag makes a GitHub **prerelease**. Only people with **Beta updates** on (Settings > About) get it through the updater; everyone else stays on `releases/latest`. Notes use the same style, with the Full Changelog against the previous client tag, beta or stable.
 - `server-v*` runs `release-server.yml`. It publishes `ghcr.io/nekotiki/toolkitosc-server:X.Y.Z` and `:latest` (amd64 + arm64). There is no GitHub release for the server; server changes go in the client release notes.
 
 ### Release notes style
