@@ -60,6 +60,15 @@ impl Position {
         }
     }
 
+    /// How many motors in a row, numbered left to right, top to bottom.
+    pub fn columns(self) -> usize {
+        match self {
+            Position::Head => 6,
+            Position::VestFront | Position::VestBack | Position::GloveL | Position::GloveR => 4,
+            _ => 3
+        }
+    }
+
     /// The name Player lists in `ConnectedPositions`: both sides of a vest are one `Vest`.
     pub fn device(self) -> &'static str {
         match self {

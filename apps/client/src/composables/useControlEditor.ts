@@ -6,6 +6,7 @@ import { usePresets } from '@renderer/composables/usePresets'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import { getUUID } from '@renderer/utils/uuid'
 import type {
+  BhapticsControl,
   BooleanControl,
   BooleanEnumControl,
   BooleanGroupControl,
@@ -41,7 +42,8 @@ type AnyDraft = Partial<
     Fields<OpenShockControl> &
     Fields<IntifaceToyControl> &
     Fields<IntifacePatternControl> &
-    Fields<PresetControl>
+    Fields<PresetControl> &
+    Fields<BhapticsControl>
 > & {
   type?: ControlType['type']
   inputs?: BooleanGroupControl['inputs'] | BooleanEnumControl['inputs']
@@ -73,7 +75,15 @@ const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
     m.actuators = []
     m.allowedPatterns = []
   },
-  preset: (m) => (m.presetId = '')
+  preset: (m) => (m.presetId = ''),
+  bhaptics: (m) => {
+    m.positions = ['VestFront', 'VestBack']
+    m.grid = 'motors'
+    m.spread = 'soft'
+    m.maxIntensity = 0.6
+    m.pulseMs = 400
+    m.maxHoldMs = 10_000
+  }
 }
 
 // Which parameter type each address-based control type can drive.
@@ -93,7 +103,7 @@ export interface ShockerOption {
   value: string
 }
 
-export type EditorErrors = Partial<Record<'name' | 'address' | 'options' | 'inputs' | 'shockers' | 'range' | 'actuators' | 'patterns' | 'preset', string>>
+export type EditorErrors = Partial<Record<'name' | 'address' | 'options' | 'inputs' | 'shockers' | 'range' | 'actuators' | 'patterns' | 'preset' | 'positions', string>>
 
 export interface ControlEditor {
   model: Ref<AnyDraft>
@@ -240,6 +250,9 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
         break
       case 'preset':
         if (!m.presetId) next.preset = 'Pick a preset.'
+        break
+      case 'bhaptics':
+        if (!m.positions?.length) next.positions = 'Pick a device.'
         break
     }
 

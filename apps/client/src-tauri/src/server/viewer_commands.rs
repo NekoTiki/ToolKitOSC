@@ -119,6 +119,9 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
         (Some(control), Some(command)) => crate::controls::run(app, control, command, viewer_name),
         _ => Default::default()
     };
+    if outcome.live {
+        return;
+    }
 
     let sent = command.as_ref().unwrap_or(&message);
     let control_name = control

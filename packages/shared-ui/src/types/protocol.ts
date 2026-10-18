@@ -2,7 +2,7 @@
 // hand-parsed independently in useWebsocketHost.ts (client), useWebsocketClient.ts (server app),
 // and the Nitro routes server/routes/host.ts + server/routes/ws/[ws].ts. Shapes below are taken
 // directly from those call sites, not guessed.
-import type { ControlCommand, ControlGroup, ControlTypes, ViewerGroupInfo } from './controls'
+import type { BhapticsPosition, ControlCommand, ControlGroup, ControlTypes, ViewerGroupInfo } from './controls'
 import type { OpenShockCommandResult, OpenShockControlValue } from './openShock'
 import type { OSCArg } from './osc'
 import type { ColorFamilyWithoutNeutral } from './theme'
@@ -41,6 +41,10 @@ export interface WsEnvelope<Type extends string, Message> {
 //
 // Additive, no bump: Toy and Toy Pattern controls may carry `paused` while avatar touch drives their
 // toy. An older server forwards it and an older viewer page just doesn't dim the tile.
+//
+// Additive, no bump: the 'bhaptics' control type and its commands, and 'bhaptics-value-update'
+// (host -> server -> viewers). An older server drops both (its sanitizeCommand doesn't know the
+// type) and an older viewer page can't draw the tile, so viewers need an updated server for it.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
@@ -143,6 +147,15 @@ export interface IntifacePatternValueUpdateMessage {
   // Only while a viewer's own pattern plays (value VIEWER_PATTERN_ID): their name and when it stops.
   by?: string
   endsAt?: number
+}
+
+// What the host's bHaptics gear plays right now, for every bHaptics tile (see useBhapticsControl.ts).
+// Sent only when it changes, at most every 100 ms.
+export interface BhapticsValueUpdateMessage {
+  // 0-100 per motor, for the positions that play.
+  playing: Partial<Record<BhapticsPosition, number[]>>
+  // Positions avatar touch drives: viewers' taps there wait.
+  touched: BhapticsPosition[]
 }
 
 // The value a command was run with, as the host logs it: the command's own value, or for a
@@ -283,6 +296,7 @@ export type HostToServerMessage =
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
   | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
+  | WsEnvelope<'bhaptics-value-update', BhapticsValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'rate-limited', RateLimitedMessage>
@@ -315,6 +329,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'open-shock-value-update', OpenShockValueUpdateMessage>
   | WsEnvelope<'intiface-value-update', IntifaceValueUpdateMessage>
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
+  | WsEnvelope<'bhaptics-value-update', BhapticsValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'rate-limited', RateLimitedMessage>

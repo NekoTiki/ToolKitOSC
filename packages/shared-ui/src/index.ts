@@ -2,6 +2,7 @@
 // shared between the desktop client (authoring UI wraps these) and the server's viewer page.
 export { default as Control } from './components/Control.vue'
 export { default as ControlBase } from './components/ControlBase.vue'
+export { default as ControlBhaptics } from './components/ControlBhaptics.vue'
 export { default as ControlBoolean } from './components/ControlBoolean.vue'
 export { default as ControlBooleanBase } from './components/ControlBooleanBase.vue'
 export { default as ControlBooleanEnum } from './components/ControlBooleanEnum.vue'
@@ -17,6 +18,8 @@ export { default as ControlSliderBase } from './components/ControlSliderBase.vue
 export { default as ControlStepEnum } from './components/ControlStepEnum.vue'
 export { default as PatternRecorderBase } from './components/PatternRecorderBase.vue'
 export type { TileBadge } from './components/tileBadges'
+export type { BhapticsControlState } from './composables/useBhapticsControl'
+export { useBhapticsControl } from './composables/useBhapticsControl'
 export type { IntifaceControlValue } from './composables/useIntifaceControl'
 export { useIntifaceControl } from './composables/useIntifaceControl'
 export type { IntifacePatternControlValue, ViewerPatternInfo } from './composables/useIntifacePatternControl'

@@ -1,5 +1,6 @@
 import type { ControlGroup, PresenceEntry, ServerToViewerMessage, ViewerActionMessage } from '@toolkitosc/shared-ui'
 
+import { useBhapticsControl } from '~/composables/useBhapticsControl'
 import { useClientTheme } from '~/composables/useClientTheme'
 import { useIntifaceControl } from '~/composables/useIntifaceControl'
 import { useIntifacePatternControl } from '~/composables/useIntifacePatternControl'
@@ -21,6 +22,7 @@ export function useWebsocketClient(roomId: string) {
   const { args } = useOscMessages()
   const { setValue } = useOpenShockControl()
   const { setValue: setIntifaceValue } = useIntifaceControl()
+  const { setState: setBhapticsState } = useBhapticsControl()
   const { setValue: setIntifacePatternValue } = useIntifacePatternControl()
   const { setTheme } = useClientTheme()
   const controlGroups = ref<ControlGroup[]>([])
@@ -73,6 +75,8 @@ export function useWebsocketClient(roomId: string) {
         const { controlId, value, by, endsAt } = data.message
 
         setIntifacePatternValue(controlId, value, by || endsAt ? { by, endsAt } : undefined)
+      } else if (data.type === 'bhaptics-value-update') {
+        setBhapticsState({ playing: data.message.playing ?? {}, touched: data.message.touched ?? [] })
       } else if (data.type === 'client-invalid') {
         // The wire type is the full ClientType union ('everyone' | 'username' | 'discord'), but
         // checkClient() (see apps/client/src/utils/checkClient.ts) never fails validation when

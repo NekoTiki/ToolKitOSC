@@ -67,6 +67,39 @@ impl Leases {
     }
 }
 
+/// How much the motors around the touched ones play too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Spread {
+    Off,
+    Soft,
+    Wide
+}
+
+/// The touched `motors` at `level`, and their neighbours at a part of it, on `position`'s grid.
+pub fn spread(position: Position, motors: &[usize], spread: Spread, level: f64) -> Vec<f64> {
+    let columns = position.columns() as i64;
+    let mut levels = vec![0.0; position.motors()];
+    for (index, out) in levels.iter_mut().enumerate() {
+        let (row, column) = (index as i64 / columns, index as i64 % columns);
+        let share = motors
+            .iter()
+            .map(|motor| {
+                let (dr, dc) = ((*motor as i64 / columns - row).abs(), (*motor as i64 % columns - column).abs());
+                match (dr + dc, dr.max(dc), spread) {
+                    (0, _, _) => 1.0,
+                    (1, _, Spread::Soft) => 0.35,
+                    (1, _, Spread::Wide) => 0.5,
+                    (2, 1, Spread::Wide) => 0.25,
+                    _ => 0.0
+                }
+            })
+            .fold(0.0, f64::max);
+        *out = share * level;
+    }
+    levels
+}
+
 /// Each position's state, without the sending, so it can be tested.
 #[derive(Debug, Default)]
 pub struct Arbiter {
@@ -211,6 +244,19 @@ mod tests {
         leases.set("viewer:sam", Position::VestBack, vec![1.0], until);
         leases.set("viewer:sam", Position::VestBack, vec![0.0, 1.0], until);
         assert_eq!(&leases.levels(start)[&Position::VestBack][..2], [0.0, 1.0]);
+    }
+
+    #[test]
+    fn spread_reaches_the_neighbours() {
+        let soft = spread(Position::VestBack, &[5], Spread::Soft, 0.8);
+        assert_eq!(soft[5], 0.8);
+        assert_eq!([soft[1], soft[4], soft[6], soft[9]], [0.8 * 0.35; 4]);
+        assert_eq!(soft[0], 0.0, "no diagonals when soft");
+        let wide = spread(Position::VestBack, &[5], Spread::Wide, 1.0);
+        assert_eq!([wide[4], wide[0], wide[10], wide[7]], [0.5, 0.25, 0.25, 0.0]);
+        let off = spread(Position::VestBack, &[3], Spread::Off, 1.0);
+        assert_eq!(off.iter().filter(|l| **l > 0.0).count(), 1);
+        assert_eq!(spread(Position::VestFront, &[3], Spread::Soft, 1.0)[4], 0.0, "rows don't wrap");
     }
 
     #[test]

@@ -25,6 +25,9 @@ function optionCount(control: ControlType): number | null {
 // Option pickers size themselves from their option count (their buttons need the room);
 // everything else is one cell unless the user asked for a wide tile.
 export function controlTileSpan(control: ControlType): TileSpan {
+  // A body needs the room to draw on.
+  if (control.type === 'bhaptics') return 'l'
+
   const options = optionCount(control)
 
   if (options !== null) return options > MAX_OPTIONS_IN_WIDE_TILE ? 'l' : 'm'

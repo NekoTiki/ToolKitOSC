@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AddressField from '@renderer/components/control-modal/AddressField.vue'
+import type { BhapticsOptions } from '@renderer/components/control-modal/BhapticsFields.vue'
+import BhapticsFields from '@renderer/components/control-modal/BhapticsFields.vue'
 import BooleanEnumFields from '@renderer/components/control-modal/BooleanEnumFields.vue'
 import BooleanGroupFields from '@renderer/components/control-modal/BooleanGroupFields.vue'
 import EnumOptionsField from '@renderer/components/control-modal/EnumOptionsField.vue'
@@ -105,13 +107,17 @@ const allTypeGroups = computed<{ label: string; items: TypeChoice[] }[]>(() => [
     ]
   },
   {
+    label: 'bHaptics',
+    items: [{ value: 'bhaptics', icon: 'i-lucide-shirt', description: 'Viewers draw on your vest, head or arms · Beta' }]
+  },
+  {
     label: 'Presets',
     items: [{ value: 'preset', icon: 'i-lucide-play', description: 'Apply a saved preset in one tap', disabled: !editor.hasPresets.value, reason: 'Create a preset first' }]
   }
 ])
 
 // Option pickers size themselves from their option count (see shared-ui's controlTileSpan).
-const sizeable = computed(() => !['enum', 'boolean-enum', 'intiface-pattern'].includes(model.value.type ?? ''))
+const sizeable = computed(() => !['enum', 'boolean-enum', 'intiface-pattern', 'bhaptics'].includes(model.value.type ?? ''))
 
 const tileWidth = computed<'normal' | 'wide'>({
   get: () => (model.value.size === 'wide' ? 'wide' : 'normal'),
@@ -146,6 +152,18 @@ const viewerPatterns = computed<IntifacePatternControl['viewerPatterns']>({
   set: (value) => (model.value.viewerPatterns = value)
 })
 
+const bhapticsOptions = computed<BhapticsOptions>({
+  get: () => ({
+    positions: model.value.positions ?? ['VestFront', 'VestBack'],
+    grid: model.value.grid ?? 'motors',
+    spread: model.value.spread ?? 'soft',
+    maxIntensity: model.value.maxIntensity ?? 0.6,
+    pulseMs: model.value.pulseMs ?? 400,
+    maxHoldMs: model.value.maxHoldMs ?? 10_000
+  }),
+  set: (value) => Object.assign(model.value, value)
+})
+
 const openShockModes = [
   { label: 'Shock', value: 'Shock' as const },
   { label: 'Vibrate', value: 'Vibrate' as const }
@@ -154,7 +172,8 @@ const openShockModes = [
 // Large tiles don't fit two-wide in the preview column, and a 2×2 picker previews as one row
 // (its options scroll), so the preview is capped at medium.
 const previewDensity = computed(() => (density.value === 'l' ? 'm' : density.value))
-const previewSpan = computed(() => (controlTileSpan(preview.value) === 's' ? 's' : 'm'))
+// A bHaptics body keeps its 2×2: it can't be drawn on one row.
+const previewSpan = computed(() => (preview.value.type === 'bhaptics' ? 'l' : controlTileSpan(preview.value) === 's' ? 's' : 'm'))
 
 const preview = computed(() => ({ ...model.value, id: model.value.id ?? 'preview', name: model.value.name || 'Untitled control' }) as ControlType)
 
@@ -284,7 +303,7 @@ onBeforeRouteLeave(async () => {
             </UFormField>
             <UFormField
               label="Tile width"
-              :description="sizeable ? undefined : 'Automatic: two cells, or 2×2 above 8 options.'"
+              :description="sizeable ? undefined : type === 'bhaptics' ? 'Always 2×2, with room to draw.' : 'Automatic: two cells, or 2×2 above 8 options.'"
             >
               <SegmentedControl
                 v-if="sizeable"
@@ -413,6 +432,13 @@ onBeforeRouteLeave(async () => {
               />
             </UFormField>
           </template>
+
+          <UFormField
+            v-if="type === 'bhaptics'"
+            :error="errors.positions"
+          >
+            <BhapticsFields v-model="bhapticsOptions" />
+          </UFormField>
 
           <UFormField
             v-if="type === 'preset'"
