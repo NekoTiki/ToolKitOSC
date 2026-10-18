@@ -1,0 +1,10 @@
+[package]
+name = "toolkitosc-raster"
+version = "1.0.0"
+description = "Draws egui's triangles on the CPU, for the wrist panel (see src/wrist)"
+edition = "2021"
+rust-version = "1.77"
+publish = false
+
+[dependencies]
+egui = "0.29"
