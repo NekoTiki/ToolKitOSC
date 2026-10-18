@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BhapticsStepFields from '@renderer/components/automations/BhapticsStepFields.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
@@ -410,6 +411,10 @@ const leashValue = computed({
   }
 })
 
+// ---- bHaptics
+
+const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
+
 const toInt = (value: number | string): number =>
   Math.min(255, Math.max(0, Math.round(Number(value) || 0)))
 </script>
@@ -487,7 +492,10 @@ const toInt = (value: number | string): number =>
         />
       </UFormField>
 
-      <UFormField label="Action" :description="OUTPUT_ACTIONS[outputType].description">
+      <UFormField
+        label="Action"
+        :description="OUTPUT_ACTIONS[outputType].description"
+      >
         <SegmentedControl
           v-model="outputType"
           :items="outputItems"
@@ -496,7 +504,10 @@ const toInt = (value: number | string): number =>
         />
       </UFormField>
 
-      <div v-if="board.output.type === 'pulse'" class="grid gap-3 sm:grid-cols-3">
+      <div
+        v-if="board.output.type === 'pulse'"
+        class="grid gap-3 sm:grid-cols-3"
+      >
         <UFormField
           label="On for"
           :description="
@@ -522,7 +533,10 @@ const toInt = (value: number | string): number =>
             "
           />
         </UFormField>
-        <UFormField label="Times" description="1 to 100.">
+        <UFormField
+          label="Times"
+          description="1 to 100."
+        >
           <UInput
             v-model.number="board.output.count"
             type="number"
@@ -550,7 +564,10 @@ const toInt = (value: number | string): number =>
         </UFormField>
       </div>
 
-      <div v-else-if="board.output.type === 'follow'" class="grid gap-3 sm:grid-cols-2">
+      <div
+        v-else-if="board.output.type === 'follow'"
+        class="grid gap-3 sm:grid-cols-2"
+      >
         <UFormField :label="`At 0: ${Math.round(board.output.min * 100)} %`">
           <USlider
             :model-value="board.output.min"
@@ -588,7 +605,10 @@ const toInt = (value: number | string): number =>
           :description="`Posts “${outputMessages}”.`"
           @update:model-value="board.chatbox = !!$event"
         />
-        <p v-if="board.chatbox && !chatboxEnabled" class="text-sm text-error">
+        <p
+          v-if="board.chatbox && !chatboxEnabled"
+          class="text-sm text-error"
+        >
           The chatbox is off, so this won't post anything. Turn it on in Settings › VRChat chatbox.
         </p>
       </template>
@@ -610,7 +630,10 @@ const toInt = (value: number | string): number =>
           disabled
         />
       </UFormField>
-      <UFormField v-else label="Parameter">
+      <UFormField
+        v-else
+        label="Parameter"
+      >
         <div class="grid gap-2">
           <USelectMenu
             v-model="parameter"
@@ -620,12 +643,18 @@ const toInt = (value: number | string): number =>
             class="w-full"
             virtualize
           />
-          <UCheckbox v-model="showAllParameters" label="Show built-in parameters too" />
+          <UCheckbox
+            v-model="showAllParameters"
+            label="Show built-in parameters too"
+          />
         </div>
       </UFormField>
 
       <template v-if="param.parameter">
-        <UFormField label="Action" :description="PARAMETER_ACTIONS[parameterType].description">
+        <UFormField
+          label="Action"
+          :description="PARAMETER_ACTIONS[parameterType].description"
+        >
           <SegmentedControl
             v-model="parameterType"
             :items="parameterTypeItems"
@@ -648,7 +677,10 @@ const toInt = (value: number | string): number =>
             ]"
             aria-label="Value"
           />
-          <div v-else-if="param.valueType === 'Int'" class="max-w-40">
+          <div
+            v-else-if="param.valueType === 'Int'"
+            class="max-w-40"
+          >
             <UInput
               :model-value="parameterValue"
               type="number"
@@ -659,7 +691,10 @@ const toInt = (value: number | string): number =>
               @update:model-value="parameterValue = toInt($event)"
             />
           </div>
-          <div v-else class="grid gap-1.5">
+          <div
+            v-else
+            class="grid gap-1.5"
+          >
             <span class="text-sm text-muted tabular-nums">{{ parameterValue.toFixed(2) }}</span>
             <USlider
               :model-value="parameterValue"
@@ -671,7 +706,10 @@ const toInt = (value: number | string): number =>
           </div>
         </UFormField>
 
-        <div v-else-if="param.set.type === 'follow'" class="grid gap-3 sm:grid-cols-2">
+        <div
+          v-else-if="param.set.type === 'follow'"
+          class="grid gap-3 sm:grid-cols-2"
+        >
           <UFormField :label="`At 0: ${param.set.min.toFixed(2)}`">
             <USlider
               :model-value="param.set.min"
@@ -733,7 +771,10 @@ const toInt = (value: number | string): number =>
       </UFormField>
 
       <template v-if="controlStep.controlId">
-        <UFormField label="Action" :description="controlRunDescription">
+        <UFormField
+          label="Action"
+          :description="controlRunDescription"
+        >
           <SegmentedControl
             v-model="controlRunType"
             :items="controlRunItems"
@@ -762,10 +803,11 @@ const toInt = (value: number | string): number =>
             :items="choiceItems"
             class="w-full max-w-80"
           />
-          <div v-else class="grid gap-1.5">
-            <span class="text-sm text-muted tabular-nums"
-              >{{ Math.round(Number(controlStep.run.value) * 100) }} %</span
-            >
+          <div
+            v-else
+            class="grid gap-1.5"
+          >
+            <span class="text-sm text-muted tabular-nums">{{ Math.round(Number(controlStep.run.value) * 100) }} %</span>
             <USlider
               :model-value="Number(controlStep.run.value)"
               :min="0"
@@ -776,7 +818,10 @@ const toInt = (value: number | string): number =>
           </div>
         </UFormField>
 
-        <div v-else-if="controlStep.run.type === 'pulse'" class="grid gap-3 sm:grid-cols-2">
+        <div
+          v-else-if="controlStep.run.type === 'pulse'"
+          class="grid gap-3 sm:grid-cols-2"
+        >
           <UFormField :label="`Intensity: ${Math.round(controlStep.run.value * 100)} %`">
             <USlider
               :model-value="controlStep.run.value"
@@ -804,13 +849,16 @@ const toInt = (value: number | string): number =>
               class="w-full"
               @update:model-value="
                 controlStep.run.type === 'pulse' &&
-                (controlStep.run.ms = toMs($event, MAX_TOY_PULSE_MS))
+                  (controlStep.run.ms = toMs($event, MAX_TOY_PULSE_MS))
               "
             />
           </UFormField>
         </div>
 
-        <div v-else-if="controlStep.run.type === 'follow'" class="grid gap-3 sm:grid-cols-2">
+        <div
+          v-else-if="controlStep.run.type === 'follow'"
+          class="grid gap-3 sm:grid-cols-2"
+        >
           <UFormField :label="`At 0: ${Math.round(controlStep.run.min * 100)} %`">
             <USlider
               :model-value="controlStep.run.min"
@@ -852,8 +900,18 @@ const toInt = (value: number | string): number =>
             : undefined
         "
       >
-        <UInput v-if="otherAvatar" model-value="A profile on that avatar" class="w-full" disabled />
-        <USelect v-else v-model="profileTarget" :items="profileItems" class="w-full max-w-80" />
+        <UInput
+          v-if="otherAvatar"
+          model-value="A profile on that avatar"
+          class="w-full"
+          disabled
+        />
+        <USelect
+          v-else
+          v-model="profileTarget"
+          :items="profileItems"
+          class="w-full max-w-80"
+        />
       </UFormField>
     </template>
 
@@ -878,7 +936,10 @@ const toInt = (value: number | string): number =>
       </UFormField>
     </template>
 
-    <p v-else-if="step.kind === 'stop-everything'" class="text-sm text-muted">
+    <p
+      v-else-if="step.kind === 'stop-everything'"
+      class="text-sm text-muted"
+    >
       Stops every toy, pattern, shock and board output and pauses your controls, like the button in
       the top bar.
     </p>
@@ -898,5 +959,10 @@ const toInt = (value: number | string): number =>
         aria-label="Leash moves me"
       />
     </UFormField>
+
+    <BhapticsStepFields
+      v-else-if="bhapticsStep"
+      :model-value="bhapticsStep"
+    />
   </div>
 </template>

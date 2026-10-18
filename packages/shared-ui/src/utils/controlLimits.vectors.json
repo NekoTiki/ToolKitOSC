@@ -321,5 +321,23 @@
     "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000 },
     "command": { "type": "bhaptics", "value": "shock", "position": "VestFront", "motors": [1] },
     "expected": null
+  },
+  {
+    "name": "bhaptics effect the control allows",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000, "effects": ["heartbeat", "made-up"] },
+    "command": { "type": "bhaptics", "value": "effect", "effect": "heartbeat", "position": "Head" },
+    "expected": { "type": "bhaptics", "value": "effect", "effect": "heartbeat", "level": 0.6 }
+  },
+  {
+    "name": "bhaptics drops an effect the control doesn't allow",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000, "effects": ["heartbeat", "made-up"] },
+    "command": { "type": "bhaptics", "value": "effect", "effect": "rain" },
+    "expected": null
+  },
+  {
+    "name": "bhaptics drops an effect the app doesn't have",
+    "control": { "id": "c", "name": "C", "type": "bhaptics", "positions": ["VestFront", "VestBack"], "grid": "motors", "spread": "soft", "maxIntensity": 0.6, "pulseMs": 400, "maxHoldMs": 10000, "effects": ["heartbeat", "made-up"] },
+    "command": { "type": "bhaptics", "value": "effect", "effect": "made-up" },
+    "expected": null
   }
 ]

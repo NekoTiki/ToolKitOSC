@@ -159,7 +159,8 @@ const bhapticsOptions = computed<BhapticsOptions>({
     spread: model.value.spread ?? 'soft',
     maxIntensity: model.value.maxIntensity ?? 0.6,
     pulseMs: model.value.pulseMs ?? 400,
-    maxHoldMs: model.value.maxHoldMs ?? 10_000
+    maxHoldMs: model.value.maxHoldMs ?? 10_000,
+    effects: model.value.effects ?? []
   }),
   set: (value) => Object.assign(model.value, value)
 })

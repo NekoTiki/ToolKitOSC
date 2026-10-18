@@ -1,5 +1,5 @@
 import type { CommandWithoutIds, ControlLimits, ControlType, ViewerGroupInfo } from '../types/controls'
-import { BHAPTICS_LAYOUT, INTIFACE_PATTERN_OFF_ID, PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS, VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '../types/controls'
+import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, INTIFACE_PATTERN_OFF_ID, PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS, VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '../types/controls'
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
@@ -155,8 +155,18 @@ export function sanitizeCommand(control: ControlType, command: CommandWithoutIds
       return { type: command.type }
 
     case 'bhaptics': {
-      if (control.type !== 'bhaptics' || (command.value !== 'hold' && command.value !== 'tap')) return null
-      if (!control.positions.includes(command.position)) return null
+      if (control.type !== 'bhaptics') return null
+
+      // Nothing above the control's own cap or the profile's max is ever played.
+      const level = Math.min(clamp(control.maxIntensity, 0, 1), limitRange(limits).max)
+
+      if (command.value === 'effect') {
+        const known = BHAPTICS_EFFECTS.some((effect) => effect.id === command.effect)
+
+        return known && control.effects?.includes(command.effect!) ? { type: command.type, value: command.value, effect: command.effect, level } : null
+      }
+      if (command.value !== 'hold' && command.value !== 'tap') return null
+      if (!command.position || !control.positions.includes(command.position)) return null
 
       const count = BHAPTICS_LAYOUT[command.position].motors
       const { motors } = command
@@ -165,8 +175,6 @@ export function sanitizeCommand(control: ControlType, command: CommandWithoutIds
       if (command.value === 'tap' && !motors.length) return null
       if (command.value === 'hold' && !isFiniteNumber(command.holdId)) return null
 
-      // Nothing above the control's own cap or the profile's max is ever played.
-      const level = Math.min(clamp(control.maxIntensity, 0, 1), limitRange(limits).max)
       const sorted = [...new Set(motors)].sort((a, b) => a - b)
 
       return command.value === 'tap'

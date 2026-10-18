@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import type { BhapticsControl, BhapticsPosition } from '@toolkitosc/shared-ui'
+import { BHAPTICS_EFFECTS } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 // The bHaptics control's options: which part of the body the tile shows, how fine its grid is, and
 // how hard and how long viewers can make it play.
-export type BhapticsOptions = Pick<BhapticsControl, 'positions' | 'grid' | 'spread' | 'maxIntensity' | 'pulseMs' | 'maxHoldMs'>
+export type BhapticsOptions = Pick<BhapticsControl, 'positions' | 'grid' | 'spread' | 'maxIntensity' | 'pulseMs' | 'maxHoldMs' | 'effects'>
 
 const options = defineModel<BhapticsOptions>({ required: true })
 
@@ -21,6 +22,13 @@ const spread = field('spread')
 const maxIntensity = field('maxIntensity')
 const pulseMs = field('pulseMs')
 const maxHoldMs = field('maxHoldMs')
+const effects = field('effects')
+
+const toggleEffect = (id: string, on: boolean): void => {
+  const current = effects.value ?? []
+
+  effects.value = on ? [...current.filter((e) => e !== id), id] : current.filter((e) => e !== id)
+}
 
 type Device = 'vest' | 'head' | 'arms' | 'hands' | 'gloves' | 'feet'
 type Sides = 'both' | 'first' | 'second'
@@ -155,6 +163,26 @@ const fromSlider = (value: number | number[] | undefined, apply: (value: number)
         />
       </UFormField>
     </div>
+    <UFormField
+      label="Effects"
+      description="Buttons under the grid. Each plays across every side the tile has."
+    >
+      <div class="flex flex-wrap gap-2">
+        <label
+          v-for="effect in BHAPTICS_EFFECTS"
+          :key="effect.id"
+          :for="`bhaptics-effect-${effect.id}`"
+          class="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-default bg-(--aurora-well) px-3"
+        >
+          <UCheckbox
+            :id="`bhaptics-effect-${effect.id}`"
+            :model-value="effects?.includes(effect.id) ?? false"
+            @update:model-value="toggleEffect(effect.id, !!$event)"
+          />
+          <span :class="effects?.includes(effect.id) ? 'text-highlighted' : 'text-muted'">{{ effect.label }}</span>
+        </label>
+      </div>
+    </UFormField>
     <p class="text-sm text-dimmed">
       Each device's strength in Settings > bHaptics and the active profile's limits for this control still apply on top. While someone touches
       that part of your avatar, viewers' taps there wait.

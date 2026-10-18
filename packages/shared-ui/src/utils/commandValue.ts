@@ -69,6 +69,7 @@ export const describeCommand = (control: ControlType | undefined, type: ControlT
     case 'bhaptics':
       if (value === 'hold') return 'drew on it'
       if (value === 'tap') return 'tapped it'
+      if (value === 'effect') return 'played an effect'
       break
   }
 

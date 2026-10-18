@@ -83,6 +83,7 @@ const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
     m.maxIntensity = 0.6
     m.pulseMs = 400
     m.maxHoldMs = 10_000
+    m.effects = ['heartbeat']
   }
 }
 

@@ -11,6 +11,7 @@
 //! the switch in the app.
 mod arbiter;
 pub mod control;
+pub mod effects;
 mod launch;
 mod link;
 pub mod model;
@@ -101,7 +102,9 @@ pub struct Bhaptics {
     /// Test motors is walking this position.
     testing: Mutex<Option<(Position, tauri::async_runtime::JoinHandle<()>)>>,
     /// Viewers' holds going on now (see `control`).
-    holds: Mutex<std::collections::HashMap<String, control::Hold>>
+    holds: Mutex<std::collections::HashMap<String, control::Hold>>,
+    /// Effects playing now, by who started them.
+    effects: Mutex<std::collections::HashMap<String, (u64, tauri::async_runtime::JoinHandle<()>)>>
 }
 
 fn bhaptics(app: &AppHandle) -> &Bhaptics {
@@ -233,6 +236,67 @@ pub fn ask(app: &AppHandle, id: &str, position: Position, levels: Vec<f64>, unti
 /// Lets go of everything `id` asked for.
 pub fn let_go(app: &AppHandle, id: &str) {
     bhaptics(app).leases.lock().unwrap().remove(id);
+}
+
+/// Plays `effect` on `positions` at up to `level`, under `id`: one already playing under the same
+/// id stops first. Held back on positions touch drives, like anything else asked.
+pub fn play_effect(app: &AppHandle, id: &str, effect: &str, positions: Vec<Position>, level: f64) {
+    if !effects::exists(effect) || positions.is_empty() {
+        return;
+    }
+    static RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let run = RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if let Some((_, old)) = bhaptics(app).effects.lock().unwrap().remove(id) {
+        old.abort();
+    }
+    let_go(app, id);
+    let task = {
+        let (app, id, effect) = (app.clone(), id.to_owned(), effect.to_owned());
+        let seed = rand::random::<u64>();
+        tauri::async_runtime::spawn(async move {
+            let started = Instant::now();
+            let mut ticker = interval(TICK);
+            ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                let now = Instant::now();
+                let Some(levels) = effects::levels(&effect, &positions, now.duration_since(started), seed) else {
+                    break;
+                };
+                for (position, motors) in levels {
+                    // Lasts past the next tick, so the effect doesn't flicker between them.
+                    ask(&app, &id, position, motors.iter().map(|m| m * level).collect(), now + TICK + TICK / 2);
+                }
+            }
+            // Unless another run has taken its place since.
+            let mut playing = bhaptics(&app).effects.lock().unwrap();
+            if playing.get(&id).is_some_and(|(other, _)| *other == run) {
+                playing.remove(&id);
+            }
+        })
+    };
+    bhaptics(app).effects.lock().unwrap().insert(id.to_owned(), (run, task));
+}
+
+/// Runs a bHaptics automation step. Pulses each get their own lease, so steps close together
+/// overlap rather than cut each other short.
+pub fn run_step(app: &AppHandle, action: &crate::automations::model::Action) {
+    use crate::automations::model::Action;
+    static PULSES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    match action {
+        Action::BhapticsPulse { position, motors, intensity, ms } => {
+            let level = intensity.clamp(0.0, 1.0);
+            let mut levels = vec![if motors.is_empty() { level } else { 0.0 }; position.motors()];
+            let count = position.motors();
+            motors.iter().filter(|m| **m < count).for_each(|m| levels[*m] = level);
+            let id = format!("automation:{}", PULSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+            ask(app, &id, *position, levels, Instant::now() + Duration::from_millis(u64::from(*ms)));
+        }
+        Action::BhapticsEffect { effect, positions, intensity } => {
+            play_effect(app, &format!("automation:{effect}"), effect, positions.clone(), intensity.clamp(0.0, 1.0));
+        }
+        _ => {}
+    }
 }
 
 /// Walks every motor of `position`, one at a time, so you can feel the order is right. Starting
@@ -495,6 +559,9 @@ pub fn set_simulated(app: &AppHandle, simulated: bool) -> Result<(), String> {
 fn stop_all(app: &AppHandle) {
     stop_test(app);
     bhaptics(app).holds.lock().unwrap().clear();
+    for (_, (_, task)) in bhaptics(app).effects.lock().unwrap().drain() {
+        task.abort();
+    }
     bhaptics(app).leases.lock().unwrap().clear();
     bhaptics(app).arbiter.lock().unwrap().clear();
     send(app, &[Submit::TurnOffAll]);
@@ -544,7 +611,7 @@ impl crate::addons::Addon for Addon {
             badge: Some("beta"),
             needs: &[],
             control_types: &["bhaptics"],
-            automation_kinds: &[],
+            automation_kinds: &["bhaptics-pulse", "bhaptics-effect"],
             pages: &[]
         }
     }

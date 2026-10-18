@@ -361,7 +361,17 @@ export interface BhapticsControl extends BaseControl {
   pulseMs: number
   // A single hold is cut off after this long, and needs a new press.
   maxHoldMs: number
+  // The built-in effects (BHAPTICS_EFFECTS ids) viewers get a button for. Missing: none.
+  effects?: string[]
 }
+
+// The built-in effects, played by the app across the control's positions (see the client's
+// src-tauri/src/bhaptics/effects.rs).
+export const BHAPTICS_EFFECTS: { id: string; label: string }[] = [
+  { id: 'heartbeat', label: 'Heartbeat' },
+  { id: 'rain', label: 'Rain' },
+  { id: 'sweep', label: 'Sweep up' }
+]
 
 export const BHAPTICS_HOLD_TICK_MS = 100
 
@@ -442,12 +452,14 @@ export interface PresetControlCommand extends BaseControlCommand {
 // finger: each one keeps those motors on for a moment, so a closed tab stops them by itself. An
 // empty `motors` ends the hold, and `start` marks its first message (the only one logged). 'tap' plays
 // `motors` once, for the control's pulse length. `level` (0-1) is filled in by sanitizeCommand: the
-// highest the control and the profile allow.
+// highest the control and the profile allow. 'effect' plays one of the control's `effects` across
+// all its positions.
 export interface BhapticsControlCommand extends BaseControlCommand {
   type: 'bhaptics'
-  value: 'hold' | 'tap'
-  position: BhapticsPosition
-  motors: number[]
+  value: 'hold' | 'tap' | 'effect'
+  position?: BhapticsPosition
+  motors?: number[]
+  effect?: string
   holdId?: number
   start?: boolean
   level?: number

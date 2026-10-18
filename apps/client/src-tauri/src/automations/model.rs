@@ -254,7 +254,25 @@ pub enum Action {
     Chatbox { text: String },
     StopEverything,
     /// Turns "Leash moves me" on or off, like `TKOSC/Leash`.
-    LeashEnabled { enabled: bool }
+    LeashEnabled { enabled: bool },
+    /// Plays motors of one bHaptics position (all of them when `motors` is empty) for `ms`.
+    #[serde(rename_all = "camelCase")]
+    BhapticsPulse {
+        position: crate::bhaptics::model::Position,
+        #[serde(default)]
+        motors: Vec<usize>,
+        /// 0–1.
+        intensity: f64,
+        ms: u32
+    },
+    /// Plays one of the built-in bHaptics effects across `positions`.
+    #[serde(rename_all = "camelCase")]
+    BhapticsEffect {
+        effect: String,
+        positions: Vec<crate::bhaptics::model::Position>,
+        /// 0–1.
+        intensity: f64
+    }
 }
 
 /// How a step runs a control. Values are what the control's command takes (see shared-ui
@@ -294,6 +312,8 @@ fn run_fits(run: &ControlRun, control_type: &str) -> bool {
 pub const CHATBOX_MAX: usize = 144;
 /// Longest toy pulse.
 pub const MAX_TOY_PULSE_MS: u32 = 60_000;
+/// The longest a bHaptics pulse step plays.
+pub const MAX_BHAPTICS_PULSE_MS: u32 = 30_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -534,6 +554,7 @@ impl Action {
         match self {
             Action::BoardOutput { output, .. } => output.busy_ms().unwrap_or(0),
             Action::Control { run: ControlRun::Pulse { ms, .. }, .. } => *ms,
+            Action::BhapticsPulse { ms, .. } => *ms,
             _ => 0
         }
     }
@@ -636,6 +657,25 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
             }
         }
         Action::Profile { .. } | Action::StopEverything | Action::LeashEnabled { .. } => {}
+        Action::BhapticsPulse { position, motors, intensity, ms } => {
+            if !(0.0..=1.0).contains(intensity) || *ms == 0 || *ms > MAX_BHAPTICS_PULSE_MS {
+                return Err(format!("A bHaptics pulse needs an intensity and up to {} s.", MAX_BHAPTICS_PULSE_MS / 1000));
+            }
+            if motors.iter().any(|motor| *motor >= position.motors()) {
+                return Err("That motor isn't on this device.".into());
+            }
+        }
+        Action::BhapticsEffect { effect, positions, intensity } => {
+            if !crate::bhaptics::effects::exists(effect) {
+                return Err("Pick an effect.".into());
+            }
+            if positions.is_empty() {
+                return Err("Pick where it plays.".into());
+            }
+            if !(0.0..=1.0).contains(intensity) {
+                return Err("The intensity must be within 0–100 %.".into());
+            }
+        }
         Action::Chatbox { text } => {
             if text.trim().is_empty() {
                 return Err("Write the chatbox message.".into());
@@ -886,6 +926,21 @@ mod tests {
         assert_eq!(chatbox_text("Lamp", BoardNote::On), "Lamp activated");
         assert_eq!(chatbox_text("Lamp", BoardNote::Off), "Lamp turned off");
         assert_eq!(chatbox_text(&"x".repeat(200), BoardNote::On).chars().count(), CHATBOX_MAX);
+    }
+
+    #[test]
+    fn bhaptics_steps_read_as_the_webview_writes_them() {
+        use crate::bhaptics::model::Position;
+        let step: Step = serde_json::from_str(r#"{"kind":"bhaptics-pulse","position":"VestBack","motors":[0,1],"intensity":0.5,"ms":800}"#).unwrap();
+        assert_eq!(step.action, Action::BhapticsPulse { position: Position::VestBack, motors: vec![0, 1], intensity: 0.5, ms: 800 });
+        assert_eq!(step.action.busy_ms(), 800);
+        assert!(validate_step(&step, Runs::Moment, None).is_ok());
+        let step: Step = serde_json::from_str(r#"{"kind":"bhaptics-effect","effect":"rain","positions":["VestFront","VestBack"],"intensity":1}"#).unwrap();
+        assert!(validate_step(&step, Runs::Moment, None).is_ok());
+        let step: Step = serde_json::from_str(r#"{"kind":"bhaptics-pulse","position":"Head","motors":[6],"intensity":0.5,"ms":800}"#).unwrap();
+        assert!(validate_step(&step, Runs::Moment, None).is_err(), "a Tactal has 6 motors");
+        let step: Step = serde_json::from_str(r#"{"kind":"bhaptics-effect","effect":"explode","positions":["Head"],"intensity":1}"#).unwrap();
+        assert!(validate_step(&step, Runs::Moment, None).is_err());
     }
 
     #[test]

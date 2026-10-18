@@ -221,6 +221,14 @@ pub fn sanitize_command(control: &Value, command: &Value) -> Option<Value> {
         "open-shock-shocker" | "preset" => Some(json!({ "type": kind })),
         "bhaptics" => {
             let action = value?.as_str()?;
+            // Nothing above the control's own cap or the profile's max is ever played.
+            let cap = number(control.get("maxIntensity")).map(|cap| clamp(cap, 0.0, 1.0)).unwrap_or(f64::NAN);
+            let level = cap.min(limit_range(limits).1);
+            if action == "effect" {
+                let effect = command.get("effect")?.as_str()?;
+                let allowed = control.get("effects").and_then(Value::as_array).is_some_and(|effects| effects.iter().any(|e| e.as_str() == Some(effect)));
+                return (allowed && crate::bhaptics::effects::exists(effect)).then(|| json!({ "type": kind, "value": action, "effect": effect, "level": level }));
+            }
             if action != "hold" && action != "tap" {
                 return None;
             }
@@ -237,9 +245,6 @@ pub fn sanitize_command(control: &Value, command: &Value) -> Option<Value> {
             if action == "tap" && motors.is_empty() {
                 return None;
             }
-            // Nothing above the control's own cap or the profile's max is ever played.
-            let cap = number(control.get("maxIntensity")).map(|cap| clamp(cap, 0.0, 1.0)).unwrap_or(f64::NAN);
-            let level = cap.min(limit_range(limits).1);
             if action == "tap" {
                 return Some(json!({ "type": kind, "value": action, "position": position_name, "motors": motors, "level": level }));
             }
