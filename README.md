@@ -34,6 +34,8 @@ invite can drive your avatar, toys and shockers in real time.
 - See who's connected and what they did on the **Viewers** and **Activity** pages, and ban anyone who misbehaves.
 - Viewers see who else is on the page and the last action taken, or you can keep them private.
 - **Profiles** decide which controls viewers can touch, and can limit options and ranges.
+- **Viewer groups** (Friends, Mods…) can get more than everyone else in each profile.
+- Viewers can record their own toy patterns on the share page; you see them in **Activity**, try them and save them.
 - **Stop everything** from the top bar, a global hotkey or the `TKOSC/Panic` avatar parameter: every toy and
   shocker stops, and viewers see a paused page until you resume.
 - Optionally post viewer actions to your **VRChat chatbox**, so the people in your instance see who's controlling you.
@@ -45,18 +47,31 @@ invite can drive your avatar, toys and shockers in real time.
   held for a while or on any avatar with that name; putting on an avatar; or the share page
   (a viewer uses a control or sends a shock, viewers join or leave, controls resume).
 - **Steps:** run a control or a toy, switch profile, post to the chatbox, set another avatar
-  parameter, drive an ESP32 output or stop everything. Up to 8 per automation, each after its
-  own delay.
+  parameter, drive an ESP32 output, turn the leash on or off, play a bHaptics effect or an OWO
+  sensation, or stop everything. Up to 8 per automation, each after its own delay.
 - **Only if** another parameter is on, a profile is active, or viewers are watching.
 - **Listen** finds the parameter a contact uses: press it, then touch the contact in VRChat.
 
-### 🔌 Integrations
+### 🔌 Add-ons
 
-- **VRChat OSC** — automatic avatar detection, live parameter values and a parameter change log.
-- **Intiface / Buttplug** — control connected toys and play vibration patterns.
+Turn on only what you use in **Settings > Add-ons**; "What do you use?" picks them on first launch.
+
+- **Intiface toys** — control connected toys, play vibration patterns and record your own.
 - **OpenShock** — shocker controls, including the gamble slot-machine reels.
 - **ESP32 boards** — pair boards running the [ToolKitOSC ESP32 firmware](https://github.com/NekoTiki/ToolKitOSC-ESP32)
   and drive their outputs with **automations** (_when Boop turns on, pulse the fan_).
+- **Avatar haptics** — your toys, bHaptics gear and OWO Skin respond when someone touches your
+  SPS avatar, like OscGoesBrrr. Avatar touch takes priority over viewers.
+- **Avatar leash** — someone pulls the leash on your avatar and you walk toward them, like
+  OSCLeash, with a live compass and a setup guide.
+- **bHaptics** _(beta, Windows)_ — your vest, Tactal and sleeves play avatar touch through
+  bHaptics Player, and viewers can draw on your vest from the share page.
+- **OWO** _(beta)_ — your OWO Skin feels avatar touch through the OWO app on your PC or phone,
+  and viewers can fire a muscle from the share page.
+
+### 🔗 Integrations
+
+- **VRChat OSC** — automatic avatar detection, live parameter and PhysBone values and a parameter change log.
 - **SteamVR & VRCX** — optionally launch the toolkit alongside your VR session.
 
 ### 🤖 AI suggestions
@@ -68,6 +83,10 @@ invite can drive your avatar, toys and shockers in real time.
 ### 🎨 Aurora theme
 
 - A two-color theme you pick yourself, shared by the desktop app and the website.
+
+### 🔄 Updates
+
+- The app updates itself and shows what changed. Turn on **Beta updates** in Settings > About to get prereleases early.
 
 ---
 
@@ -87,6 +106,8 @@ This is an npm workspaces monorepo:
                      │
                      ├── Intiface Central (toys)
                      ├── OpenShock (shockers)
+                     ├── bHaptics Player (vest, sleeves)
+                     ├── OWO app (OWO Skin)
                      └── ESP32 boards (outputs)
 ```
 
@@ -158,7 +179,7 @@ See [`apps/server/docker-compose.yml`](apps/server/docker-compose.yml) for a set
 
 Releases are cut by pushing a tag:
 
-- `client-vX.Y.Z` — creates a draft GitHub release, builds the Windows installer and the Linux `.deb` and `.AppImage` into it, then publishes it once every build succeeded. A suffixed tag (`client-vX.Y.Z-beta.1`) is published as a prerelease, which the in-app updater ignores.
+- `client-vX.Y.Z` — creates a draft GitHub release, builds the Windows installer and the Linux `.deb` and `.AppImage` into it, then publishes it once every build succeeded. A suffixed tag (`client-vX.Y.Z-beta.1`) is published as a prerelease, which the in-app updater only offers to people with **Beta updates** on.
 - `server-vX.Y.Z` — builds the multi-arch server image and pushes it to GitHub Container Registry.
 
 The client release needs these set in the repository's Actions settings:
