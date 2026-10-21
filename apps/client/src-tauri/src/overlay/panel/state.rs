@@ -69,6 +69,7 @@ fn addons(app: &AppHandle) -> Vec<AddonRow> {
             let leash = (id == "leash").then(|| crate::leash::view(app)).filter(|view| view.active.is_some());
             AddonRow {
                 name: name.to_owned(),
+                state: status.state,
                 status: leash.as_ref().and_then(|view| view.active.clone()).map_or(status.text.clone(), |active| format!("{active} · {}", status.text)),
                 level: leash.map(|view| view.stretch),
                 touched: false
@@ -85,6 +86,6 @@ fn addons(app: &AppHandle) -> Vec<AddonRow> {
             .map(|control| (text(control, "name").unwrap_or_default().to_owned(), text(control, "id").unwrap_or_default().to_owned(), control.get("paused").and_then(Value::as_bool).unwrap_or(false)))
             .collect()
     });
-    rows.extend(toys.into_iter().map(|(name, id, touched)| AddonRow { name, status: "Toy".into(), level: Some(crate::controls::toy_level(&id)), touched }));
+    rows.extend(toys.into_iter().map(|(name, id, touched)| AddonRow { name, state: crate::addons::State::Ok, status: "Toy".into(), level: Some(crate::controls::toy_level(&id)), touched }));
     rows
 }

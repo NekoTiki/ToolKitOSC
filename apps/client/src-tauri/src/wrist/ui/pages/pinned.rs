@@ -106,7 +106,7 @@ fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) {
                 TileKind::Choice { option } => option.as_deref().unwrap_or("Press for the next"),
                 _ => "Press to apply"
             });
-            if widgets::pressed(ui, rect) {
+            if cx.clicked(rect) {
                 cx.actions.push(press(None));
             }
         }

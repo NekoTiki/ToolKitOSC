@@ -29,6 +29,10 @@ struct Touch {
     hold: Option<(String, Instant, bool)>,
     /// The level last sent for what's being dragged.
     dragging: Option<(String, f64)>,
+    /// Where the press now held began, while it can still be a click.
+    origin: Option<Pos2>,
+    /// A press that ended this frame: where it began and where it ended.
+    click: Option<(Pos2, Pos2)>,
     /// Where each labelled widget was drawn last frame, for tests to press it by name.
     #[cfg(test)]
     rects: Vec<(String, Rect)>
@@ -67,6 +71,16 @@ impl Cx<'_> {
         moved
     }
 
+    /// Clicked this frame on `rect`: pressed and let go on it, with no scroll in between.
+    pub fn clicked(&self, rect: Rect) -> bool {
+        self.touch.click.is_some_and(|(from, to)| rect.contains(from) && rect.contains(to))
+    }
+
+    /// The press held now scrolled something, so letting go isn't a click.
+    pub fn cancel_click(&mut self) {
+        self.touch.origin = None;
+    }
+
     /// Notes where `label` was drawn, for the tests.
     pub fn mark(&mut self, _label: &str, _rect: Rect) {
         #[cfg(test)]
@@ -102,6 +116,20 @@ impl Panel {
         #[cfg(test)]
         self.touch.rects.clear();
         let Self { state, theme, pages, page, touch } = self;
+        // Things act when you let go of them, so a poke that slides off cancels; Stop and holds
+        // read the pointer themselves.
+        touch.click = None;
+        ctx.input(|i| {
+            for event in &i.events {
+                if let egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, .. } = event {
+                    if *pressed {
+                        touch.origin = Some(*pos);
+                    } else {
+                        touch.click = touch.origin.take().map(|from| (from, *pos));
+                    }
+                }
+            }
+        });
         let mut cx = Cx { theme, actions: Vec::new(), again: false, touch };
         egui::CentralPanel::default().frame(egui::Frame::none()).show(ctx, |ui| {
             let full = Rect::from_min_size(Pos2::ZERO, SIZE);
@@ -128,7 +156,8 @@ impl Panel {
 }
 
 /// The page buttons, and Stop: filled while viewers can use your controls, an outline once
-/// everything is stopped. Returns the page pressed.
+/// everything is stopped. Stop acts the moment it's poked, not when you let go. Returns the page
+/// clicked.
 fn rail(ui: &egui::Ui, cx: &mut Cx, pages: &[Box<dyn pages::Page>], current: usize, paused: bool) -> Option<usize> {
     let theme = cx.theme;
     ui.painter().line_segment([Pos2::new(RAIL, 0.0), Pos2::new(RAIL, SIZE.y)], Stroke::new(1.0_f32, theme.line));
@@ -144,7 +173,7 @@ fn rail(ui: &egui::Ui, cx: &mut Cx, pages: &[Box<dyn pages::Page>], current: usi
         }
         widgets::text(ui, rect.center(), Align2::CENTER_CENTER, page.icon(), 20.0, if on { theme.fg } else { theme.muted }, f32::INFINITY);
         cx.mark(page.name(), rect);
-        if widgets::pressed(ui, rect) {
+        if cx.clicked(rect) {
             picked = Some(i);
         }
     }
@@ -202,8 +231,8 @@ mod tests {
     /// A poke on `label`: what it sent.
     fn press(ctx: &egui::Context, panel: &mut Panel, label: &str) -> Vec<ToApp> {
         let pos = find(ctx, panel, label).center();
-        let actions = press_down(ctx, panel, pos);
-        frame(ctx, panel, vec![button(pos, false)]);
+        let mut actions = press_down(ctx, panel, pos);
+        actions.extend(frame(ctx, panel, vec![button(pos, false)]));
         actions
     }
 
@@ -266,6 +295,40 @@ mod tests {
         assert_eq!(press(&ctx, &mut panel, "c8"), vec![control("c8", None)]);
         press(&ctx, &mut panel, "›");
         assert_eq!(shown(&mut panel)[0], "c1", "wraps around");
+    }
+
+    #[test]
+    fn a_tile_acts_when_let_go_and_not_if_the_poke_slides_off() {
+        let ctx = egui::Context::default();
+        let mut panel = on_page("Pinned");
+        panel.state.pinned.tiles = vec![tile("ears", TileKind::Toggle { on: false }, false)];
+        let pos = find(&ctx, &mut panel, "ears").center();
+        assert!(press_down(&ctx, &mut panel, pos).is_empty(), "nothing on the way in");
+        assert_eq!(frame(&ctx, &mut panel, vec![button(pos, false)]), vec![control("ears", None)]);
+        // Slides off the panel: tracking lets go at 0, 0.
+        press_down(&ctx, &mut panel, pos);
+        assert!(frame(&ctx, &mut panel, vec![button(Pos2::ZERO, false), egui::Event::PointerGone]).is_empty());
+    }
+
+    #[test]
+    fn dragging_a_long_list_scrolls_it() {
+        let ctx = egui::Context::default();
+        let mut panel = on_page("Add-ons");
+        let row = |i: usize| crate::wrist::protocol::AddonRow { name: format!("a{i}"), state: crate::addons::State::Ok, status: String::new(), level: None, touched: false };
+        panel.state.addons = (0..10).map(row).collect();
+        let last = find(&ctx, &mut panel, "a9");
+        assert!(last.top() > SIZE.y, "the last row starts out of sight");
+        // Two drags up, each staying on the list.
+        let start = Pos2::new(SIZE.x / 2.0, SIZE.y - 30.0);
+        for _ in 0..2 {
+            press_down(&ctx, &mut panel, start);
+            for step in 1..=10 {
+                frame(&ctx, &mut panel, vec![egui::Event::PointerMoved(start - Vec2::new(0.0, step as f32 * 16.0))]);
+            }
+            frame(&ctx, &mut panel, vec![button(start - Vec2::new(0.0, 160.0), false)]);
+        }
+        let last = find(&ctx, &mut panel, "a9");
+        assert!(last.bottom() <= SIZE.y, "scrolled to the end: {last:?}");
     }
 
     #[test]

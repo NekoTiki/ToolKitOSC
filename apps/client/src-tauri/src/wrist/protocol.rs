@@ -65,6 +65,8 @@ pub struct Tile {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AddonRow {
     pub name: String,
+    /// Its card's dot.
+    pub state: crate::addons::State,
     pub status: String,
     pub level: Option<f64>,
     /// Avatar touch is driving it right now.

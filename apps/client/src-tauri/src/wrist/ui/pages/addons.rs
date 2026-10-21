@@ -1,14 +1,18 @@
-//! Add-ons: one row per add-on that's on, as its card in the app says, and the toys with their
-//! level and whether touch drives them. Read only.
+//! Add-ons: one row per add-on that's on, with its card's dot and text, and the toys with their
+//! level and whether touch drives them. Dragged up and down to scroll. Read only.
 use egui::{Align2, Rect, Sense, Ui, Vec2};
 
 use super::Page;
+use crate::addons::State as Status;
 use crate::wrist::protocol::State;
 use crate::wrist::ui::theme::{ROW_HEIGHT, SMALL};
-use crate::wrist::ui::widgets;
+use crate::wrist::ui::widgets::{self, Scroll};
 use crate::wrist::ui::Cx;
 
-pub struct Addons;
+#[derive(Default)]
+pub struct Addons {
+    scroll: Scroll
+}
 
 impl Page for Addons {
     fn icon(&self) -> &'static str {
@@ -21,8 +25,15 @@ impl Page for Addons {
 
     fn show(&mut self, ui: &mut Ui, state: &State, cx: &mut Cx) {
         widgets::header(ui, cx, "Add-ons", |_, _| {});
-        widgets::list(ui, cx, &state.addons, ROW_HEIGHT, "No add-ons are on", |ui, cx, addon| {
-            widgets::row(ui, cx, &addon.name, &addon.status, |ui, cx| {
+        widgets::scroll_list(ui, cx, &mut self.scroll, &state.addons, ROW_HEIGHT, "No add-ons are on", |ui, cx, addon| {
+            // The colors of the dots on the add-ons' cards in the app.
+            let dot = match addon.state {
+                Status::Ok => cx.theme.ok,
+                Status::Warn | Status::Busy => cx.theme.hot,
+                Status::Error => cx.theme.stop,
+                Status::Off => cx.theme.muted
+            };
+            widgets::dot_row(ui, cx, Some(dot), &addon.name, &addon.status, |ui, cx| {
                 if addon.level.is_none() && !addon.touched {
                     return;
                 }
