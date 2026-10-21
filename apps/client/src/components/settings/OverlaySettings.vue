@@ -91,7 +91,7 @@ const sendTest = (): void => {
       <USwitch
         :model-value="settings.panel.enabled"
         label="Show ToolKitOSC on your wrist"
-        description="While SteamVR runs. Turn the back of your hand toward you to see it, then poke it with your other hand's finger or point at it and pull the trigger. Stop is always at the bottom left."
+        description="While SteamVR runs. Turn the back of your hand toward you to see it, then poke it with your other hand's finger or point at it and pull the trigger. Stop is always at the bottom right."
         @update:model-value="change((s) => (s.panel.enabled = !!$event))"
       />
       <template v-if="settings.panel.enabled">
