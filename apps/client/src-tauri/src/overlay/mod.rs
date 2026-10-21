@@ -8,7 +8,6 @@ pub mod model;
 mod notify;
 mod panel;
 mod store;
-mod tiles;
 
 use std::sync::Mutex;
 use std::time::Duration;

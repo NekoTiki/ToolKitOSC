@@ -183,9 +183,11 @@ pub fn viewers(app: &AppHandle) -> Vec<(viewer::Viewer, Vec<String>)> {
         .collect()
 }
 
-/// The control groups of the avatar you're wearing, as the webview last pushed them.
-pub fn control_groups(app: &AppHandle) -> Vec<serde_json::Value> {
-    server(app).inner.lock().unwrap().policy.as_ref().map(|policy| policy.groups.clone()).unwrap_or_default()
+/// Runs `f` on the control groups of the avatar you're wearing, as the webview last pushed them,
+/// without copying them. It holds the server's lock: copy out what you need and work on it after.
+pub fn with_control_groups<T>(app: &AppHandle, f: impl FnOnce(&[serde_json::Value]) -> T) -> T {
+    let inner = server(app).inner.lock().unwrap();
+    f(inner.policy.as_ref().map_or(&[], |policy| &policy.groups))
 }
 
 /// A control of the avatar you're wearing, as the webview last pushed it.

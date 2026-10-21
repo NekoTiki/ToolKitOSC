@@ -3,14 +3,11 @@
 //! OSC values; a press runs through `controls::run` as you, like a click in the app.
 //!
 //! A pressed tile shows its new state right away and keeps it until VRChat reports a value for
-//! that parameter (see `EXPECTED`): VRChat may not echo what it receives over OSC.
-use std::collections::HashMap;
-use std::sync::Mutex;
-
+//! that parameter (see `Panel::expected`): VRChat may not echo what it receives over OSC.
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
-use super::store;
+use super::{overlay, store};
 use crate::state::AppState;
 use crate::types::{OscArg, OscMessage};
 use crate::wrist::protocol::{Tile, TileKind};
@@ -18,10 +15,6 @@ use crate::wrist::protocol::{Tile, TileKind};
 pub const MAX_PINNED: usize = 6;
 /// Shown when nothing is pinned on this avatar yet.
 const FIRST: usize = 4;
-
-/// Control id -> what a press made it, and its parameters' values from before the press. Shown
-/// until one of those values changes.
-static EXPECTED: Mutex<Option<HashMap<String, (TileKind, Vec<Option<OscMessage>>)>>> = Mutex::new(None);
 
 /// The parameters a control sets.
 fn addresses(control: &Value) -> Vec<String> {
@@ -39,13 +32,13 @@ fn snapshot(app: &AppHandle, control: &Value) -> Vec<Option<OscMessage>> {
 
 /// What the last press made it, while VRChat hasn't reported a value since.
 fn expected(app: &AppHandle, control_id: &str, control: &Value) -> Option<TileKind> {
-    let mut guard = EXPECTED.lock().unwrap();
-    let map = guard.get_or_insert_with(HashMap::new);
-    let (kind, before) = map.get(control_id)?;
-    if *before == snapshot(app, control) {
+    let now = snapshot(app, control);
+    let mut panel = overlay(app).panel.lock().unwrap();
+    let (kind, before) = panel.expected.get(control_id)?;
+    if *before == now {
         return Some(kind.clone());
     }
-    map.remove(control_id);
+    panel.expected.remove(control_id);
     None
 }
 
@@ -113,25 +106,30 @@ fn tile(app: &AppHandle, group_id: &str, control: &Value) -> Option<Tile> {
     })
 }
 
-/// Every control of the avatar you're wearing, with its group's id, in the app's order.
-fn controls(app: &AppHandle) -> Vec<(String, Value)> {
-    crate::server::control_groups(app)
-        .iter()
-        .flat_map(|group| {
-            let group_id = text(group, "id").unwrap_or_default().to_owned();
-            group.get("controls").and_then(Value::as_array).cloned().unwrap_or_default().into_iter().map(move |control| (group_id.clone(), control))
+/// The controls with these ids, in that order and at most `MAX_PINNED`, each with its group's id;
+/// or the first few when none of them is there. True for the second.
+fn pick(groups: &[Value], ids: &[String]) -> (Vec<(String, Value)>, bool) {
+    let all = || {
+        groups.iter().flat_map(|group| {
+            let group_id = text(group, "id").unwrap_or_default();
+            group.get("controls").and_then(Value::as_array).into_iter().flatten().map(move |control| (group_id, control))
         })
-        .collect()
+    };
+    let chosen: Vec<_> = ids.iter().filter_map(|id| all().find(|(_, control)| text(control, "id") == Some(id))).take(MAX_PINNED).collect();
+    let nothing_pinned = chosen.is_empty();
+    let shown = if nothing_pinned { all().take(FIRST).collect() } else { chosen };
+    (shown.into_iter().map(|(group_id, control)| (group_id.to_owned(), control.clone())).collect(), nothing_pinned)
 }
 
-/// The pinned tiles, and whether they're the first few because nothing is pinned.
-pub fn pinned(app: &AppHandle) -> (Vec<Tile>, bool) {
-    let all = controls(app);
-    let ids = avatar_id(app).and_then(|avatar| store::get(app).pinned.get(&avatar).cloned()).unwrap_or_default();
-    let chosen: Vec<&(String, Value)> = ids.iter().filter_map(|id| all.iter().find(|(_, control)| text(control, "id") == Some(id))).take(MAX_PINNED).collect();
-    let nothing_pinned = chosen.is_empty();
-    let shown: Vec<&(String, Value)> = if nothing_pinned { all.iter().take(FIRST).collect() } else { chosen };
-    (shown.into_iter().filter_map(|(group_id, control)| tile(app, group_id, control)).collect(), nothing_pinned)
+/// The tiles for the controls pinned with `ids`, and whether they're the first few because nothing
+/// is pinned.
+pub fn tiles(app: &AppHandle, ids: &[String]) -> (Vec<Tile>, bool) {
+    // Building a tile reads the live parameters, so it happens after the server's lock is let go.
+    let (shown, nothing_pinned) = crate::server::with_control_groups(app, |groups| pick(groups, ids));
+    let tiles: Vec<Tile> = shown.iter().filter_map(|(group_id, control)| tile(app, group_id, control)).collect();
+    // What a press showed only matters while its tile is on the page.
+    overlay(app).panel.lock().unwrap().expected.retain(|id, _| tiles.iter().any(|tile| &tile.control_id == id));
+    (tiles, nothing_pinned)
 }
 
 /// A tile pressed on the panel: what a click on it in the app would do.
@@ -178,9 +176,10 @@ pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f6
     if let Some(shown) = shown {
         // The values from before, so the press shows until VRChat reports the parameter. A press
         // on a tile already showing what it expects keeps the original values.
-        let before = EXPECTED.lock().unwrap().get_or_insert_with(HashMap::new).remove(control_id).map(|(_, before)| before);
-        let before = before.unwrap_or_else(|| snapshot(app, &control));
-        EXPECTED.lock().unwrap().get_or_insert_with(HashMap::new).insert(control_id.to_owned(), (shown, before));
+        let now = snapshot(app, &control);
+        let mut panel = overlay(app).panel.lock().unwrap();
+        let before = panel.expected.remove(control_id).map_or(now, |(_, before)| before);
+        panel.expected.insert(control_id.to_owned(), (shown, before));
     }
     crate::controls::run(app, &control, &command, None);
 }
@@ -209,4 +208,38 @@ pub fn set_pinned(app: &AppHandle, control_id: &str, pin: bool) -> Result<(), St
 /// The controls pinned on the avatar you're wearing.
 pub fn pinned_ids(app: &AppHandle) -> Vec<String> {
     avatar_id(app).and_then(|avatar| store::get(app).pinned.get(&avatar).cloned()).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn groups() -> Vec<Value> {
+        let controls = |ids: &[&str]| ids.iter().map(|id| json!({ "id": id, "name": id })).collect::<Vec<_>>();
+        vec![json!({ "id": "a", "controls": controls(&["ears", "tail", "lush"]) }), json!({ "id": "b", "controls": controls(&["shock", "wings", "hat", "boots"]) })]
+    }
+
+    fn ids(picked: &[(String, Value)]) -> Vec<(&str, &str)> {
+        picked.iter().map(|(group, control)| (group.as_str(), text(control, "id").unwrap())).collect()
+    }
+
+    #[test]
+    fn pinned_controls_come_in_pin_order_and_skip_missing_ones() {
+        let (picked, nothing_pinned) = pick(&groups(), &["shock".into(), "gone".into(), "ears".into()]);
+        assert!(!nothing_pinned);
+        assert_eq!(ids(&picked), [("b", "shock"), ("a", "ears")]);
+    }
+
+    #[test]
+    fn at_most_six_are_pinned() {
+        let all: Vec<String> = ["ears", "tail", "lush", "shock", "wings", "hat", "boots"].map(String::from).to_vec();
+        assert_eq!(pick(&groups(), &all).0.len(), MAX_PINNED);
+    }
+
+    #[test]
+    fn nothing_pinned_shows_the_first_four() {
+        let (picked, nothing_pinned) = pick(&groups(), &["gone".into()]);
+        assert!(nothing_pinned);
+        assert_eq!(ids(&picked), [("a", "ears"), ("a", "tail"), ("a", "lush"), ("b", "shock")]);
+    }
 }

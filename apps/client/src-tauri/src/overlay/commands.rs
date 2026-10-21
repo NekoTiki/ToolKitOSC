@@ -40,14 +40,14 @@ pub fn overlay_set_context(app: AppHandle, profiles: Vec<Profile>, profile_id: O
 /// The controls pinned to your wrist on the avatar you're wearing.
 #[tauri::command]
 pub fn overlay_pinned(app: AppHandle) -> Vec<String> {
-    super::tiles::pinned_ids(&app)
+    super::panel::pinned::pinned_ids(&app)
 }
 
 /// Pins a control of the avatar you're wearing to your wrist, or unpins it.
 #[tauri::command]
 pub fn overlay_set_pinned(app: AppHandle, control_id: String, pinned: bool) -> Result<(), String> {
     crate::addons::require(&app, "overlay")?;
-    super::tiles::set_pinned(&app, &control_id, pinned)?;
+    super::panel::pinned::set_pinned(&app, &control_id, pinned)?;
     super::settings_changed(&app);
     Ok(())
 }
