@@ -103,11 +103,14 @@ enum Pointer {
 
 enum ToRender {
     State(protocol::State),
-    Events(Vec<egui::Event>)
+    Events(Vec<egui::Event>),
+    /// Shown or hidden: nothing is drawn while it's hidden.
+    Visible(bool)
 }
 
-/// Draws the panel whenever it gets new state or input, or a hold is filling, and once a second
-/// for "8 s ago". Stops when tracking does.
+/// Draws the panel while it's shown: whenever it gets new state or input, or a hold is filling,
+/// and once a second for "8 s ago". What comes in while it's hidden is drawn when it shows again.
+/// Stops when tracking does.
 fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mpsc::Receiver<ToRender>, pressed: std::sync::mpsc::Sender<protocol::ToApp>) {
     use std::sync::mpsc::RecvTimeoutError;
 
@@ -126,14 +129,24 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
     let mut events: Vec<egui::Event> = Vec::new();
     let mut again = false;
     let mut retry = false;
+    let mut visible = false;
     let mut last_frame = Instant::now() - FRAME;
 
     loop {
+        let wait = if !visible {
+            // Nothing to draw until something comes in.
+            None
+        } else if again || retry {
+            Some(FRAME)
+        } else {
+            Some(Duration::from_secs(1))
+        };
         let mut apply = |message: ToRender| match message {
             ToRender::State(state) => panel.set_state(state),
-            ToRender::Events(more) => events.extend(more)
+            ToRender::Events(more) => events.extend(more),
+            ToRender::Visible(shown) => visible = shown
         };
-        match rx.recv_timeout(if again || retry { FRAME } else { Duration::from_secs(1) }) {
+        match wait.map_or_else(|| rx.recv().map_err(|_| RecvTimeoutError::Disconnected), |wait| rx.recv_timeout(wait)) {
             Ok(message) => apply(message),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return
@@ -142,6 +155,9 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
         std::thread::sleep(FRAME.saturating_sub(last_frame.elapsed()));
         while let Ok(message) = rx.try_recv() {
             apply(message);
+        }
+        if !visible {
+            continue;
         }
         let input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, ui::SIZE)),
@@ -198,8 +214,15 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
     let mut events: Vec<egui::Event> = Vec::new();
     let mut cursor_shown = false;
 
+    // What `render` was last told.
+    let mut told_visible = false;
+
     loop {
         std::thread::sleep(TICK);
+        if visible != told_visible {
+            told_visible = visible;
+            let _ = to_render.send(ToRender::Visible(visible));
+        }
         if vr.quit_requested() {
             tracing::info!("Panel: SteamVR is quitting");
             return Ok(());
