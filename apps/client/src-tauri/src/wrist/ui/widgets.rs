@@ -5,7 +5,7 @@
 //! before, while the panel draws a frame only when something changes, and its clicks give up after
 //! a few points of movement, less than a finger shakes. Things act on a click (`Cx::clicked`):
 //! pressed and let go on them. Stop acts the moment it's poked (`pressed`).
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use egui::{Align, Align2, Color32, FontId, Layout, Pos2, Rect, Rounding, Sense, Ui, UiBuilder, Vec2};
 
@@ -158,21 +158,6 @@ pub fn bar(ui: &Ui, cx: &Cx, rect: Rect, level: f64, color: Color32) {
     let mut fill = rect;
     fill.set_width(rect.width() * level.clamp(0.0, 1.0) as f32);
     ui.painter().rect_filled(fill, Rounding::same(PILL), color);
-}
-
-/// A wide button that acts only after it's held for `length`, filling up meanwhile. Returns true
-/// the moment it completes.
-pub fn hold_button(ui: &mut Ui, cx: &mut Cx, title: &str, sub: &str, length: Duration) -> bool {
-    let rect = take(ui, ui.available_width(), STAT_HEIGHT);
-    let (progress, done) = cx.hold(title, cx.held(ui, rect, true).is_some(), length);
-    ui.painter().rect_filled(rect, Rounding::same(ROUND_BIG), cx.theme.well);
-    let mut fill = rect;
-    fill.set_width(rect.width() * progress);
-    ui.painter().rect_filled(fill, Rounding::same(ROUND_BIG), cx.theme.ok.gamma_multiply(0.45));
-    text(ui, rect.center() - Vec2::new(0.0, 8.0), Align2::CENTER_CENTER, title, TITLE, cx.theme.fg, rect.width());
-    text(ui, rect.center() + Vec2::new(0.0, 12.0), Align2::CENTER_CENTER, sub, SMALL, cx.theme.muted, rect.width());
-    cx.mark(title, rect);
-    done
 }
 
 /// One row per item, `height` tall, until the page runs out of room; the last one that fits then

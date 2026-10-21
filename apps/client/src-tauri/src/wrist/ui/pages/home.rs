@@ -1,7 +1,5 @@
-//! Home: sharing or paused (with Resume after a hold), the viewer count, the profile and the last
-//! action.
-use std::time::Duration;
-
+//! Home: sharing or stopped, the viewer count, the profile and the last action. Resuming after a
+//! Stop is the bar's (see `super::super::resume`).
 use egui::{Ui, Vec2};
 
 use super::Page;
@@ -9,8 +7,6 @@ use crate::wrist::protocol::{State, ToApp};
 use crate::wrist::ui::theme::LINE_HEIGHT;
 use crate::wrist::ui::widgets::{self, ago, entry_text};
 use crate::wrist::ui::Cx;
-
-const RESUME_HOLD: Duration = Duration::from_millis(1500);
 
 #[derive(Default)]
 pub struct Home {
@@ -37,21 +33,14 @@ impl Page for Home {
         }
         let home = &state.home;
         widgets::header(ui, cx, "ToolKitOSC", |ui, cx| {
-            let (label, color) = if state.paused { ("Paused", cx.theme.stop) } else { ("Sharing", cx.theme.ok) };
+            let (label, color) = if state.paused { ("Stopped", cx.theme.stop) } else { ("Sharing", cx.theme.ok) };
             widgets::chip(ui, label, color, 120.0);
         });
-        if state.paused {
-            // Resume needs a hold, so a stray poke can't undo a Stop.
-            if widgets::hold_button(ui, cx, "Hold to resume", "Viewers can't use your controls", RESUME_HOLD) {
-                cx.actions.push(ToApp::Resume);
-            }
-        } else {
-            let stats = [
-                (home.watching.to_string(), format!("watching · {} signed in", home.signed_in)),
-                (home.recent.to_string(), "actions in the last minute".to_owned())
-            ];
-            widgets::stats(ui, cx, &stats);
-        }
+        let stats = [
+            (home.watching.to_string(), format!("watching · {} signed in", home.signed_in)),
+            (home.recent.to_string(), "actions in the last minute".to_owned())
+        ];
+        widgets::stats(ui, cx, &stats);
 
         let profile = home.profile.as_ref().and_then(|id| home.profiles.iter().find(|p| &p.id == id)).map_or("No profile", |p| p.name.as_str());
         let mut change = false;

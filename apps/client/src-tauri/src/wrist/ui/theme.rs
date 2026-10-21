@@ -45,10 +45,15 @@ impl Default for Theme {
     }
 }
 
-/// The panel's layout size in points; it's drawn at a multiple of it.
-pub const SIZE: egui::Vec2 = egui::Vec2::new(380.0, 270.0);
-pub const RAIL: f32 = 58.0;
-/// Around the page, right of the rail.
+/// The page's card, at the top.
+pub const CARD: egui::Vec2 = egui::Vec2::new(380.0, 270.0);
+/// Between the page's card and the bar's.
+pub const BAR_GAP: f32 = 8.0;
+/// The bar's card under it: the page buttons and Stop.
+pub const BAR_HEIGHT: f32 = 64.0;
+/// The panel's layout size in points, both cards; it's drawn at a multiple of it.
+pub const SIZE: egui::Vec2 = egui::Vec2::new(CARD.x, CARD.y + BAR_GAP + BAR_HEIGHT);
+/// Around the page, inside its card.
 pub const MARGIN: f32 = 12.0;
 /// Between the blocks of a page.
 pub const GAP: f32 = 8.0;
