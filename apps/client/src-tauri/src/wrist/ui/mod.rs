@@ -336,6 +336,18 @@ mod tests {
     }
 
     #[test]
+    fn launch_starts_intiface_from_its_row() {
+        let ctx = egui::Context::default();
+        let mut panel = on_page("Add-ons");
+        let intiface = |launch| crate::wrist::protocol::AddonRow { name: "Intiface".into(), state: crate::addons::State::Warn, status: "Intiface Central isn't running".into(), level: None, launch };
+        panel.state.addons = vec![intiface(false)];
+        frame(&ctx, &mut panel, Vec::new());
+        assert!(!panel.touch.rects.iter().any(|(name, _)| name == "Launch"));
+        panel.state.addons = vec![intiface(true)];
+        assert_eq!(press(&ctx, &mut panel, "Launch"), vec![ToApp::LaunchIntiface]);
+    }
+
+    #[test]
     fn home_shows_and_hides_the_hud() {
         let ctx = egui::Context::default();
         let mut panel = Panel::default();
@@ -415,7 +427,7 @@ mod tests {
     fn dragging_a_long_list_scrolls_it() {
         let ctx = egui::Context::default();
         let mut panel = on_page("Add-ons");
-        let row = |i: usize| crate::wrist::protocol::AddonRow { name: format!("a{i}"), state: crate::addons::State::Ok, status: String::new(), level: None };
+        let row = |i: usize| crate::wrist::protocol::AddonRow { name: format!("a{i}"), state: crate::addons::State::Ok, status: String::new(), level: None, launch: false };
         panel.state.addons = (0..10).map(row).collect();
         let last = find(&ctx, &mut panel, "a9");
         assert!(last.top() > CARD.y, "the last row starts out of sight");

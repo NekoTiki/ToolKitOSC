@@ -71,7 +71,10 @@ pub struct AddonRow {
     /// Its card's dot.
     pub state: crate::addons::State,
     pub status: String,
-    pub level: Option<f64>
+    pub level: Option<f64>,
+    /// Intiface Central is installed but not running: the row has a button that starts it.
+    #[serde(default)]
+    pub launch: bool
 }
 
 /// A toy control of the avatar you're wearing, with its level now.
@@ -164,6 +167,8 @@ pub enum ToApp {
     Profile { id: Option<String> },
     /// Shows or hides the HUD.
     Hud { on: bool },
+    /// Starts Intiface Central.
+    LaunchIntiface,
     /// A pinned tile pressed: toggled, the next option, a preset, a shock after its hold. `level`
     /// for a slider or toy dragged to it, `pick` for what was picked from a `TileKind::Menu`.
     #[serde(rename_all = "camelCase")]
