@@ -28,8 +28,9 @@ use openvr::{Actions, OpenVr, HMD, INVALID_DEVICE, ROLE_LEFT, ROLE_RIGHT};
 /// Pixels per egui point: the panel is drawn at twice its 380 × 270 layout.
 const SCALE: f32 = 2.0;
 const TICK: Duration = Duration::from_millis(11);
-/// Redraws at most this often.
-const FRAME: Duration = Duration::from_millis(33);
+/// Redraws at most this often: about 60 a second while something moves. A frame takes 5 to 10 ms
+/// to draw on the CPU.
+const FRAME: Duration = Duration::from_millis(16);
 /// The fade from fully shown to hidden spans this many degrees past `show_within_deg`.
 const FADE_DEG: f32 = 15.0;
 /// Fully faded for this long before it's hidden, so a glance away doesn't flicker it.
@@ -44,8 +45,10 @@ const POKE_RANGE: f32 = 0.05;
 const CURSOR_SIZE: f32 = 0.012;
 const CURSOR_LIFT: f32 = 0.002;
 const CURSOR_PRESSED: [f32; 3] = [0.65, 0.55, 0.98];
-/// SteamVR swaps a new image into an overlay asynchronously, and it blanks meanwhile. So the panel
-/// is two overlays in one place: a frame goes to the hidden one, which is shown this long after.
+/// With `SetOverlayRaw` (when Direct3D 11 isn't there), SteamVR swaps a new image into an overlay
+/// asynchronously, and it blanks meanwhile. So the panel is two overlays in one place: a frame goes
+/// to the hidden one, which is shown this long after. A texture is copied right away: it goes
+/// straight to the one shown.
 const SWAP_AFTER: Duration = Duration::from_millis(50);
 /// The hidden one stays barely visible, so SteamVR keeps its image loaded.
 const BACK_ALPHA: f32 = 0.01;
@@ -186,18 +189,21 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
         toolkitosc_raster::to_rgba8(&pixels, &mut bytes);
         // Every upload can flicker in SteamVR, so only a frame that looks different goes out.
         if bytes != sent {
-            let back = 1 - front.load(Ordering::Relaxed);
+            let shown = front.load(Ordering::Relaxed);
+            let back = 1 - shown;
             #[cfg(windows)]
             let uploaded = match &textures {
-                Some(textures) => textures.upload(back, &bytes, |texture| vr.set_texture(panels[back], texture)),
-                None => vr.set_raw(panels[back], &mut bytes, width as u32, height as u32)
+                Some(textures) => textures.upload(shown, &bytes, |texture| vr.set_texture(panels[shown], texture)).map(|()| false),
+                None => vr.set_raw(panels[back], &mut bytes, width as u32, height as u32).map(|()| true)
             };
             #[cfg(not(windows))]
-            let uploaded = vr.set_raw(panels[back], &mut bytes, width as u32, height as u32);
+            let uploaded = vr.set_raw(panels[back], &mut bytes, width as u32, height as u32).map(|()| true);
             match uploaded {
-                Ok(()) => {
-                    std::thread::sleep(SWAP_AFTER);
-                    front.store(back, Ordering::Relaxed);
+                Ok(swap) => {
+                    if swap {
+                        std::thread::sleep(SWAP_AFTER);
+                        front.store(back, Ordering::Relaxed);
+                    }
                     std::mem::swap(&mut bytes, &mut sent);
                     retry = false;
                 }
