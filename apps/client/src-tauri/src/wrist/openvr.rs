@@ -82,6 +82,14 @@ struct SystemFnTable {
     acknowledge_quit_exiting: unsafe extern "system" fn()
 }
 
+/// `Texture_t`.
+#[repr(C)]
+struct Texture {
+    handle: *mut c_void,
+    texture_type: i32,
+    color_space: i32
+}
+
 #[repr(C)]
 struct OverlayFnTable {
     _a: [*const c_void; 1],
@@ -101,7 +109,9 @@ struct OverlayFnTable {
     _f: [*const c_void; 7],
     show_overlay: unsafe extern "system" fn(u64) -> i32,
     hide_overlay: unsafe extern "system" fn(u64) -> i32,
-    _g: [*const c_void; 17],
+    _g: [*const c_void; 15],
+    set_overlay_texture: unsafe extern "system" fn(u64, *const Texture) -> i32,
+    _g2: [*const c_void; 1],
     set_overlay_raw: unsafe extern "system" fn(u64, *mut c_void, u32, u32, u32) -> i32
 }
 
@@ -271,6 +281,14 @@ impl OpenVr {
         }
     }
 
+    /// A Direct3D 11 texture, which SteamVR copies right away (see `super::texture`).
+    #[cfg(windows)]
+    pub fn set_texture(&self, handle: u64, texture: *mut c_void) -> Result<(), String> {
+        // TextureType_DirectX, ColorSpace_Gamma: drawn as sRGB, like the app.
+        let texture = Texture { handle: texture, texture_type: 0, color_space: 1 };
+        check(unsafe { (self.overlay.set_overlay_texture)(handle, &texture) })
+    }
+
     /// RGBA, 4 bytes a pixel, rows top to bottom.
     pub fn set_raw(&self, handle: u64, rgba: &mut [u8], width: u32, height: u32) -> Result<(), String> {
         check(unsafe { (self.overlay.set_overlay_raw)(handle, rgba.as_mut_ptr().cast(), width, height, 4) })
@@ -333,7 +351,9 @@ mod tests {
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_width_in_meters), 22 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_transform_tracked_device_relative), 35 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, show_overlay), 43 * ptr);
+        assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_texture), 60 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_raw), 62 * ptr);
+        assert_eq!(std::mem::size_of::<Texture>(), 16);
         assert_eq!(std::mem::size_of::<TrackedDevicePose>(), 80);
         assert_eq!(std::mem::offset_of!(InputFnTable, get_pose_action_data_relative_to_now), 7 * ptr);
         assert_eq!(std::mem::size_of::<DigitalActionData>(), 24);

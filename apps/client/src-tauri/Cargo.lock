@@ -5256,6 +5256,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "vrchat_osc",
+ "windows 0.61.3",
  "winreg 0.56.0",
 ]
 

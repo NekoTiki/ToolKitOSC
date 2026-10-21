@@ -12,6 +12,8 @@ mod input;
 mod link;
 mod openvr;
 pub mod protocol;
+#[cfg(windows)]
+mod texture;
 mod ui;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -125,6 +127,14 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
     let mut pixels = vec![[0.0f32; 4]; width * height];
     let mut bytes = Vec::with_capacity(width * height * 4);
     let mut sent: Vec<u8> = Vec::new();
+    #[cfg(windows)]
+    let textures = match texture::Textures::new(width as u32, height as u32) {
+        Ok(textures) => Some(textures),
+        Err(err) => {
+            tracing::warn!("Panel: {err}, sending frames raw");
+            None
+        }
+    };
     let started = Instant::now();
     let mut events: Vec<egui::Event> = Vec::new();
     let mut again = false;
@@ -177,7 +187,14 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
         // Every upload can flicker in SteamVR, so only a frame that looks different goes out.
         if bytes != sent {
             let back = 1 - front.load(Ordering::Relaxed);
-            match vr.set_raw(panels[back], &mut bytes, width as u32, height as u32) {
+            #[cfg(windows)]
+            let uploaded = match &textures {
+                Some(textures) => vr.set_texture(panels[back], textures.write(back, &bytes)),
+                None => vr.set_raw(panels[back], &mut bytes, width as u32, height as u32)
+            };
+            #[cfg(not(windows))]
+            let uploaded = vr.set_raw(panels[back], &mut bytes, width as u32, height as u32);
+            match uploaded {
                 Ok(()) => {
                     std::thread::sleep(SWAP_AFTER);
                     front.store(back, Ordering::Relaxed);
@@ -187,7 +204,10 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
                 // SteamVR refuses an upload while it's still taking the last one: the panel keeps
                 // what it shows, and the same frame goes again next time.
                 Err(err) => {
-                    tracing::debug!("Panel: {err}, trying again");
+                    // Once per run of failures, so it's in the panel's log without flooding it.
+                    if !retry {
+                        tracing::warn!("Panel: {err}, trying again");
+                    }
                     retry = true;
                 }
             }
