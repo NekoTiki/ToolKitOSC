@@ -107,13 +107,14 @@ impl Panel {
             let full = Rect::from_min_size(Pos2::ZERO, SIZE);
             ui.painter().rect_filled(full, Rounding::same(22.0), theme.bg);
             ui.painter().rect_stroke(full.shrink(0.5), Rounding::same(22.0), Stroke::new(1.0_f32, theme.line));
-            if let Some(picked) = rail(ui, &mut cx, pages, *page) {
+            if let Some(picked) = rail(ui, &mut cx, pages, *page, state.paused) {
                 pages[*page].leave();
                 *page = picked;
             }
             let main = Rect::from_min_max(Pos2::new(RAIL + 14.0, MARGIN), Pos2::new(SIZE.x - 14.0, SIZE.y - MARGIN));
             let mut ui = ui.new_child(UiBuilder::new().max_rect(main).layout(Layout::top_down(Align::Min)));
-            ui.set_clip_rect(main);
+            // A little past the page, so the outlines on its edges aren't cut in half.
+            ui.set_clip_rect(main.expand(2.0));
             ui.spacing_mut().item_spacing = Vec2::splat(GAP);
             pages[*page].show(&mut ui, state, &mut cx);
             // Nothing held any more: a hold or a drag ends.
@@ -126,8 +127,9 @@ impl Panel {
     }
 }
 
-/// The page buttons, and Stop. Returns the page pressed.
-fn rail(ui: &egui::Ui, cx: &mut Cx, pages: &[Box<dyn pages::Page>], current: usize) -> Option<usize> {
+/// The page buttons, and Stop: filled while viewers can use your controls, an outline once
+/// everything is stopped. Returns the page pressed.
+fn rail(ui: &egui::Ui, cx: &mut Cx, pages: &[Box<dyn pages::Page>], current: usize, paused: bool) -> Option<usize> {
     let theme = cx.theme;
     ui.painter().line_segment([Pos2::new(RAIL, 0.0), Pos2::new(RAIL, SIZE.y)], Stroke::new(1.0_f32, theme.line));
     let mut picked = None;
@@ -149,9 +151,16 @@ fn rail(ui: &egui::Ui, cx: &mut Cx, pages: &[Box<dyn pages::Page>], current: usi
 
     // Below the last page with a clear gap, so a poke can't land on both.
     let stop = Rect::from_min_size(Pos2::new(6.0, SIZE.y - 8.0 - 56.0), Vec2::new(RAIL - 12.0, 56.0));
-    let fill = if widgets::hovered(ui, stop) { theme.stop.gamma_multiply(1.2) } else { theme.stop };
-    ui.painter().rect_filled(stop, Rounding::same(16.0), fill);
-    widgets::text(ui, stop.center(), Align2::CENTER_CENTER, "STOP", 11.0, egui::Color32::WHITE, f32::INFINITY);
+    if paused {
+        ui.painter().rect_filled(stop, Rounding::same(16.0), theme.stop.gamma_multiply(0.16));
+        ui.painter().rect_stroke(stop.shrink(0.75), Rounding::same(16.0), Stroke::new(1.5_f32, theme.stop));
+        widgets::text(ui, stop.center() - Vec2::new(0.0, 8.0), Align2::CENTER_CENTER, "■", 14.0, theme.stop, f32::INFINITY);
+        widgets::text(ui, stop.center() + Vec2::new(0.0, 10.0), Align2::CENTER_CENTER, "STOPPED", 8.5, theme.stop, stop.width() - 4.0);
+    } else {
+        let fill = if widgets::hovered(ui, stop) { theme.stop.gamma_multiply(1.2) } else { theme.stop };
+        ui.painter().rect_filled(stop, Rounding::same(16.0), fill);
+        widgets::text(ui, stop.center(), Align2::CENTER_CENTER, "STOP", 11.0, egui::Color32::WHITE, f32::INFINITY);
+    }
     cx.mark("STOP", stop);
     if widgets::pressed(ui, stop) {
         cx.actions.push(ToApp::Stop);
@@ -229,6 +238,20 @@ mod tests {
     }
 
     #[test]
+    fn the_rail_still_works_after_a_stop() {
+        let ctx = egui::Context::default();
+        let mut panel = Panel::default();
+        let stop = find(&ctx, &mut panel, "STOP").center();
+        // As tracking sends it: the poke goes in, then the finger leaves the panel.
+        assert_eq!(press_down(&ctx, &mut panel, stop), vec![ToApp::Stop]);
+        frame(&ctx, &mut panel, vec![button(Pos2::ZERO, false), egui::Event::PointerGone]);
+        panel.state.paused = true;
+        frame(&ctx, &mut panel, Vec::new());
+        press(&ctx, &mut panel, "Pinned");
+        assert_eq!(panel.pages[panel.page].name(), "Pinned");
+    }
+
+    #[test]
     fn the_rail_switches_pages() {
         let ctx = egui::Context::default();
         let mut panel = Panel::default();
@@ -262,7 +285,7 @@ mod tests {
     fn the_icons_are_in_the_fonts() {
         let ctx = egui::Context::default();
         let _ = ctx.run(Default::default(), |_| {});
-        let icons = pages::all().iter().map(|page| page.icon()).chain(["🔒", "…", "·"]).flat_map(str::chars).collect::<Vec<_>>();
+        let icons = pages::all().iter().map(|page| page.icon()).chain(["🔒", "…", "·", "■"]).flat_map(str::chars).collect::<Vec<_>>();
         for c in icons {
             assert!(ctx.fonts(|f| f.has_glyph(&egui::FontId::proportional(20.0), c)), "{c}");
         }
