@@ -260,7 +260,7 @@ mod tests {
     }
 
     fn control(id: &str, level: Option<f64>) -> ToApp {
-        ToApp::Control { group_id: "g".into(), control_id: id.into(), level }
+        ToApp::Control { group_id: "g".into(), control_id: id.into(), level, pick: None }
     }
 
     #[test]
@@ -327,7 +327,7 @@ mod tests {
     fn dragging_a_long_list_scrolls_it() {
         let ctx = egui::Context::default();
         let mut panel = on_page("Add-ons");
-        let row = |i: usize| crate::wrist::protocol::AddonRow { name: format!("a{i}"), state: crate::addons::State::Ok, status: String::new(), level: None, touched: false };
+        let row = |i: usize| crate::wrist::protocol::AddonRow { name: format!("a{i}"), state: crate::addons::State::Ok, status: String::new(), level: None };
         panel.state.addons = (0..10).map(row).collect();
         let last = find(&ctx, &mut panel, "a9");
         assert!(last.top() > SIZE.y, "the last row starts out of sight");
@@ -369,6 +369,19 @@ mod tests {
         press_down(&ctx, &mut panel, lush.center());
         let below = Pos2::new(lush.left() + 2.0, lush.bottom() + 40.0);
         assert_eq!(frame(&ctx, &mut panel, vec![egui::Event::PointerMoved(below)]), vec![control("lush", Some(0.0))]);
+    }
+
+    #[test]
+    fn a_menu_tile_opens_its_list_and_sends_the_pick() {
+        let ctx = egui::Context::default();
+        let mut panel = on_page("Pinned");
+        let options = vec!["Off".to_owned(), "Wave".to_owned(), "Pulse".to_owned()];
+        panel.state.pinned.tiles = vec![tile("lush pattern", TileKind::Menu { options, current: Some(0) }, false)];
+        assert!(press(&ctx, &mut panel, "lush pattern").is_empty(), "opening sends nothing");
+        let pick = ToApp::Control { group_id: "g".into(), control_id: "lush pattern".into(), level: None, pick: Some(2) };
+        assert_eq!(press(&ctx, &mut panel, "Pulse"), vec![pick]);
+        press(&ctx, &mut panel, "Back");
+        find(&ctx, &mut panel, "lush pattern");
     }
 
     #[test]

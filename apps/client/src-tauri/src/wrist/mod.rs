@@ -107,7 +107,7 @@ enum Pointer {
 }
 
 enum ToRender {
-    State(protocol::State),
+    State(Box<protocol::State>),
     Events(Vec<egui::Event>),
     /// Shown or hidden: nothing is drawn while it's hidden.
     Visible(bool)
@@ -155,7 +155,7 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
             Some(Duration::from_secs(1))
         };
         let mut apply = |message: ToRender| match message {
-            ToRender::State(state) => panel.set_state(state),
+            ToRender::State(state) => panel.set_state(*state),
             ToRender::Events(more) => events.extend(more),
             ToRender::Visible(shown) => visible = shown
         };
@@ -257,7 +257,7 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
             match link.states.try_recv() {
                 Ok(state) => {
                     settings = state.panel.clone();
-                    let _ = to_render.send(ToRender::State(state));
+                    let _ = to_render.send(ToRender::State(Box::new(state)));
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => return Ok(())

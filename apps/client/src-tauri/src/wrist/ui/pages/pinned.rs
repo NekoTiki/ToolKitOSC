@@ -1,14 +1,15 @@
 //! Pinned: the controls pinned on the avatar you're wearing, as big tiles in a 2 × 3 grid, a page
 //! at a time. Toggles, options and presets act on a press, levels fill the tile and are dragged
-//! along it, shocks and the OWO Skin fire after a hold. Tiles the profile locks are greyed out.
+//! along it, shocks and the OWO Skin fire after a hold. Patterns and bHaptics open a list to pick
+//! from. Tiles the profile locks are greyed out.
 use std::time::Duration;
 
 use egui::{Align2, Rect, Rounding, Sense, Stroke, Ui, Vec2};
 
 use super::Page;
 use crate::wrist::protocol::{State, Tile, TileKind, ToApp};
-use crate::wrist::ui::theme::{GAP, ROUND_BIG, SMALL};
-use crate::wrist::ui::widgets;
+use crate::wrist::ui::theme::{GAP, LINE_HEIGHT, ROUND_BIG, SMALL};
+use crate::wrist::ui::widgets::{self, Scroll};
 use crate::wrist::ui::Cx;
 
 /// Shocks and the OWO Skin fire after this long a hold.
@@ -24,7 +25,10 @@ const END: f32 = 6.0;
 #[derive(Default)]
 pub struct Pinned {
     /// Which 6 it shows.
-    page: usize
+    page: usize,
+    /// The control whose list is open (`TileKind::Menu`), instead of the tiles.
+    menu: Option<String>,
+    menu_scroll: Scroll
 }
 
 impl Page for Pinned {
@@ -36,8 +40,18 @@ impl Page for Pinned {
         "Pinned"
     }
 
+    fn leave(&mut self) {
+        self.menu = None;
+    }
+
     fn show(&mut self, ui: &mut Ui, state: &State, cx: &mut Cx) {
         let pinned = &state.pinned;
+        // Gone since, or locked: back to the tiles.
+        let open = self.menu.as_ref().and_then(|id| pinned.tiles.iter().find(|tile| &tile.control_id == id && !tile.locked));
+        match open {
+            Some(tile) => return self.menu(ui, cx, tile),
+            None => self.menu = None
+        }
         let per_page = COLUMNS * ROWS;
         let pages = pinned.tiles.len().div_ceil(per_page).max(1);
         // Unpinned or another avatar since: back to a page that's there.
@@ -63,7 +77,10 @@ impl Page for Pinned {
         let size = Vec2::new((grid.width() - GAP) / COLUMNS as f32, (grid.height() - GAP * (ROWS - 1) as f32) / ROWS as f32);
         for (i, tile) in pinned.tiles.iter().skip(self.page * per_page).take(per_page).enumerate() {
             let at = grid.min + Vec2::new((i % COLUMNS) as f32, (i / COLUMNS) as f32) * (size + Vec2::splat(GAP));
-            show_tile(ui, cx, Rect::from_min_size(at, size), tile);
+            if show_tile(ui, cx, Rect::from_min_size(at, size), tile) {
+                self.menu = Some(tile.control_id.clone());
+                self.menu_scroll = Scroll::default();
+            }
         }
         if pinned.nothing_pinned {
             let rect = ui.allocate_exact_size(Vec2::new(ui.available_width(), HINT_HEIGHT), Sense::hover()).0;
@@ -72,7 +89,33 @@ impl Page for Pinned {
     }
 }
 
-fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) {
+impl Pinned {
+    /// A `TileKind::Menu`'s list, on the whole page: picking one sends it and keeps the list open,
+    /// so a pattern playing shows highlighted.
+    fn menu(&mut self, ui: &mut Ui, cx: &mut Cx, tile: &Tile) {
+        let TileKind::Menu { options, current } = &tile.kind else {
+            return;
+        };
+        let mut back = false;
+        widgets::header(ui, cx, &tile.name, |ui, cx| back = widgets::button(ui, cx, "Back", Vec2::new(70.0, 26.0)));
+        let items: Vec<(usize, &String)> = options.iter().enumerate().collect();
+        let mut picked = None;
+        widgets::scroll_list(ui, cx, &mut self.menu_scroll, &items, |_| LINE_HEIGHT, "Nothing to pick", |ui, cx, (i, name)| {
+            if widgets::line(ui, cx, name, "", *current == Some(*i)) {
+                picked = Some(*i);
+            }
+        });
+        if let Some(pick) = picked {
+            cx.actions.push(ToApp::Control { group_id: tile.group_id.clone(), control_id: tile.control_id.clone(), level: None, pick: Some(pick) });
+        }
+        if back {
+            self.menu = None;
+        }
+    }
+}
+
+/// Draws a tile and acts on it. Returns true when its list should open (`TileKind::Menu`).
+fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) -> bool {
     let theme = cx.theme;
     let key = format!("{}/{}", tile.group_id, tile.control_id);
     let usable = !tile.locked && tile.kind != TileKind::AppOnly;
@@ -92,13 +135,18 @@ fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) {
     let bar_at = |bottom: f32, height: f32| Rect::from_min_size(rect.left_bottom() + Vec2::new(10.0, -bottom - height), Vec2::new(rect.width() - 20.0, height));
     // A hold lets go when the pointer slides off; a level keeps following it.
     let down = |inside: bool| if usable { cx.held(ui, rect, inside) } else { None };
-    let press = |level: Option<f64>| ToApp::Control { group_id: tile.group_id.clone(), control_id: tile.control_id.clone(), level };
+    let press = |level: Option<f64>| ToApp::Control { group_id: tile.group_id.clone(), control_id: tile.control_id.clone(), level, pick: None };
+    let mut open = false;
     match &tile.kind {
         _ if tile.locked => {
             detail("🔒 Locked");
         }
         TileKind::AppOnly => {
             detail("In the app");
+        }
+        TileKind::Menu { options, current } => {
+            detail(current.and_then(|at| options.get(at)).map_or("Press for the list", String::as_str));
+            open = cx.clicked(rect);
         }
         TileKind::Toggle { .. } | TileKind::Choice { .. } | TileKind::Press => {
             detail(match &tile.kind {
@@ -145,4 +193,5 @@ fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) {
     // Last, over a level's fill.
     let color = if usable { theme.fg } else { theme.muted };
     widgets::text(ui, rect.left_top() + Vec2::new(10.0, 8.0), Align2::LEFT_TOP, &tile.name, 12.5, color, rect.width() - 56.0);
+    open
 }

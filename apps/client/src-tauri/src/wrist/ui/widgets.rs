@@ -207,14 +207,14 @@ pub struct Scroll {
 /// A press that moves this far on a list scrolls it instead of clicking.
 const SCROLL_SLOP: f32 = 8.0;
 
-/// One row per item, `height` tall, in the rest of the page, dragged up and down to scroll, with a
-/// thin bar on the right while it doesn't all fit.
-pub fn scroll_list<T>(ui: &mut Ui, cx: &mut Cx, scroll: &mut Scroll, items: &[T], height: f32, empty_label: &str, mut each: impl FnMut(&mut Ui, &mut Cx, &T)) {
+/// One row per item, as tall as `height` says, in the rest of the page, dragged up and down to
+/// scroll, with a thin bar on the right while it doesn't all fit.
+pub fn scroll_list<T>(ui: &mut Ui, cx: &mut Cx, scroll: &mut Scroll, items: &[T], height: impl Fn(&T) -> f32, empty_label: &str, mut each: impl FnMut(&mut Ui, &mut Cx, &T)) {
     if items.is_empty() {
         return empty(ui, cx, empty_label);
     }
     let area = take(ui, ui.available_width(), ui.available_height());
-    let content = items.len() as f32 * (height + LIST_GAP) - LIST_GAP;
+    let content = items.iter().map(|item| height(item) + LIST_GAP).sum::<f32>() - LIST_GAP;
     let max = (content - area.height()).max(0.0);
     match cx.held(ui, area, false) {
         Some(pos) => {
@@ -250,6 +250,32 @@ pub fn scroll_list<T>(ui: &mut Ui, cx: &mut Cx, scroll: &mut Scroll, items: &[T]
         ui.painter().rect_filled(track, Rounding::same(PILL), cx.theme.well);
         ui.painter().rect_filled(Rect::from_min_size(Pos2::new(track.left(), top), Vec2::new(track.width(), thumb)), Rounding::same(PILL), cx.theme.muted);
     }
+}
+
+/// A section's title in a list: small and muted, at the bottom of `height`, so the room above it
+/// sets the section apart.
+pub fn section(ui: &mut Ui, cx: &mut Cx, title: &str, height: f32) {
+    let rect = take(ui, ui.available_width(), height);
+    text(ui, rect.left_bottom() + Vec2::new(4.0, -2.0), Align2::LEFT_BOTTOM, title, SMALL, cx.theme.muted, rect.width() - 8.0);
+}
+
+/// A ring filled clockwise from the top to `level`, 0–1, with the percent in it.
+pub fn ring(ui: &mut Ui, cx: &mut Cx, level: f64, color: Color32) {
+    let rect = take(ui, 34.0, 34.0);
+    let (center, radius) = (rect.center(), 14.0);
+    ui.painter().circle_stroke(center, radius, egui::Stroke::new(4.0_f32, cx.theme.line));
+    let level = level.clamp(0.0, 1.0) as f32;
+    if level > 0.0 {
+        let steps = (48.0 * level).ceil().max(2.0) as usize;
+        let points = (0..=steps)
+            .map(|i| {
+                let angle = std::f32::consts::TAU * level * i as f32 / steps as f32 - std::f32::consts::FRAC_PI_2;
+                center + Vec2::new(angle.cos(), angle.sin()) * radius
+            })
+            .collect();
+        ui.painter().add(egui::Shape::line(points, egui::Stroke::new(4.0_f32, color)));
+    }
+    text(ui, center, Align2::CENTER_CENTER, &format!("{}", (level * 100.0).round()), 10.0, cx.theme.fg, rect.width());
 }
 
 /// "8 s", "2 min", "1 h": how long ago `at`, in Unix ms.

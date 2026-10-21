@@ -94,8 +94,8 @@ fn act(app: &AppHandle, action: ToApp) {
         });
     }
     match &action {
-        ToApp::Control { group_id, control_id, level } => {
-            super::pinned::press(app, group_id, control_id, *level);
+        ToApp::Control { group_id, control_id, level, pick } => {
+            super::pinned::press(app, group_id, control_id, *level, *pick);
             refresh(app);
         }
         ToApp::Stop | ToApp::Resume | ToApp::Profile { .. } => {

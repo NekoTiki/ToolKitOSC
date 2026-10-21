@@ -37,15 +37,18 @@ pub struct Viewer {
 pub enum TileKind {
     /// A press switches it.
     Toggle { on: bool },
-    /// A press goes to the next option.
+    /// A press goes to the next option: an enum, or which of a boolean-enum's inputs is on.
     Choice { option: Option<String> },
+    /// A press opens a list to pick from, on its own page: a toy pattern (Off first) or a bHaptics
+    /// effect (Buzz first). `current` is highlighted.
+    Menu { options: Vec<String>, current: Option<usize> },
     /// Dragged along, 0–1: a slider or a toy.
     Level { value: f64 },
     /// A press applies it: a preset.
     Press,
     /// Fires after a hold: a shocker or the OWO Skin.
     Hold,
-    /// Only in the app (patterns, bHaptics).
+    /// Only in the app: a type the panel doesn't know.
     AppOnly
 }
 
@@ -61,14 +64,21 @@ pub struct Tile {
     pub locked: bool
 }
 
-/// An add-on that's on, as its card in the app shows it, with a level for what has one.
+/// An add-on that's on, as its card in the app shows it, with a level for what has one (the leash).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AddonRow {
     pub name: String,
     /// Its card's dot.
     pub state: crate::addons::State,
     pub status: String,
-    pub level: Option<f64>,
+    pub level: Option<f64>
+}
+
+/// A toy control of the avatar you're wearing, with its level now.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToyRow {
+    pub name: String,
+    pub level: f64,
     /// Avatar touch is driving it right now.
     pub touched: bool
 }
@@ -125,7 +135,8 @@ pub struct State {
     pub activity: Vec<Entry>,
     pub viewers: Vec<Viewer>,
     pub pinned: Pinned,
-    pub addons: Vec<AddonRow>
+    pub addons: Vec<AddonRow>,
+    pub toys: Vec<ToyRow>
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -138,7 +149,13 @@ pub enum ToApp {
     Resume,
     Profile { id: Option<String> },
     /// A pinned tile pressed: toggled, the next option, a preset, a shock after its hold. `level`
-    /// for a slider or toy dragged to it.
+    /// for a slider or toy dragged to it, `pick` for what was picked from a `TileKind::Menu`.
     #[serde(rename_all = "camelCase")]
-    Control { group_id: String, control_id: String, level: Option<f64> }
+    Control {
+        group_id: String,
+        control_id: String,
+        level: Option<f64>,
+        #[serde(default)]
+        pick: Option<usize>
+    }
 }

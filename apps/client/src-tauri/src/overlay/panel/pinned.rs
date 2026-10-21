@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 use super::{overlay, store};
+use crate::server::limits::OFF_ID;
 use crate::state::AppState;
 use crate::types::{OscArg, OscMessage};
 use crate::wrist::protocol::{Tile, TileKind};
@@ -17,8 +18,14 @@ const FIRST: usize = 4;
 
 /// The parameters a control sets.
 fn addresses(control: &Value) -> Vec<String> {
+    let inputs = || control.get("inputs").and_then(Value::as_array).into_iter().flatten();
     match text(control, "type") {
-        Some("boolean-group") => control.get("inputs").and_then(Value::as_array).into_iter().flatten().filter_map(|input| text(input, "inputAddress")).map(str::to_owned).collect(),
+        Some("boolean-group") => inputs().filter_map(|input| text(input, "inputAddress")).map(str::to_owned).collect(),
+        Some("boolean-enum") => inputs()
+            .flat_map(|input| ["true", "false"].map(|side| input.pointer(&format!("/inputAddress/{side}")).and_then(Value::as_array).cloned().unwrap_or_default()))
+            .flatten()
+            .filter_map(|address| address.as_str().map(str::to_owned))
+            .collect(),
         _ => text(control, "inputAddress").map(str::to_owned).into_iter().collect()
     }
 }
@@ -80,13 +87,57 @@ fn current_option(app: &AppHandle, control: &Value) -> Option<usize> {
     control.get("options")?.as_array()?.iter().position(|option| option.get("value").and_then(Value::as_f64) == Some(current))
 }
 
+/// A boolean-enum's input that's on: all its `true` parameters are.
+fn current_input(app: &AppHandle, control: &Value) -> Option<usize> {
+    control.get("inputs")?.as_array()?.iter().position(|input| {
+        let on = input.pointer("/inputAddress/true").and_then(Value::as_array).cloned().unwrap_or_default();
+        !on.is_empty() && on.iter().all(|address| address.as_str().and_then(|address| value(app, address)).is_some_and(|v| v >= 0.5))
+    })
+}
+
+/// What a press steps through, by name, and which it's on now: an enum's options, or a
+/// boolean-enum's inputs.
+fn choices(app: &AppHandle, control: &Value) -> (Vec<String>, Option<usize>) {
+    let (list, current) = match text(control, "type") {
+        Some("boolean-enum") => ("inputs", current_input(app, control)),
+        _ => ("options", current_option(app, control))
+    };
+    let names = control.get(list).and_then(Value::as_array).into_iter().flatten().map(|item| text(item, "name").unwrap_or_default().to_owned()).collect();
+    (names, current)
+}
+
+/// A pattern control's choices: Off, then its patterns, by id and name.
+fn patterns(control: &Value) -> Vec<(String, String)> {
+    let allowed = control.get("allowedPatterns").and_then(Value::as_array).into_iter().flatten();
+    std::iter::once((OFF_ID.to_owned(), "Off".to_owned()))
+        .chain(allowed.map(|pattern| (text(pattern, "id").unwrap_or_default().to_owned(), text(pattern, "name").unwrap_or_default().to_owned())))
+        .collect()
+}
+
+/// A bHaptics control's built-in effects the panel offers after Buzz.
+fn effects(control: &Value) -> Vec<String> {
+    control.get("effects").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).filter(|effect| crate::bhaptics::effects::exists(effect)).map(str::to_owned).collect()
+}
+
+/// "heartbeat" -> "Heartbeat", as the app's own labels.
+fn label(id: &str) -> String {
+    let mut chars = id.chars();
+    chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
+}
+
 fn tile(app: &AppHandle, group_id: &str, control: &Value) -> Option<Tile> {
     let kind = match text(control, "type")? {
         "boolean" | "boolean-group" => TileKind::Toggle { on: is_on(app, control) },
-        "enum" | "step-enum" => {
-            let option = current_option(app, control).and_then(|at| control.pointer(&format!("/options/{at}/name"))?.as_str().map(str::to_owned));
-            TileKind::Choice { option }
+        "enum" | "step-enum" | "boolean-enum" => {
+            let (names, current) = choices(app, control);
+            TileKind::Choice { option: current.and_then(|at| names.get(at).cloned()) }
         }
+        "intiface-pattern" => {
+            let patterns = patterns(control);
+            let playing = crate::toys::patterns::value(app, text(control, "id")?);
+            TileKind::Menu { current: patterns.iter().position(|(id, _)| *id == playing), options: patterns.into_iter().map(|(_, name)| name).collect() }
+        }
+        "bhaptics" => TileKind::Menu { options: std::iter::once("Buzz".to_owned()).chain(effects(control).iter().map(|effect| label(effect))).collect(), current: None },
         "slider" => TileKind::Level { value: text(control, "inputAddress").and_then(|address| value(app, address)).unwrap_or(0.0) },
         "intiface-toy" => TileKind::Level { value: crate::controls::toy_level(text(control, "id")?) },
         "preset" => TileKind::Press,
@@ -131,8 +182,9 @@ pub fn tiles(app: &AppHandle, ids: &[String]) -> (Vec<Tile>, bool) {
     (tiles, nothing_pinned)
 }
 
-/// A tile pressed on the panel: what a click on it in the app would do.
-pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f64>) {
+/// A tile pressed on the panel: what a click on it in the app would do. `pick` is what was picked
+/// from a `TileKind::Menu`.
+pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f64>, pick: Option<usize>) {
     let Some(control) = crate::server::find_control(app, group_id, control_id) else {
         return;
     };
@@ -143,11 +195,14 @@ pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f6
         return;
     }
     let kind = text(&control, "type").unwrap_or_default();
-    let options = control.get("options").and_then(Value::as_array).cloned().unwrap_or_default();
-    let next_option = current_option(app, &control).map_or(0, |at| (at + 1) % options.len().max(1));
+    let (choices, current) = choices(app, &control);
+    let next_choice = current.map_or(0, |at| (at + 1) % choices.len().max(1));
+    if let (TileKind::Menu { .. }, Some(pick)) = (&tile.kind, pick) {
+        return pick_from_menu(app, group_id, control_id, &control, pick);
+    }
     let shown = match &tile.kind {
         TileKind::Toggle { on } => Some(TileKind::Toggle { on: !on }),
-        TileKind::Choice { .. } => Some(TileKind::Choice { option: options.get(next_option).and_then(|o| text(o, "name")).map(str::to_owned) }),
+        TileKind::Choice { .. } => Some(TileKind::Choice { option: choices.get(next_choice).cloned() }),
         TileKind::Level { .. } if kind == "slider" => Some(TileKind::Level { value: level.unwrap_or(0.0).clamp(0.0, 1.0) }),
         _ => None
     };
@@ -157,11 +212,12 @@ pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f6
             "boolean" => json!(!on != control.get("reverse").and_then(Value::as_bool).unwrap_or(false)),
             _ => json!(!on)
         },
-        TileKind::Choice { .. } if options.is_empty() => return,
-        TileKind::Choice { .. } => json!(next_option),
+        TileKind::Choice { .. } if choices.is_empty() => return,
+        TileKind::Choice { .. } => json!(next_choice),
         TileKind::Level { .. } => json!(level.unwrap_or(0.0).clamp(0.0, 1.0)),
         TileKind::Press | TileKind::Hold => Value::Null,
-        TileKind::AppOnly => return
+        // Opening the list happens on the panel; only a pick comes here.
+        TileKind::Menu { .. } | TileKind::AppOnly => return
     };
     let mut command = json!({ "type": kind, "groupId": group_id, "controlId": control_id });
     if !value.is_null() {
@@ -181,6 +237,38 @@ pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f6
         panel.expected.insert(control_id.to_owned(), (shown, before));
     }
     crate::controls::run(app, &control, &command, None);
+}
+
+/// Something picked from a `TileKind::Menu`: a pattern to play (or Off), or a bHaptics Buzz or
+/// effect.
+fn pick_from_menu(app: &AppHandle, group_id: &str, control_id: &str, control: &Value, pick: usize) {
+    let kind = text(control, "type").unwrap_or_default();
+    let command = |value: Value| json!({ "type": kind, "groupId": group_id, "controlId": control_id, "value": value });
+    match kind {
+        "intiface-pattern" => {
+            if let Some((id, _)) = patterns(control).get(pick) {
+                crate::controls::run(app, control, &command(json!(id)), None);
+            }
+        }
+        // Buzz: a short tap on every motor of each of its positions, at the control's highest.
+        "bhaptics" if pick == 0 => {
+            let positions: Vec<crate::bhaptics::model::Position> = control.get("positions").cloned().and_then(|p| serde_json::from_value(p).ok()).unwrap_or_default();
+            for position in positions {
+                let mut tap = command(json!("tap"));
+                tap["position"] = json!(position);
+                tap["motors"] = json!((0..position.motors()).collect::<Vec<_>>());
+                crate::controls::run(app, control, &tap, None);
+            }
+        }
+        "bhaptics" => {
+            if let Some(effect) = effects(control).get(pick - 1) {
+                let mut play = command(json!("effect"));
+                play["effect"] = json!(effect);
+                crate::controls::run(app, control, &play, None);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Pins or unpins a control of the avatar you're wearing.

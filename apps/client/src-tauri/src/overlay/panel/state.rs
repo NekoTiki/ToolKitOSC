@@ -6,7 +6,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 use super::{overlay, pinned, store};
-use crate::wrist::protocol::{AddonRow, Home, Pinned, State, Viewer};
+use crate::wrist::protocol::{AddonRow, Home, Pinned, State, ToyRow, Viewer};
 
 const RECENT: Duration = Duration::from_secs(60);
 
@@ -15,6 +15,7 @@ pub fn build(app: &AppHandle) -> State {
     let viewers = viewers(app);
     let pinned = pinned(app, &settings.pinned);
     let addons = addons(app);
+    let toys = toys(app);
     let (watching, signed_in) = crate::server::viewer_counts(app);
     let paused = crate::automations::is_paused(app);
     let mut panel = overlay(app).panel.lock().unwrap();
@@ -29,7 +30,8 @@ pub fn build(app: &AppHandle) -> State {
         activity: panel.activity.iter().cloned().collect(),
         viewers,
         pinned,
-        addons
+        addons,
+        toys
     }
 }
 
@@ -59,9 +61,9 @@ fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
 }
 
-/// The add-ons that are on, as their cards say, and a row per toy control with its level.
+/// The add-ons that are on, as their cards say.
 fn addons(app: &AppHandle) -> Vec<AddonRow> {
-    let mut rows: Vec<AddonRow> = crate::addons::statuses(app)
+    crate::addons::statuses(app)
         .into_iter()
         .filter(|(id, _, _)| *id != "overlay")
         .map(|(id, name, status)| {
@@ -71,11 +73,14 @@ fn addons(app: &AppHandle) -> Vec<AddonRow> {
                 name: name.to_owned(),
                 state: status.state,
                 status: leash.as_ref().and_then(|view| view.active.clone()).map_or(status.text.clone(), |active| format!("{active} · {}", status.text)),
-                level: leash.map(|view| view.stretch),
-                touched: false
+                level: leash.map(|view| view.stretch)
             }
         })
-        .collect();
+        .collect()
+}
+
+/// A row per toy control, with its level.
+fn toys(app: &AppHandle) -> Vec<ToyRow> {
     // Only the toys are copied out of the controls.
     let toys: Vec<(String, String, bool)> = crate::server::with_control_groups(app, |groups| {
         groups
@@ -86,6 +91,5 @@ fn addons(app: &AppHandle) -> Vec<AddonRow> {
             .map(|control| (text(control, "name").unwrap_or_default().to_owned(), text(control, "id").unwrap_or_default().to_owned(), control.get("paused").and_then(Value::as_bool).unwrap_or(false)))
             .collect()
     });
-    rows.extend(toys.into_iter().map(|(name, id, touched)| AddonRow { name, state: crate::addons::State::Ok, status: "Toy".into(), level: Some(crate::controls::toy_level(&id)), touched }));
-    rows
+    toys.into_iter().map(|(name, id, touched)| ToyRow { name, level: crate::controls::toy_level(&id), touched }).collect()
 }
