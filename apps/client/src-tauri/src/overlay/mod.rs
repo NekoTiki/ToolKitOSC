@@ -16,7 +16,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
 
 use crate::state::AppState;
-use crate::wrist::protocol::Profile;
+use crate::wrist::protocol::{Profile, Theme};
 use model::{NotifySettings, Target};
 use notify::{Kind, Toast};
 
@@ -150,9 +150,9 @@ pub fn automation_ran(app: &AppHandle, name: &str) {
     push(app, |n| n.automations, Toast { kind: Kind::Automation, who: None, what: format!("automation {name} ran"), detail: String::new() });
 }
 
-/// The profiles and the active one, from the webview.
-pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>) {
-    panel::set_context(app, profiles, profile, groups);
+/// The profiles and the active one, the viewer groups and the theme, from the webview.
+pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>, theme: Theme) {
+    panel::set_context(app, profiles, profile, groups, theme);
 }
 
 /// The settings changed: the panel gets them, and may start again after crashing.

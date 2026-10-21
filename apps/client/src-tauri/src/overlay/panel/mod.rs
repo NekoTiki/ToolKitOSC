@@ -35,7 +35,8 @@ pub struct Panel {
     crashes: Vec<Instant>,
     /// Stopped after crashing too often.
     pub gave_up: bool,
-    /// Profiles and the active one, from the webview (see `set_context`).
+    /// Profiles and the active one, the viewer groups and the theme, from the webview (see
+    /// `set_context`).
     profiles: Vec<Profile>,
     profile: Option<String>,
     /// Viewer groups by id, for their names.
@@ -77,12 +78,13 @@ pub fn note_action(app: &AppHandle, who: &str, what: &str) {
     refresh(app);
 }
 
-pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>) {
+pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>, theme: Theme) {
     {
         let mut panel = overlay(app).panel.lock().unwrap();
         panel.profiles = profiles;
         panel.profile = profile;
         panel.groups = groups;
+        panel.theme = theme;
     }
     refresh(app);
 }

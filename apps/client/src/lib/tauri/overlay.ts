@@ -30,14 +30,26 @@ export interface OverlaySettings {
   pinned: Record<string, string[]>
 }
 
+export type Rgb = [number, number, number]
+
+// The colors the wrist panel draws with.
+export interface OverlayTheme {
+  primary: Rgb
+  secondary: Rgb
+}
+
 export type OverlayAction = { type: 'stop' } | { type: 'resume' } | { type: 'profile'; id: string | null }
 
 export const overlayApi = {
   overlaySettings: (): Promise<OverlaySettings> => invoke('overlay_settings'),
   overlaySave: (settings: OverlaySettings): Promise<void> => invoke('overlay_save', { settings }),
   overlayTestToast: (): Promise<void> => invoke('overlay_test_toast'),
-  overlaySetContext: (profiles: { id: string; name: string }[], profileId: string | null, viewerGroups: { id: string; name: string }[]): Promise<void> =>
-    invoke('overlay_set_context', { profiles, profileId, viewerGroups }),
+  overlaySetContext: (
+    profiles: { id: string; name: string }[],
+    profileId: string | null,
+    viewerGroups: { id: string; name: string }[],
+    theme: OverlayTheme | null
+  ): Promise<void> => invoke('overlay_set_context', { profiles, profileId, viewerGroups, theme }),
   // The controls pinned to your wrist on the avatar you're wearing.
   overlayPinned: (): Promise<string[]> => invoke('overlay_pinned'),
   overlaySetPinned: (controlId: string, pinned: boolean): Promise<void> => invoke('overlay_set_pinned', { controlId, pinned }),
