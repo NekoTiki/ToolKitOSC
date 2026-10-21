@@ -1,4 +1,4 @@
-//! The panel's Pinned page: up to 6 controls of the avatar you're wearing, as tiles. Their state
+//! The panel's Pinned page: the controls pinned on the avatar you're wearing, as tiles. Their state
 //! comes from the controls the webview last pushed (with the active profile's locks) and the live
 //! OSC values; a press runs through `controls::run` as you, like a click in the app.
 //!
@@ -12,7 +12,6 @@ use crate::state::AppState;
 use crate::types::{OscArg, OscMessage};
 use crate::wrist::protocol::{Tile, TileKind};
 
-pub const MAX_PINNED: usize = 6;
 /// Shown when nothing is pinned on this avatar yet.
 const FIRST: usize = 4;
 
@@ -106,7 +105,7 @@ fn tile(app: &AppHandle, group_id: &str, control: &Value) -> Option<Tile> {
     })
 }
 
-/// The controls with these ids, in that order and at most `MAX_PINNED`, each with its group's id;
+/// The controls with these ids, in that order, each with its group's id;
 /// or the first few when none of them is there. True for the second.
 fn pick(groups: &[Value], ids: &[String]) -> (Vec<(String, Value)>, bool) {
     let all = || {
@@ -115,7 +114,7 @@ fn pick(groups: &[Value], ids: &[String]) -> (Vec<(String, Value)>, bool) {
             group.get("controls").and_then(Value::as_array).into_iter().flatten().map(move |control| (group_id, control))
         })
     };
-    let chosen: Vec<_> = ids.iter().filter_map(|id| all().find(|(_, control)| text(control, "id") == Some(id))).take(MAX_PINNED).collect();
+    let chosen: Vec<_> = ids.iter().filter_map(|id| all().find(|(_, control)| text(control, "id") == Some(id))).collect();
     let nothing_pinned = chosen.is_empty();
     let shown = if nothing_pinned { all().take(FIRST).collect() } else { chosen };
     (shown.into_iter().map(|(group_id, control)| (group_id.to_owned(), control.clone())).collect(), nothing_pinned)
@@ -184,7 +183,7 @@ pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f6
     crate::controls::run(app, &control, &command, None);
 }
 
-/// Pins or unpins a control of the avatar you're wearing. At most `MAX_PINNED`.
+/// Pins or unpins a control of the avatar you're wearing.
 pub fn set_pinned(app: &AppHandle, control_id: &str, pin: bool) -> Result<(), String> {
     let avatar = avatar_id(app).ok_or("Wear the avatar in VRChat first")?;
     store::with(app, |settings| {
@@ -194,9 +193,6 @@ pub fn set_pinned(app: &AppHandle, control_id: &str, pin: bool) -> Result<(), St
             return (Ok(()), false);
         }
         if pin {
-            if list.len() >= MAX_PINNED {
-                return (Err(format!("Up to {MAX_PINNED} controls fit on your wrist. Unpin one first.")), false);
-            }
             list.push(control_id.to_owned());
         } else {
             list.retain(|id| id != control_id);
@@ -231,9 +227,9 @@ mod tests {
     }
 
     #[test]
-    fn at_most_six_are_pinned() {
+    fn any_number_can_be_pinned() {
         let all: Vec<String> = ["ears", "tail", "lush", "shock", "wings", "hat", "boots"].map(String::from).to_vec();
-        assert_eq!(pick(&groups(), &all).0.len(), MAX_PINNED);
+        assert_eq!(pick(&groups(), &all).0.len(), 7);
     }
 
     #[test]

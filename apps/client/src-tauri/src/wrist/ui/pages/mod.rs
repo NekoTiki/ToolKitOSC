@@ -22,5 +22,5 @@ pub trait Page {
 
 /// The pages in the rail, top to bottom. The first one shows at start.
 pub fn all() -> Vec<Box<dyn Page>> {
-    vec![Box::new(home::Home::default()), Box::new(viewers::Viewers::default()), Box::new(pinned::Pinned), Box::new(addons::Addons)]
+    vec![Box::new(home::Home::default()), Box::new(viewers::Viewers::default()), Box::new(pinned::Pinned::default()), Box::new(addons::Addons)]
 }

@@ -252,6 +252,23 @@ mod tests {
     }
 
     #[test]
+    fn pinned_controls_go_six_a_page() {
+        let ctx = egui::Context::default();
+        let mut panel = on_page("Pinned");
+        panel.state.pinned.tiles = (1..=8).map(|i| tile(&format!("c{i}"), TileKind::Press, false)).collect();
+        let shown = |panel: &mut Panel| {
+            frame(&ctx, panel, Vec::new());
+            panel.touch.rects.iter().filter(|(name, _)| name.starts_with('c')).map(|(name, _)| name.clone()).collect::<Vec<_>>()
+        };
+        assert_eq!(shown(&mut panel), ["c1", "c2", "c3", "c4", "c5", "c6"]);
+        press(&ctx, &mut panel, "›");
+        assert_eq!(shown(&mut panel), ["c7", "c8"]);
+        assert_eq!(press(&ctx, &mut panel, "c8"), vec![control("c8", None)]);
+        press(&ctx, &mut panel, "›");
+        assert_eq!(shown(&mut panel)[0], "c1", "wraps around");
+    }
+
+    #[test]
     fn the_rail_switches_pages() {
         let ctx = egui::Context::default();
         let mut panel = Panel::default();
@@ -285,7 +302,7 @@ mod tests {
     fn the_icons_are_in_the_fonts() {
         let ctx = egui::Context::default();
         let _ = ctx.run(Default::default(), |_| {});
-        let icons = pages::all().iter().map(|page| page.icon()).chain(["🔒", "…", "·", "■"]).flat_map(str::chars).collect::<Vec<_>>();
+        let icons = pages::all().iter().map(|page| page.icon()).chain(["🔒", "…", "·", "■", "‹", "›"]).flat_map(str::chars).collect::<Vec<_>>();
         for c in icons {
             assert!(ctx.fonts(|f| f.has_glyph(&egui::FontId::proportional(20.0), c)), "{c}");
         }

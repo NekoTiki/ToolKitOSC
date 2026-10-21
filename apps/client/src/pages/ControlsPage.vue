@@ -155,7 +155,7 @@ const wristCount = computed(() => {
 
 const builtInViews = computed(() => [
   { id: PINNED, label: 'Pinned', icon: 'i-lucide-star', count: pinnedCount.value, hint: `${pinnedCount.value} pinned from any group` },
-  ...(isOn('overlay') ? [{ id: WRIST, label: 'On your wrist', icon: 'i-lucide-watch', count: wristCount.value, hint: `${wristCount.value} of 6 on the VR overlay panel` }] : []),
+  ...(isOn('overlay') ? [{ id: WRIST, label: 'On your wrist', icon: 'i-lucide-watch', count: wristCount.value, hint: `${wristCount.value} on the VR overlay panel` }] : []),
   { id: PRESETS, label: 'Presets', icon: 'i-lucide-layers', count: presets.value.length, hint: `${presets.value.length} presets for this avatar` }
 ])
 
@@ -440,7 +440,7 @@ const meta = computed(() => {
   if (search.value) return `${shown.value.length} controls match "${query.value.trim()}"`
 
   if (selectedId.value === PRESETS) return `${presets.value.length} ${presets.value.length === 1 ? 'preset' : 'presets'} for this avatar`
-  if (selectedId.value === WRIST) return `${shown.value.length} of 6 · in the order the VR overlay panel shows them`
+  if (selectedId.value === WRIST) return `${shown.value.length} ${shown.value.length === 1 ? 'control' : 'controls'} · in the order the VR overlay panel shows them, 6 a page`
 
   const count = `${shown.value.length} ${shown.value.length === 1 ? 'control' : 'controls'}`
 
@@ -878,7 +878,7 @@ const mode = computed<'use' | 'edit'>({
         v-else-if="selectedId === WRIST"
         icon="i-lucide-watch"
         title="Nothing on your wrist yet"
-        description="Until you pin some, the panel shows this avatar's first 4 controls. Right-click a tile, then Pin › To your wrist, up to 6."
+        description="Until you pin some, the panel shows this avatar's first 4 controls. Right-click a tile, then Pin › To your wrist."
       />
       <EmptyState
         v-else-if="selectedGroup"

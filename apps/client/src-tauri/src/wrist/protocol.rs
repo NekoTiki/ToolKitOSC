@@ -105,7 +105,8 @@ pub struct Home {
 pub struct Pinned {
     /// The avatar you're wearing.
     pub avatar: Option<String>,
-    /// Up to 6 controls pinned on that avatar, or its first 4 when nothing is pinned yet.
+    /// The controls pinned on that avatar, or its first 4 when nothing is pinned yet. The panel
+    /// shows them a page at a time.
     pub tiles: Vec<Tile>,
     pub nothing_pinned: bool
 }

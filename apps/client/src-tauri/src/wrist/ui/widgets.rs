@@ -63,12 +63,11 @@ pub fn chip(ui: &mut Ui, label: &str, color: Color32, width: f32) {
     ui.painter().galley(rect.min + Vec2::new(9.0, 3.0), galley, color);
 }
 
-/// Small muted text in the layout, like "8 s".
+/// Small muted text in the layout, as wide as it is, like "8 s".
 pub fn note(ui: &mut Ui, cx: &mut Cx, label: &str) {
-    let rect = take(ui, ui.available_width().min(160.0), 16.0);
-    let anchor = if ui.layout().prefer_right_to_left() { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER };
-    let pos = if anchor == Align2::RIGHT_CENTER { rect.right_center() } else { rect.left_center() };
-    text(ui, pos, anchor, label, SMALL, cx.theme.muted, rect.width());
+    let galley = egui::WidgetText::from(label).into_galley(ui, Some(egui::TextWrapMode::Truncate), ui.available_width().min(160.0), FontId::proportional(SMALL));
+    let rect = take(ui, galley.size().x, 16.0);
+    ui.painter().galley(Align2::LEFT_CENTER.anchor_size(rect.left_center(), galley.size()).min, galley, cx.theme.muted);
 }
 
 /// Muted text where a list would be.
