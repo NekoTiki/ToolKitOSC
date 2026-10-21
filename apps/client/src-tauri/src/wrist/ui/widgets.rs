@@ -19,11 +19,6 @@ pub fn pressed(ui: &Ui, rect: Rect) -> bool {
     ui.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|p| rect.contains(p)))
 }
 
-/// Where the pointer holds `rect` down, if it does.
-pub fn held(ui: &Ui, rect: Rect) -> Option<Pos2> {
-    ui.input(|i| i.pointer.interact_pos().filter(|p| i.pointer.primary_down() && rect.contains(*p)))
-}
-
 pub fn hovered(ui: &Ui, rect: Rect) -> bool {
     ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
 }
@@ -169,7 +164,7 @@ pub fn bar(ui: &Ui, cx: &Cx, rect: Rect, level: f64, color: Color32) {
 /// the moment it completes.
 pub fn hold_button(ui: &mut Ui, cx: &mut Cx, title: &str, sub: &str, length: Duration) -> bool {
     let rect = take(ui, ui.available_width(), STAT_HEIGHT);
-    let (progress, done) = cx.hold(title, held(ui, rect).is_some(), length);
+    let (progress, done) = cx.hold(title, cx.held(ui, rect, true).is_some(), length);
     ui.painter().rect_filled(rect, Rounding::same(ROUND_BIG), cx.theme.well);
     let mut fill = rect;
     fill.set_width(rect.width() * progress);
@@ -221,7 +216,7 @@ pub fn scroll_list<T>(ui: &mut Ui, cx: &mut Cx, scroll: &mut Scroll, items: &[T]
     let area = take(ui, ui.available_width(), ui.available_height());
     let content = items.len() as f32 * (height + LIST_GAP) - LIST_GAP;
     let max = (content - area.height()).max(0.0);
-    match held(ui, area) {
+    match cx.held(ui, area, false) {
         Some(pos) => {
             if let Some(last) = scroll.grab {
                 scroll.offset -= pos.y - last;

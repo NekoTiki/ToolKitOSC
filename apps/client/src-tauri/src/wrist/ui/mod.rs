@@ -29,8 +29,10 @@ struct Touch {
     hold: Option<(String, Instant, bool)>,
     /// The level last sent for what's being dragged.
     dragging: Option<(String, f64)>,
-    /// Where the press now held began, while it can still be a click.
+    /// Where the press now held began.
     origin: Option<Pos2>,
+    /// It scrolled something, so letting go isn't a click.
+    scrolled: bool,
     /// A press that ended this frame: where it began and where it ended.
     click: Option<(Pos2, Pos2)>,
     /// Where each labelled widget was drawn last frame, for tests to press it by name.
@@ -78,7 +80,17 @@ impl Cx<'_> {
 
     /// The press held now scrolled something, so letting go isn't a click.
     pub fn cancel_click(&mut self) {
-        self.touch.origin = None;
+        self.touch.scrolled = true;
+    }
+
+    /// Where the pointer holds down a press that began on `rect`, so a hold or a drag never picks
+    /// up a press from somewhere else. With `inside`, only while it's still on `rect`: sliding off
+    /// a hold lets go of it, while a drag goes on wherever the pointer goes.
+    pub fn held(&self, ui: &egui::Ui, rect: Rect, inside: bool) -> Option<Pos2> {
+        if !self.touch.origin.is_some_and(|origin| rect.contains(origin)) {
+            return None;
+        }
+        ui.input(|i| i.pointer.interact_pos().filter(|pos| i.pointer.primary_down() && (!inside || rect.contains(*pos))))
     }
 
     /// Notes where `label` was drawn, for the tests.
@@ -124,8 +136,9 @@ impl Panel {
                 if let egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, .. } = event {
                     if *pressed {
                         touch.origin = Some(*pos);
+                        touch.scrolled = false;
                     } else {
-                        touch.click = touch.origin.take().map(|from| (from, *pos));
+                        touch.click = touch.origin.take().filter(|_| !touch.scrolled).map(|from| (from, *pos));
                     }
                 }
             }
@@ -329,6 +342,33 @@ mod tests {
         }
         let last = find(&ctx, &mut panel, "a9");
         assert!(last.bottom() <= SIZE.y, "scrolled to the end: {last:?}");
+    }
+
+    #[test]
+    fn a_press_from_elsewhere_doesnt_move_a_level_or_fire_a_hold() {
+        let ctx = egui::Context::default();
+        let mut panel = on_page("Pinned");
+        panel.state.pinned.tiles = vec![tile("lush", TileKind::Level { value: 0.2 }, false), tile("shocker", TileKind::Hold, false)];
+        let lush = find(&ctx, &mut panel, "lush");
+        let shocker = find(&ctx, &mut panel, "shocker");
+        // Pressed in the gap under the tiles, then slid onto each.
+        let outside = Pos2::new(lush.center().x, SIZE.y - 4.0);
+        press_down(&ctx, &mut panel, outside);
+        assert!(frame(&ctx, &mut panel, vec![egui::Event::PointerMoved(lush.center())]).is_empty());
+        frame(&ctx, &mut panel, vec![egui::Event::PointerMoved(shocker.center())]);
+        std::thread::sleep(pages::FIRE_HOLD + Duration::from_millis(50));
+        assert!(frame(&ctx, &mut panel, Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn a_level_follows_a_drag_that_leaves_its_tile() {
+        let ctx = egui::Context::default();
+        let mut panel = on_page("Pinned");
+        panel.state.pinned.tiles = vec![tile("lush", TileKind::Level { value: 0.2 }, false)];
+        let lush = find(&ctx, &mut panel, "lush");
+        press_down(&ctx, &mut panel, lush.center());
+        let below = Pos2::new(lush.left() + 2.0, lush.bottom() + 40.0);
+        assert_eq!(frame(&ctx, &mut panel, vec![egui::Event::PointerMoved(below)]), vec![control("lush", Some(0.0))]);
     }
 
     #[test]

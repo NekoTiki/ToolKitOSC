@@ -90,7 +90,8 @@ fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) {
     let detail_at = |above: f32, label: &str| widgets::text(ui, rect.left_bottom() + Vec2::new(10.0, -9.0 - above), Align2::LEFT_BOTTOM, label, SMALL, theme.muted, rect.width() - 20.0);
     let detail = |label: &str| detail_at(0.0, label);
     let bar_at = |bottom: f32, height: f32| Rect::from_min_size(rect.left_bottom() + Vec2::new(10.0, -bottom - height), Vec2::new(rect.width() - 20.0, height));
-    let down = if usable { widgets::held(ui, rect) } else { None };
+    // A hold lets go when the pointer slides off; a level keeps following it.
+    let down = |inside: bool| if usable { cx.held(ui, rect, inside) } else { None };
     let press = |level: Option<f64>| ToApp::Control { group_id: tile.group_id.clone(), control_id: tile.control_id.clone(), level };
     match &tile.kind {
         _ if tile.locked => {
@@ -113,7 +114,7 @@ fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) {
         TileKind::Level { value } => {
             // The whole tile is the slider, dragged along; the level shows right away, before the
             // app echoes it.
-            let level = match down {
+            let level = match down(false) {
                 Some(pos) => {
                     // The last few points at each end are 0 and 100 %, so they're easy to reach.
                     let level = f64::from(((pos.x - rect.left() - END) / (rect.width() - 2.0 * END)).clamp(0.0, 1.0));
@@ -131,7 +132,8 @@ fn show_tile(ui: &Ui, cx: &mut Cx, rect: Rect, tile: &Tile) {
             widgets::text(ui, rect.left_bottom() + Vec2::new(10.0, -9.0), Align2::LEFT_BOTTOM, &format!("{} %", (level * 100.0).round()), SMALL, theme.fg, rect.width() - 20.0);
         }
         TileKind::Hold => {
-            let (progress, fire) = cx.hold(&key, down.is_some(), FIRE_HOLD);
+            let held = down(true).is_some();
+            let (progress, fire) = cx.hold(&key, held, FIRE_HOLD);
             if fire {
                 cx.actions.push(press(None));
             }
