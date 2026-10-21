@@ -6,13 +6,24 @@ import type { OverlayCorner, OverlayHud, OverlayNotify, OverlaySettings, Overlay
 import { api } from '@renderer/lib/tauri-bridge'
 import { computed, ref } from 'vue'
 
-// Settings > VR overlay: the panel on your wrist in SteamVR, the HUD in a corner of your view, and
-// toasts in XSOverlay or OVR Toolkit when viewers do something. Only you see them, unlike the chatbox.
+// Settings > VR overlay, in three tabs: the panel on your wrist in SteamVR, the HUD in a corner of
+// your view, and toasts in XSOverlay or OVR Toolkit when viewers do something. Only you see them,
+// unlike the chatbox.
 const { getAddon } = useAddons()
 const toast = useToast()
 const settings = ref<OverlaySettings | null>(null)
 
 void api.overlaySettings().then((value) => (settings.value = value))
+
+type Category = 'wrist' | 'hud' | 'toasts'
+
+const category = ref<Category>('wrist')
+
+const CATEGORIES: { value: Category; label: string; icon: string }[] = [
+  { value: 'wrist', label: 'Wrist panel', icon: 'i-lucide-watch' },
+  { value: 'hud', label: 'HUD', icon: 'i-lucide-scan' },
+  { value: 'toasts', label: 'Toasts', icon: 'i-lucide-bell' }
+]
 
 const TARGETS: { value: OverlayTarget; label: string }[] = [
   { value: 'auto', label: 'Auto' },
@@ -84,9 +95,25 @@ const sendTest = (): void => {
 
 <template>
   <template v-if="settings">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <SegmentedControl
+        v-model="category"
+        :items="CATEGORIES"
+        aria-label="VR overlay settings"
+        accent
+      />
+      <p
+        v-if="status"
+        class="text-[13px] text-muted"
+      >
+        {{ status }}
+      </p>
+    </div>
+
     <FormSection
+      v-if="category === 'wrist'"
       title="Wrist panel"
-      :description="status"
+      description="ToolKitOSC on the back of your hand, with Stop one poke away."
     >
       <USwitch
         :model-value="settings.panel.enabled"
@@ -145,6 +172,7 @@ const sendTest = (): void => {
     </FormSection>
 
     <FormSection
+      v-if="category === 'hud'"
       title="HUD"
       description="A small display in a corner of your view. Nothing on it is pressed, so it never gets in your way. Avatar parameter TKOSC/Hud (bool) and the wrist panel's Home page show or hide it too."
     >
@@ -256,7 +284,7 @@ const sendTest = (): void => {
     </FormSection>
 
     <FormSection
-      v-if="settings.hud.enabled"
+      v-if="category === 'hud' && settings.hud.enabled"
       title="What the HUD shows"
       description="It shrinks to what's on it."
     >
@@ -271,6 +299,7 @@ const sendTest = (): void => {
     </FormSection>
 
     <FormSection
+      v-if="category === 'toasts'"
       title="Send toasts to"
       description="Auto picks XSOverlay if it runs, otherwise OVR Toolkit."
     >
@@ -295,7 +324,7 @@ const sendTest = (): void => {
     </FormSection>
 
     <FormSection
-      v-if="settings.notify.to !== 'off'"
+      v-if="category === 'toasts' && settings.notify.to !== 'off'"
       title="What sends a toast"
       description="At most one toast every 2 seconds. Actions that arrive in between are merged into one."
     >
