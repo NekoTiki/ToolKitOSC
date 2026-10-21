@@ -71,28 +71,58 @@ pub struct AddonRow {
     pub touched: bool
 }
 
+/// The app's primary and secondary colors, as the panel draws them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Theme {
+    pub primary: [u8; 3],
+    pub secondary: [u8; 3]
+}
+
+impl Default for Theme {
+    /// Violet and cyan, the app's own defaults.
+    fn default() -> Self {
+        Self { primary: [0xa7, 0x8b, 0xfa], secondary: [0x22, 0xd3, 0xee] }
+    }
+}
+
+/// The Home page.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Home {
+    /// Viewers on the share page now, and how many of them signed in.
+    pub watching: usize,
+    pub signed_in: usize,
+    /// Viewer actions in the last minute.
+    pub recent: usize,
+    /// The active profile, None for no profile.
+    pub profile: Option<String>,
+    pub profiles: Vec<Profile>
+}
+
+/// The Pinned page.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pinned {
+    /// The avatar you're wearing.
+    pub avatar: Option<String>,
+    /// Up to 6 controls pinned on that avatar, or its first 4 when nothing is pinned yet.
+    pub tiles: Vec<Tile>,
+    pub nothing_pinned: bool
+}
+
+/// Everything the panel shows, grouped by the page that shows it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct State {
     pub paused: bool,
-    /// Viewers on the share page now, and how many of them signed in.
-    pub watching: usize,
-    pub signed_in: usize,
-    /// The active profile, None for no profile.
-    pub profile: Option<String>,
-    pub profiles: Vec<Profile>,
-    /// What viewers did, newest first, at most 20.
+    pub panel: PanelSettings,
+    pub theme: Theme,
+    pub home: Home,
+    /// What viewers did, newest first, at most 20: Home's Last and Viewers' Activity.
     pub activity: Vec<Entry>,
-    /// Viewer actions in the last minute.
-    pub recent: usize,
     pub viewers: Vec<Viewer>,
-    /// The avatar you're wearing.
-    pub avatar: Option<String>,
-    /// Up to 6 controls pinned on that avatar, or its first 4 when nothing is pinned yet.
-    pub pinned: Vec<Tile>,
-    pub nothing_pinned: bool,
-    pub addons: Vec<AddonRow>,
-    pub panel: PanelSettings
+    pub pinned: Pinned,
+    pub addons: Vec<AddonRow>
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

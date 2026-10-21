@@ -130,7 +130,7 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
 
     loop {
         let mut apply = |message: ToRender| match message {
-            ToRender::State(state) => panel.state = state,
+            ToRender::State(state) => panel.set_state(state),
             ToRender::Events(more) => events.extend(more)
         };
         match rx.recv_timeout(if again || retry { FRAME } else { Duration::from_secs(1) }) {

@@ -15,7 +15,7 @@ use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::{overlay, store};
-use crate::wrist::protocol::{AddonRow, Entry, Profile, State, ToApp, Viewer};
+use crate::wrist::protocol::{AddonRow, Entry, Home, Pinned, Profile, State, ToApp, Viewer};
 
 /// The panel crashing this many times within `CRASH_WINDOW` stops it until you change a setting.
 const MAX_CRASHES: usize = 3;
@@ -221,18 +221,13 @@ pub fn refresh(app: &AppHandle) {
     }
     let state = State {
         paused,
-        watching,
-        signed_in,
-        profile: panel.profile.clone(),
-        profiles: panel.profiles.clone(),
+        panel: settings,
+        theme: Default::default(),
+        home: Home { watching, signed_in, recent: panel.recent.len(), profile: panel.profile.clone(), profiles: panel.profiles.clone() },
         activity: panel.activity.iter().cloned().collect(),
-        recent: panel.recent.len(),
         viewers,
-        avatar,
-        pinned,
-        nothing_pinned,
-        addons,
-        panel: settings
+        pinned: Pinned { avatar, tiles: pinned, nothing_pinned },
+        addons
     };
     if let Some(tx) = &panel.state {
         tx.send_if_modified(|current| {
