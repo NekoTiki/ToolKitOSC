@@ -293,7 +293,7 @@ const sendTest = (): void => {
                 Follow
               </p>
               <p class="text-sm text-muted">
-                Lazy stays put while you look around a little, then glides back. Glued moves exactly with your view.
+                Lazy trails a little behind your view and glides smoothly back into place. Glued moves exactly with your view.
               </p>
             </div>
             <SegmentedControl

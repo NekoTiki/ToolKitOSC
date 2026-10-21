@@ -55,12 +55,20 @@ const SWAP_AFTER: Duration = Duration::from_millis(50);
 const BACK_ALPHA: f32 = 0.01;
 /// The HUD's width at size 1, per meter away: it keeps its size in your view at any distance.
 const HUD_WIDTH: f32 = 0.4;
-/// Lazy follow: the HUD stays put until it's this far off its place in your view, in degrees,
-/// then glides back until it's within `LAZY_STOP_DEG`.
-const LAZY_START_DEG: f32 = 10.0;
-const LAZY_STOP_DEG: f32 = 1.0;
+/// Lazy follow: within this many degrees of its place in your view, the HUD stays still, so the
+/// headset's small shakes don't move it. Past it, it glides back, slowly at first and at full speed
+/// once it's `LAZY_RAMP_DEG` further off.
+const LAZY_STILL_DEG: f32 = 1.0;
+const LAZY_RAMP_DEG: f32 = 5.0;
 /// How fast it glides at catch-up speed 1: the share of the way left it covers a second, as a rate.
 const CATCH_RATE: f32 = 8.0;
+
+/// Lazy follow's glide rate when the HUD is `off` degrees from its place: 0 while it's close
+/// enough, growing smoothly to the full rate.
+fn lazy_rate(off: f32, catch_up: f32) -> f32 {
+    let pull = ((off - LAZY_STILL_DEG) / LAZY_RAMP_DEG).clamp(0.0, 1.0);
+    catch_up.clamp(0.1, 1.0) * CATCH_RATE * pull * pull * (3.0 - 2.0 * pull)
+}
 
 /// Runs the panel until SteamVR quits or the app goes away.
 pub fn main(port: u16, token: String) -> Result<(), String> {
@@ -172,8 +180,6 @@ struct HudPlace {
     width: f32,
     /// Lazy: where it is in the world now.
     placed: Option<Matrix34>,
-    /// Lazy: gliding back to its place.
-    catching: bool,
     /// Glued: what it was attached to the headset with.
     glued: Option<Matrix34>,
     last_tick: Option<Instant>
@@ -217,14 +223,14 @@ impl HudPlace {
                 let target = position(&multiply(head, &offset));
                 let at = self.placed.as_ref().map_or(target, position);
                 let off = geometry::angle_between(eye, at, target);
-                let off_distance = (geometry::distance(eye, at) - distance).abs() > distance * 0.25;
-                self.catching |= off > LAZY_START_DEG || off_distance;
-                if self.catching || self.placed.is_none() {
-                    let share = if self.placed.is_some() { 1.0 - (-settings.catch_up.clamp(0.1, 1.0) * CATCH_RATE * dt).exp() } else { 1.0 };
+                // Leaning in or back counts too: as much as turning by the same share of its distance.
+                let off = off.max(((geometry::distance(eye, at) - distance).abs() / distance).min(1.0).asin().to_degrees());
+                let rate = lazy_rate(off, settings.catch_up);
+                if rate > 0.0 || self.placed.is_none() {
+                    let share = if self.placed.is_some() { 1.0 - (-rate * dt).exp() } else { 1.0 };
                     let placed = geometry::facing(geometry::lerp(at, target, share), eye, geometry::column(head, 1));
                     hud.each(|overlay| vr.place(overlay, &placed));
                     self.placed = Some(placed);
-                    self.catching = off > LAZY_STOP_DEG;
                 }
             }
         }
@@ -521,3 +527,18 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panel: &mut Pair, curs
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lazy_follow_ignores_shakes_and_speeds_up_smoothly() {
+        assert_eq!(lazy_rate(0.5, 0.5), 0.0);
+        assert_eq!(lazy_rate(LAZY_STILL_DEG, 0.5), 0.0);
+        let rates: Vec<f32> = [1.5, 2.0, 3.0, 4.5].iter().map(|&off| lazy_rate(off, 0.5)).collect();
+        assert!(rates.windows(2).all(|pair| pair[0] > 0.0 && pair[0] < pair[1]), "{rates:?}");
+        assert_eq!(lazy_rate(30.0, 0.5), 0.5 * CATCH_RATE);
+        assert_eq!(lazy_rate(30.0, 1.0), CATCH_RATE);
+    }
+}
