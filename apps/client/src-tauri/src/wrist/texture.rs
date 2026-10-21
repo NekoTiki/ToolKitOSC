@@ -47,14 +47,15 @@ impl Textures {
         Ok(Self { textures: [texture()?, texture()?], context, width })
     }
 
-    /// Copies a frame (RGBA, rows top to bottom) into texture `index`; returns it for
-    /// `SetOverlayTexture`.
-    pub fn write(&self, index: usize, rgba: &[u8]) -> *mut c_void {
+    /// Copies a frame (RGBA, rows top to bottom) into texture `index` and hands it to `send`
+    /// (`SetOverlayTexture`).
+    pub fn upload<T>(&self, index: usize, rgba: &[u8], send: impl FnOnce(*mut c_void) -> T) -> T {
         let texture = &self.textures[index];
-        unsafe {
-            self.context.UpdateSubresource(texture, 0, None, rgba.as_ptr().cast(), self.width * 4, 0);
-            self.context.Flush();
-        }
-        texture.as_raw()
+        unsafe { self.context.UpdateSubresource(texture, 0, None, rgba.as_ptr().cast(), self.width * 4, 0) };
+        let sent = send(texture.as_raw());
+        // SteamVR copies the texture into its own with a command on our context: until it's
+        // flushed, the GPU doesn't run it and the overlay stays empty.
+        unsafe { self.context.Flush() };
+        sent
     }
 }

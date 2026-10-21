@@ -189,7 +189,7 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
             let back = 1 - front.load(Ordering::Relaxed);
             #[cfg(windows)]
             let uploaded = match &textures {
-                Some(textures) => vr.set_texture(panels[back], textures.write(back, &bytes)),
+                Some(textures) => textures.upload(back, &bytes, |texture| vr.set_texture(panels[back], texture)),
                 None => vr.set_raw(panels[back], &mut bytes, width as u32, height as u32)
             };
             #[cfg(not(windows))]
