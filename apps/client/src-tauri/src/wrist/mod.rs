@@ -201,7 +201,7 @@ impl HudPlace {
         hud.set_alpha(vr, settings.opacity.clamp(0.3, 1.0));
         let half_width = (HUD_WIDTH * size / 2.0).atan().to_degrees();
         let half_height = (HUD_WIDTH * size / 2.0 * ui::HUD_SIZE.y / ui::HUD_SIZE.x).atan().to_degrees();
-        let offset = geometry::hud_offset(settings.corner, distance, half_width, half_height);
+        let offset = geometry::hud_offset(settings.corner, settings.inset_deg.clamp(0.0, 25.0), distance, half_width, half_height);
         match settings.follow {
             Follow::Glued => {
                 if self.glued.as_ref() != Some(&offset) {

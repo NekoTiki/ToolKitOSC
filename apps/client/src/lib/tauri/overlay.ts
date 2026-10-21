@@ -28,6 +28,8 @@ export type OverlayCorner = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-r
 export interface OverlayHud {
   enabled: boolean
   corner: OverlayCorner
+  // Degrees in from the corner, 0-25.
+  insetDeg: number
   // 0.5-2, 1 is the usual size.
   size: number
   opacity: number

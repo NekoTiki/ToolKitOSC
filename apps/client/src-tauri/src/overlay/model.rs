@@ -93,6 +93,8 @@ pub enum Follow {
 pub struct HudSettings {
     pub enabled: bool,
     pub corner: Corner,
+    /// How far in from the corner of your view, in degrees, 0–25.
+    pub inset_deg: f32,
     /// 0.5–2, 1 is the usual size. It keeps that size in your view at any distance.
     pub size: f32,
     /// 0.3–1.
@@ -118,6 +120,7 @@ impl Default for HudSettings {
         Self {
             enabled: false,
             corner: Corner::BottomLeft,
+            inset_deg: 0.0,
             size: 1.0,
             opacity: 0.85,
             distance: 1.5,

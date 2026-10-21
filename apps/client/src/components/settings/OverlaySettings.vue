@@ -165,6 +165,20 @@ const sendTest = (): void => {
             @update:model-value="(corner) => change((s) => (s.hud.corner = corner))"
           />
         </div>
+        <UFormField
+          :label="`Away from the corner · ${settings.hud.insetDeg}°`"
+          description="Moves it in toward the middle of your view, if your headset cuts it off."
+        >
+          <USlider
+            :model-value="settings.hud.insetDeg"
+            :min="0"
+            :max="25"
+            :step="1"
+            size="lg"
+            aria-label="Away from the corner"
+            @update:model-value="change((s) => (s.hud.insetDeg = slider($event, 0)))"
+          />
+        </UFormField>
         <UFormField :label="`Size · ${Math.round(settings.hud.size * 100)} %`">
           <USlider
             :model-value="Math.round(settings.hud.size * 100)"

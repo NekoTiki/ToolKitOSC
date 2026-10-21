@@ -116,9 +116,10 @@ pub fn angle_between(eye: Vec3, a: Vec3, b: Vec3) -> f32 {
 }
 
 /// Where the HUD sits in your view, in head space (x right, y up, -z ahead): `distance` meters
-/// away toward `corner`, facing you. `half_width` and `half_height` are half its size, in
-/// degrees, so its outer edges stay at the same place in your view whatever its size.
-pub fn hud_offset(corner: Corner, distance: f32, half_width: f32, half_height: f32) -> Matrix34 {
+/// away toward `corner`, `inset` degrees in from it, facing you. `half_width` and `half_height`
+/// are half its size, in degrees, so its outer edges stay at the same place in your view whatever
+/// its size.
+pub fn hud_offset(corner: Corner, inset: f32, distance: f32, half_width: f32, half_height: f32) -> Matrix34 {
     // shortcut: fixed edges that suit a ~100° field of view; a setting if headsets differ much.
     let (right, top) = match corner {
         Corner::BottomLeft => (false, false),
@@ -126,8 +127,8 @@ pub fn hud_offset(corner: Corner, distance: f32, half_width: f32, half_height: f
         Corner::TopLeft => (false, true),
         Corner::TopRight => (true, true)
     };
-    let yaw = (HUD_EDGE_SIDE - half_width).max(0.0).to_radians() * if right { 1.0 } else { -1.0 };
-    let pitch = if top { (HUD_EDGE_TOP - half_height).max(0.0) } else { -(HUD_EDGE_BOTTOM - half_height).max(0.0) }.to_radians();
+    let yaw = (HUD_EDGE_SIDE - inset - half_width).max(0.0).to_radians() * if right { 1.0 } else { -1.0 };
+    let pitch = if top { (HUD_EDGE_TOP - inset - half_height).max(0.0) } else { -(HUD_EDGE_BOTTOM - inset - half_height).max(0.0) }.to_radians();
     let at = [distance * yaw.sin() * pitch.cos(), distance * pitch.sin(), -distance * yaw.cos() * pitch.cos()];
     facing(at, [0.0; 3], [0.0, 1.0, 0.0])
 }
@@ -192,7 +193,7 @@ mod tests {
     #[test]
     fn the_hud_faces_you_from_its_corner() {
         for corner in [Corner::BottomLeft, Corner::BottomRight, Corner::TopLeft, Corner::TopRight] {
-            let m = hud_offset(corner, 1.5, 10.0, 6.0);
+            let m = hud_offset(corner, 0.0, 1.5, 10.0, 6.0);
             let at = position(&m);
             assert!((length(at) - 1.5).abs() < 1e-4 && at[2] < 0.0, "{at:?}");
             assert_eq!(at[0] > 0.0, matches!(corner, Corner::BottomRight | Corner::TopRight));
@@ -202,6 +203,10 @@ mod tests {
             assert!(column(&m, 0)[1].abs() < 1e-5);
         }
         assert!((angle_between([0.0; 3], [0.0, 0.0, -1.0], [1.0, 0.0, -1.0]) - 45.0).abs() < 0.01);
+        // Moved in from the corner: closer to straight ahead.
+        let ahead = [0.0, 0.0, -1.0];
+        let (out, inside) = (hud_offset(Corner::BottomLeft, 0.0, 1.5, 10.0, 6.0), hud_offset(Corner::BottomLeft, 10.0, 1.5, 10.0, 6.0));
+        assert!(angle_between([0.0; 3], ahead, position(&inside)) < angle_between([0.0; 3], ahead, position(&out)) - 5.0);
     }
 
     #[test]
