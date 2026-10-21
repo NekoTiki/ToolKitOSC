@@ -2,6 +2,7 @@
 //! Panel space: x to the right of the image, y up, z out of its face toward whoever reads it,
 //! in meters from its center.
 use super::openvr::Matrix34;
+use crate::overlay::model::Corner;
 
 pub type Vec3 = [f32; 3];
 
@@ -21,7 +22,7 @@ pub fn position(m: &Matrix34) -> Vec3 {
     [m.m[0][3], m.m[1][3], m.m[2][3]]
 }
 
-fn column(m: &Matrix34, c: usize) -> Vec3 {
+pub fn column(m: &Matrix34, c: usize) -> Vec3 {
     [m.m[0][c], m.m[1][c], m.m[2][c]]
 }
 
@@ -81,6 +82,61 @@ pub fn offset(m: &Matrix34, x: f32, y: f32, z: f32) -> Matrix34 {
     multiply(m, &Matrix34 { m: [[1.0, 0.0, 0.0, x], [0.0, 1.0, 0.0, y], [0.0, 0.0, 1.0, z]] })
 }
 
+pub fn distance(a: Vec3, b: Vec3) -> f32 {
+    length(sub(a, b))
+}
+
+/// `share` of the way from `a` to `b`.
+pub fn lerp(a: Vec3, b: Vec3, share: f32) -> Vec3 {
+    [a[0] + (b[0] - a[0]) * share, a[1] + (b[1] - a[1]) * share, a[2] + (b[2] - a[2]) * share]
+}
+
+fn cross(a: Vec3, b: Vec3) -> Vec3 {
+    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+
+fn normalize(a: Vec3) -> Vec3 {
+    let l = length(a).max(1e-6);
+    [a[0] / l, a[1] / l, a[2] / l]
+}
+
+/// An overlay at `at` with its face toward `eye`, kept upright along `up`.
+pub fn facing(at: Vec3, eye: Vec3, up: Vec3) -> Matrix34 {
+    let z = normalize(sub(eye, at));
+    let x = normalize(cross(up, z));
+    let y = cross(z, x);
+    Matrix34 { m: [[x[0], y[0], z[0], at[0]], [x[1], y[1], z[1], at[1]], [x[2], y[2], z[2], at[2]]] }
+}
+
+/// The angle in degrees between the ways from `eye` to `a` and to `b`.
+pub fn angle_between(eye: Vec3, a: Vec3, b: Vec3) -> f32 {
+    let (a, b) = (sub(a, eye), sub(b, eye));
+    let cos = dot(a, b) / (length(a) * length(b)).max(1e-6);
+    cos.clamp(-1.0, 1.0).acos().to_degrees()
+}
+
+/// Where the HUD sits in your view, in head space (x right, y up, -z ahead): `distance` meters
+/// away toward `corner`, facing you. `half_width` and `half_height` are half its size, in
+/// degrees, so its outer edges stay at the same place in your view whatever its size.
+pub fn hud_offset(corner: Corner, distance: f32, half_width: f32, half_height: f32) -> Matrix34 {
+    // shortcut: fixed edges that suit a ~100° field of view; a setting if headsets differ much.
+    let (right, top) = match corner {
+        Corner::BottomLeft => (false, false),
+        Corner::BottomRight => (true, false),
+        Corner::TopLeft => (false, true),
+        Corner::TopRight => (true, true)
+    };
+    let yaw = (HUD_EDGE_SIDE - half_width).max(0.0).to_radians() * if right { 1.0 } else { -1.0 };
+    let pitch = if top { (HUD_EDGE_TOP - half_height).max(0.0) } else { -(HUD_EDGE_BOTTOM - half_height).max(0.0) }.to_radians();
+    let at = [distance * yaw.sin() * pitch.cos(), distance * pitch.sin(), -distance * yaw.cos() * pitch.cos()];
+    facing(at, [0.0; 3], [0.0, 1.0, 0.0])
+}
+
+/// How far out the HUD's outer edges reach in your view, in degrees from straight ahead.
+const HUD_EDGE_SIDE: f32 = 32.0;
+const HUD_EDGE_TOP: f32 = 24.0;
+const HUD_EDGE_BOTTOM: f32 = 28.0;
+
 /// The angle in degrees between the panel's face and the way to your eyes.
 pub fn look_angle(panel: &Matrix34, eyes: Vec3) -> f32 {
     let to_eyes = sub(eyes, position(panel));
@@ -131,6 +187,21 @@ mod tests {
         assert!(look_angle(&IDENTITY, [0.0, 0.0, 0.5]) < 0.01);
         assert!((look_angle(&IDENTITY, [0.5, 0.0, 0.5]) - 45.0).abs() < 0.01);
         assert!(look_angle(&IDENTITY, [0.0, 0.0, -0.5]) > 179.0);
+    }
+
+    #[test]
+    fn the_hud_faces_you_from_its_corner() {
+        for corner in [Corner::BottomLeft, Corner::BottomRight, Corner::TopLeft, Corner::TopRight] {
+            let m = hud_offset(corner, 1.5, 10.0, 6.0);
+            let at = position(&m);
+            assert!((length(at) - 1.5).abs() < 1e-4 && at[2] < 0.0, "{at:?}");
+            assert_eq!(at[0] > 0.0, matches!(corner, Corner::BottomRight | Corner::TopRight));
+            assert_eq!(at[1] > 0.0, matches!(corner, Corner::TopLeft | Corner::TopRight));
+            assert!(look_angle(&m, [0.0; 3]) < 0.01);
+            // Upright: its x stays level.
+            assert!(column(&m, 0)[1].abs() < 1e-5);
+        }
+        assert!((angle_between([0.0; 3], [0.0, 0.0, -1.0], [1.0, 0.0, -1.0]) - 45.0).abs() < 0.01);
     }
 
     #[test]

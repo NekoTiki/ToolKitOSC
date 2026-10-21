@@ -98,6 +98,7 @@ fn act(app: &AppHandle, action: ToApp) {
             super::pinned::press(app, group_id, control_id, *level, *pick);
             refresh(app);
         }
+        ToApp::Hud { on } => super::super::set_hud(app, *on),
         ToApp::Stop | ToApp::Resume | ToApp::Profile { .. } => {
             let _ = app.emit("overlay-action", &action);
         }

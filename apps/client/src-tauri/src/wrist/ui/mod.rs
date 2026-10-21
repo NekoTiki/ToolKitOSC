@@ -2,6 +2,7 @@
 //! button per page and Stop. Once everything is stopped, the whole bar is the button that resumes,
 //! after a hold. Pages (see `pages`) stack the shared widgets (see `widgets`) with egui's layout;
 //! colors and sizes come from `theme`.
+mod hud;
 mod pages;
 pub mod theme;
 mod widgets;
@@ -11,6 +12,7 @@ use std::time::{Duration, Instant};
 use egui::{Align, Align2, Layout, Pos2, Rect, Rounding, Stroke, UiBuilder, Vec2};
 
 use super::protocol::{State, ToApp};
+pub use hud::{Hud, HUD_SIZE};
 pub use theme::SIZE;
 use theme::{Theme, BAR_GAP, BAR_HEIGHT, CARD, GAP, MARGIN};
 
@@ -108,6 +110,39 @@ impl Cx<'_> {
     pub fn mark(&mut self, _label: &str, _rect: Rect) {
         #[cfg(test)]
         self.touch.rects.push((_label.to_owned(), _rect));
+    }
+}
+
+/// What a render thread draws (see `crate::wrist::render`): the panel or the HUD.
+pub trait View: Default {
+    /// The layout size in points.
+    const SIZE: Vec2;
+    fn set_state(&mut self, state: State);
+    /// Draws it. Returns what was pressed, and whether to draw again soon.
+    fn show(&mut self, ctx: &egui::Context) -> (Vec<ToApp>, bool);
+}
+
+impl View for Panel {
+    const SIZE: Vec2 = SIZE;
+
+    fn set_state(&mut self, state: State) {
+        Panel::set_state(self, state);
+    }
+
+    fn show(&mut self, ctx: &egui::Context) -> (Vec<ToApp>, bool) {
+        Panel::show(self, ctx)
+    }
+}
+
+impl View for Hud {
+    const SIZE: Vec2 = HUD_SIZE;
+
+    fn set_state(&mut self, state: State) {
+        Hud::set_state(self, state);
+    }
+
+    fn show(&mut self, ctx: &egui::Context) -> (Vec<ToApp>, bool) {
+        Hud::show(self, ctx)
     }
 }
 
@@ -298,6 +333,15 @@ mod tests {
         let ctx = egui::Context::default();
         let mut panel = Panel::default();
         assert_eq!(press(&ctx, &mut panel, "STOP"), vec![ToApp::Stop]);
+    }
+
+    #[test]
+    fn home_shows_and_hides_the_hud() {
+        let ctx = egui::Context::default();
+        let mut panel = Panel::default();
+        assert_eq!(press(&ctx, &mut panel, "Show HUD"), vec![ToApp::Hud { on: true }]);
+        panel.state.hud.enabled = true;
+        assert_eq!(press(&ctx, &mut panel, "Hide HUD"), vec![ToApp::Hud { on: false }]);
     }
 
     #[test]

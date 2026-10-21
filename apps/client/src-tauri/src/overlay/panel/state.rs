@@ -6,7 +6,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 use super::{overlay, pinned, store};
-use crate::wrist::protocol::{AddonRow, Home, Pinned, State, ToyRow, Viewer};
+use crate::wrist::protocol::{AddonRow, Home, Pinned, Pull, State, ToyRow, Viewer};
 
 const RECENT: Duration = Duration::from_secs(60);
 
@@ -31,8 +31,16 @@ pub fn build(app: &AppHandle) -> State {
         viewers,
         pinned,
         addons,
-        toys
+        toys,
+        leash: pull(app),
+        hud: settings.hud
     }
+}
+
+/// Who pulls your leash right now, if anyone.
+fn pull(app: &AppHandle) -> Option<Pull> {
+    let view = crate::leash::view(app);
+    view.active.map(|who| Pull { who, stretch: view.stretch, right: view.output.horizontal, forward: view.output.vertical })
 }
 
 /// Who's on the share page, with their groups' names and what they did last.

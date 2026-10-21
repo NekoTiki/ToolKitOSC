@@ -23,9 +23,32 @@ export interface OverlayPanel {
   showWithinDeg: number
 }
 
+export type OverlayCorner = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
+
+export interface OverlayHud {
+  enabled: boolean
+  corner: OverlayCorner
+  // 0.5-2, 1 is the usual size.
+  size: number
+  opacity: number
+  // Meters.
+  distance: number
+  follow: 'lazy' | 'glued'
+  // 0.1-1.
+  catchUp: number
+  hideWithPanel: boolean
+  status: boolean
+  viewers: boolean
+  lastAction: boolean
+  toys: boolean
+  leash: boolean
+  warnings: boolean
+}
+
 export interface OverlaySettings {
   notify: OverlayNotify
   panel: OverlayPanel
+  hud: OverlayHud
   // Avatar id -> the controls pinned to the wrist (set with overlaySetPinned).
   pinned: Record<string, string[]>
 }

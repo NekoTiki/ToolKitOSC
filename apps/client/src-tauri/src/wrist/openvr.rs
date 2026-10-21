@@ -104,7 +104,9 @@ struct OverlayFnTable {
     set_overlay_sort_order: unsafe extern "system" fn(u64, u32) -> i32,
     _d2: [*const c_void; 1],
     set_overlay_width_in_meters: unsafe extern "system" fn(u64, f32) -> i32,
-    _e: [*const c_void; 12],
+    _e: [*const c_void; 10],
+    set_overlay_transform_absolute: unsafe extern "system" fn(u64, i32, *const Matrix34) -> i32,
+    _e2: [*const c_void; 1],
     set_overlay_transform_tracked_device_relative: unsafe extern "system" fn(u64, u32, *const Matrix34) -> i32,
     _f: [*const c_void; 7],
     show_overlay: unsafe extern "system" fn(u64) -> i32,
@@ -112,7 +114,9 @@ struct OverlayFnTable {
     _g: [*const c_void; 15],
     set_overlay_texture: unsafe extern "system" fn(u64, *const Texture) -> i32,
     _g2: [*const c_void; 1],
-    set_overlay_raw: unsafe extern "system" fn(u64, *mut c_void, u32, u32, u32) -> i32
+    set_overlay_raw: unsafe extern "system" fn(u64, *mut c_void, u32, u32, u32) -> i32,
+    _h: [*const c_void; 5],
+    is_dashboard_visible: unsafe extern "system" fn() -> bool
 }
 
 #[repr(C)]
@@ -271,6 +275,16 @@ impl OpenVr {
         unsafe { (self.overlay.set_overlay_transform_tracked_device_relative)(handle, device, transform) };
     }
 
+    /// Puts it at `transform` in the standing space the poses are in.
+    pub fn place(&self, handle: u64, transform: &Matrix34) {
+        unsafe { (self.overlay.set_overlay_transform_absolute)(handle, ORIGIN_STANDING, transform) };
+    }
+
+    /// The SteamVR dashboard is open.
+    pub fn dashboard_open(&self) -> bool {
+        unsafe { (self.overlay.is_dashboard_visible)() }
+    }
+
     pub fn set_visible(&self, handle: u64, visible: bool) {
         unsafe {
             if visible {
@@ -349,10 +363,12 @@ mod tests {
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_alpha), 16 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_sort_order), 20 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_width_in_meters), 22 * ptr);
+        assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_transform_absolute), 33 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_transform_tracked_device_relative), 35 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, show_overlay), 43 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_texture), 60 * ptr);
         assert_eq!(std::mem::offset_of!(OverlayFnTable, set_overlay_raw), 62 * ptr);
+        assert_eq!(std::mem::offset_of!(OverlayFnTable, is_dashboard_visible), 68 * ptr);
         assert_eq!(std::mem::size_of::<Texture>(), 16);
         assert_eq!(std::mem::size_of::<TrackedDevicePose>(), 80);
         assert_eq!(std::mem::offset_of!(InputFnTable, get_pose_action_data_relative_to_now), 7 * ptr);
