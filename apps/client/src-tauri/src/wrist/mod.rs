@@ -125,6 +125,7 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
     let started = Instant::now();
     let mut events: Vec<egui::Event> = Vec::new();
     let mut again = false;
+    let mut retry = false;
     let mut last_frame = Instant::now() - FRAME;
 
     loop {
@@ -132,7 +133,7 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
             ToRender::State(state) => panel.state = state,
             ToRender::Events(more) => events.extend(more)
         };
-        match rx.recv_timeout(if again { FRAME } else { Duration::from_secs(1) }) {
+        match rx.recv_timeout(if again || retry { FRAME } else { Duration::from_secs(1) }) {
             Ok(message) => apply(message),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return
@@ -160,12 +161,20 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
         // Every upload can flicker in SteamVR, so only a frame that looks different goes out.
         if bytes != sent {
             let back = 1 - front.load(Ordering::Relaxed);
-            if let Err(err) = vr.set_raw(panels[back], &mut bytes, width as u32, height as u32) {
-                tracing::warn!("Panel: {err}");
+            match vr.set_raw(panels[back], &mut bytes, width as u32, height as u32) {
+                Ok(()) => {
+                    std::thread::sleep(SWAP_AFTER);
+                    front.store(back, Ordering::Relaxed);
+                    std::mem::swap(&mut bytes, &mut sent);
+                    retry = false;
+                }
+                // SteamVR refuses an upload while it's still taking the last one: the panel keeps
+                // what it shows, and the same frame goes again next time.
+                Err(err) => {
+                    tracing::debug!("Panel: {err}, trying again");
+                    retry = true;
+                }
             }
-            std::thread::sleep(SWAP_AFTER);
-            front.store(back, Ordering::Relaxed);
-            std::mem::swap(&mut bytes, &mut sent);
         }
         last_frame = Instant::now();
     }

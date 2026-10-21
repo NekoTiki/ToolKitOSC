@@ -262,6 +262,11 @@ pub fn view(app: &AppHandle) -> AddonsView {
     }
 }
 
+/// Every add-on that's on: its id, name and status.
+pub fn statuses(app: &AppHandle) -> Vec<(&'static str, &'static str, Status)> {
+    available().filter(|addon| is_on(app, addon.manifest().id)).map(|addon| (addon.manifest().id, addon.manifest().name, addon.status(app))).collect()
+}
+
 /// Something about an add-on changed: its switch or its status.
 pub fn changed(app: &AppHandle) {
     let _ = app.emit("addons-update", view(app));

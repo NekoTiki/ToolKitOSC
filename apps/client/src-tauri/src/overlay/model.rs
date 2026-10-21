@@ -69,5 +69,7 @@ impl Default for PanelSettings {
 #[serde(default)]
 pub struct OverlaySettings {
     pub notify: NotifySettings,
-    pub panel: PanelSettings
+    pub panel: PanelSettings,
+    /// Avatar id -> the controls on its Pinned page, at most 6 (see `super::tiles`).
+    pub pinned: std::collections::BTreeMap<String, Vec<String>>
 }

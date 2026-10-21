@@ -21,6 +21,7 @@ import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useControlEditor } from '@renderer/composables/useControlEditor'
 import { useControls } from '@renderer/composables/useControls'
 import { useControlsView } from '@renderer/composables/useControlsView'
+import { useWristPins } from '@renderer/composables/useVrOverlay'
 import type {
   BooleanEnumControl,
   BooleanGroupControl,
@@ -64,7 +65,14 @@ interface TypeChoice {
   reason?: string
 }
 
-const { offAddonForControlType } = useAddons()
+const { offAddonForControlType, isOn } = useAddons()
+
+// Pin to your wrist: the VR overlay panel's Pinned page, per avatar, saved right away (not with Save).
+const { wristPins, setWristPin } = useWristPins()
+const wristPinned = computed(() => !!controlId && wristPins.value.includes(controlId))
+const setWristPinned = (pinned: boolean): void => {
+  if (controlId) setWristPin(controlId, pinned)
+}
 const { setAddon } = useAddonSwitch()
 
 // The type's add-on, when it's off: the control is kept, but viewers don't get it.
@@ -337,12 +345,30 @@ onBeforeRouteLeave(async () => {
             </UFormField>
           </div>
 
-          <USwitch
-            :model-value="!!model.pinned"
-            label="Pin this control"
-            description="Pinned controls are listed together at the top of the Controls page."
-            @update:model-value="model.pinned = $event || undefined"
-          />
+          <UFormField label="Pin">
+            <div class="grid gap-2.5">
+              <UCheckbox
+                :model-value="!!model.pinned"
+                label="In the app"
+                description="Listed together at the top of the Controls page."
+                size="lg"
+                @update:model-value="model.pinned = !!$event || undefined"
+              />
+              <UCheckbox
+                v-if="isOn('overlay')"
+                :model-value="wristPinned"
+                label="To your wrist"
+                :description="
+                  controlId
+                    ? 'On the Pinned page of the VR overlay panel for this avatar, up to 6. Applies right away.'
+                    : 'Save the control first.'
+                "
+                :disabled="!controlId"
+                size="lg"
+                @update:model-value="setWristPinned(!!$event)"
+              />
+            </div>
+          </UFormField>
         </FormSection>
 
         <FormSection :title="`${type ? CONTROL_TYPE_LABELS[type] : ''} settings`">

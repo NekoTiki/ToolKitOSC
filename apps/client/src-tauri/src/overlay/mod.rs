@@ -8,6 +8,7 @@ pub mod model;
 mod notify;
 mod panel;
 mod store;
+mod tiles;
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -108,7 +109,7 @@ pub fn viewer_command(app: &AppHandle, who: &str, control: Option<&serde_json::V
     let kind = notify::kind_of(control_type);
     let (what, detail) = notify::describe(control, control_type, name, value);
     if crate::addons::is_on(app, "overlay") {
-        panel::note_action(app, format!("{who} {what}"));
+        panel::note_action(app, who, &what);
     }
     let wanted = move |n: &NotifySettings| match kind {
         Kind::Shock => n.shocks,
@@ -151,8 +152,8 @@ pub fn automation_ran(app: &AppHandle, name: &str) {
 }
 
 /// The profiles and the active one, from the webview.
-pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>) {
-    panel::set_context(app, profiles, profile);
+pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>) {
+    panel::set_context(app, profiles, profile, groups);
 }
 
 /// The settings changed: the panel gets them, and may start again after crashing.
