@@ -55,6 +55,13 @@ export interface OverlaySettings {
   pinned: Record<string, string[]>
 }
 
+// What each part of the overlay is doing (see overlay/commands.rs `OverlayStatus`).
+export interface OverlayStatus {
+  inVr: boolean
+  gaveUp: boolean
+  toastsTo: OverlayTarget | null
+}
+
 export type Rgb = [number, number, number]
 
 // The colors the wrist panel draws with.
@@ -69,6 +76,7 @@ export const overlayApi = {
   overlaySettings: (): Promise<OverlaySettings> => invoke('overlay_settings'),
   overlaySave: (settings: OverlaySettings): Promise<void> => invoke('overlay_save', { settings }),
   overlayTestToast: (): Promise<void> => invoke('overlay_test_toast'),
+  overlayStatus: (): Promise<OverlayStatus> => invoke('overlay_status'),
   overlaySetContext: (
     profiles: { id: string; name: string }[],
     profileId: string | null,

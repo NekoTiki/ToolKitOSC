@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import type { StatusInfo } from '@renderer/components/settings/StatusLine.vue'
+import StatusLine from '@renderer/components/settings/StatusLine.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
-import type { OverlayCorner, OverlayHud, OverlayNotify, OverlaySettings, OverlayTarget } from '@renderer/lib/tauri-bridge'
+import type { OverlayCorner, OverlayHud, OverlayNotify, OverlaySettings, OverlayStatus, OverlayTarget } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 // Settings > VR overlay, in three tabs: the panel on your wrist in SteamVR, the HUD in a corner of
 // your view, and toasts in XSOverlay or OVR Toolkit when viewers do something. Only you see them,
@@ -69,7 +71,35 @@ const EVENTS: { key: Exclude<keyof OverlayNotify, 'to'>; label: string; descript
   { key: 'automations', label: 'Automations', description: '"Automation Headpat ran"' }
 ]
 
-const status = computed(() => getAddon('overlay')?.status.text)
+// Fetched again whenever the add-on's status changes: SteamVR, XSOverlay or OVR Toolkit came or went.
+const live = ref<OverlayStatus | null>(null)
+
+watch(
+  () => getAddon('overlay')?.status.text,
+  () => void api.overlayStatus().then((value) => (live.value = value)),
+  { immediate: true }
+)
+
+// The wrist panel's or the HUD's line, while it's on.
+const vrStatus = (where: string): StatusInfo | null => {
+  if (!live.value) return null
+  if (live.value.gaveUp) return { icon: 'i-lucide-circle-x', class: 'text-error', label: 'Stopped after crashing 3 times. Change a setting to try again.' }
+
+  return live.value.inVr
+    ? { icon: 'i-lucide-circle-check', class: 'text-success', label: where }
+    : { icon: 'i-lucide-circle-dashed', class: 'text-warning', label: 'Waits for SteamVR' }
+}
+
+const wristStatus = computed(() => (settings.value?.panel.enabled ? vrStatus('On your wrist') : null))
+const hudStatus = computed(() => (settings.value?.hud.enabled ? vrStatus('In your view') : null))
+
+const toastsStatus = computed<StatusInfo | null>(() => {
+  if (!live.value || settings.value?.notify.to === 'off') return null
+  if (live.value.toastsTo === 'xsoverlay') return { icon: 'i-lucide-circle-check', class: 'text-success', label: 'Going to XSOverlay' }
+  if (live.value.toastsTo === 'ovrtoolkit') return { icon: 'i-lucide-circle-check', class: 'text-success', label: 'Going to OVR Toolkit' }
+
+  return { icon: 'i-lucide-circle-dashed', class: 'text-warning', label: 'Waiting for XSOverlay or OVR Toolkit' }
+})
 
 // Saved a moment after the last change, so a dragged slider isn't written on every step.
 // USlider can emit its value as a one-item array; Rust wants the number.
@@ -102,12 +132,6 @@ const sendTest = (): void => {
         aria-label="VR overlay settings"
         accent
       />
-      <p
-        v-if="status"
-        class="text-[13px] text-muted"
-      >
-        {{ status }}
-      </p>
     </div>
 
     <div
@@ -118,6 +142,12 @@ const sendTest = (): void => {
         title="Wrist panel"
         description="ToolKitOSC on the back of your hand, with Stop one poke away."
       >
+        <template
+          v-if="wristStatus"
+          #actions
+        >
+          <StatusLine :status="wristStatus" />
+        </template>
         <USwitch
           :model-value="settings.panel.enabled"
           label="Show ToolKitOSC on your wrist"
@@ -184,6 +214,12 @@ const sendTest = (): void => {
         title="HUD"
         description="A small display in a corner of your view. Nothing on it is pressed, so it never gets in your way. Avatar parameter TKOSC/Hud (bool) and the wrist panel's Home page show or hide it too."
       >
+        <template
+          v-if="hudStatus"
+          #actions
+        >
+          <StatusLine :status="hudStatus" />
+        </template>
         <USwitch
           :model-value="settings.hud.enabled"
           label="Show the HUD"
@@ -315,6 +351,12 @@ const sendTest = (): void => {
         title="Send toasts to"
         description="Auto picks XSOverlay if it runs, otherwise OVR Toolkit."
       >
+        <template
+          v-if="toastsStatus"
+          #actions
+        >
+          <StatusLine :status="toastsStatus" />
+        </template>
         <SegmentedControl
           :model-value="settings.notify.to"
           :items="TARGETS"

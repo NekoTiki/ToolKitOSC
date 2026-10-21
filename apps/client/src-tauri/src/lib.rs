@@ -230,7 +230,8 @@ pub fn run() {
             overlay::commands::overlay_test_toast,
             overlay::commands::overlay_set_context,
             overlay::commands::overlay_pinned,
-            overlay::commands::overlay_set_pinned
+            overlay::commands::overlay_set_pinned,
+            overlay::commands::overlay_status
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
