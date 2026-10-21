@@ -22,7 +22,8 @@ const GROUPS: Record<string, string> = { toys: 'Toys and shockers', movement: 'M
 const BADGES: Record<string, { label: string; color: 'error' | 'warning' | 'info' | 'neutral' }> = {
   shocks: { label: 'Shocks', color: 'error' },
   electrical: { label: 'Electrical', color: 'error' },
-  beta: { label: 'Beta', color: 'info' }
+  beta: { label: 'Beta', color: 'info' },
+  experimental: { label: 'Experimental', color: 'warning' }
 }
 
 const DOT: Record<AddonState, string> = {

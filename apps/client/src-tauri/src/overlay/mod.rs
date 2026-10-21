@@ -174,7 +174,7 @@ impl crate::addons::Addon for Addon {
             pitch: "ToolKitOSC on your wrist in SteamVR, with Stop one poke away, and toasts in XSOverlay or OVR Toolkit",
             // Built and tried on Windows first; SteamVR on Linux follows.
             platforms: &["windows"],
-            badges: &["beta"],
+            badges: &["experimental"],
             needs: &[],
             needs_any: &[],
             control_types: &[],

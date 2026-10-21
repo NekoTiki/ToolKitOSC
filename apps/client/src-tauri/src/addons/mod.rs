@@ -30,7 +30,7 @@ pub struct Manifest {
     /// One line on what it does, shown while it's off.
     pub pitch: &'static str,
     pub platforms: &'static [&'static str],
-    /// Notes shown as badges: safety (`shocks`, `electrical`) or `beta`.
+    /// Notes shown as badges: safety (`shocks`, `electrical`), `beta` or `experimental`.
     pub badges: &'static [&'static str],
     /// Add-ons it can't work without.
     pub needs: &'static [&'static str],
