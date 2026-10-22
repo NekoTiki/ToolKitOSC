@@ -4,6 +4,7 @@ import AboutSettings from '@renderer/components/settings/AboutSettings.vue'
 import AccountSettings from '@renderer/components/settings/AccountSettings.vue'
 import AddonsSettings from '@renderer/components/settings/AddonsSettings.vue'
 import AppearanceSettings from '@renderer/components/settings/AppearanceSettings.vue'
+import AssistantsSettings from '@renderer/components/settings/AssistantsSettings.vue'
 import BhapticsSettings from '@renderer/components/settings/BhapticsSettings.vue'
 import BoardsSettings from '@renderer/components/settings/BoardsSettings.vue'
 import ChatboxSettings from '@renderer/components/settings/ChatboxSettings.vue'
@@ -53,7 +54,8 @@ const SECTIONS: Section[] = [
   { key: 'bhaptics', label: 'bHaptics', description: 'Player and your gear · beta', icon: 'i-lucide-shirt', component: BhapticsSettings, addon: 'bhaptics' },
   { key: 'owo', label: 'OWO', description: 'The OWO app and your suit · beta', icon: 'i-lucide-zap', component: OwoSettings, addon: 'owo' },
   { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings, addon: 'boards' },
-  { key: 'vr-overlay', label: 'VR overlay', description: 'Wrist panel, HUD and toasts · experimental', icon: 'i-lucide-glasses', component: OverlaySettings, addon: 'overlay', wide: true }
+  { key: 'vr-overlay', label: 'VR overlay', description: 'Wrist panel, HUD and toasts · experimental', icon: 'i-lucide-glasses', component: OverlaySettings, addon: 'overlay', wide: true },
+  { key: 'assistants', label: 'Assistants', description: 'AI assistants on this PC · beta', icon: 'i-lucide-bot', component: AssistantsSettings, addon: 'mcp' }
 ]
 
 const route = useRoute()

@@ -17,6 +17,7 @@ export const ADDON_SETUP: Record<string, string> = {
   bhaptics: '/settings/bhaptics',
   owo: '/settings/owo',
   overlay: '/settings/vr-overlay',
+  mcp: '/settings/assistants',
   // Avatar haptics and the leash have no Settings section: they're set up on their own page.
   haptics: '/haptics',
   leash: '/leash'

@@ -9,6 +9,7 @@ mod haptics;
 mod leash;
 mod intiface;
 mod logging;
+mod mcp;
 mod net;
 mod openshock;
 mod owo;
@@ -231,7 +232,13 @@ pub fn run() {
             overlay::commands::overlay_set_context,
             overlay::commands::overlay_pinned,
             overlay::commands::overlay_set_pinned,
-            overlay::commands::overlay_status
+            overlay::commands::overlay_status,
+            // AI assistants
+            mcp::commands::mcp_settings,
+            mcp::commands::mcp_save,
+            mcp::commands::mcp_key,
+            mcp::commands::mcp_new_key,
+            mcp::commands::mcp_clients
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
