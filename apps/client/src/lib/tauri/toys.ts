@@ -29,6 +29,8 @@ export interface IntifaceState {
   autoLaunch: boolean
   status: IntifaceStatus
   devices: IntifaceDevice[]
+  // Every toy Intiface has listed, connected now or not.
+  knownDevices: IntifaceDevice[]
   // Whether a local Intiface Central install was found.
   installed: boolean
   launchAttempts: number

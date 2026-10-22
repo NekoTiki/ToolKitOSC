@@ -465,6 +465,7 @@ onBeforeRouteLeave(async () => {
               <IntifaceFields
                 v-model:actuators="actuators"
                 :devices="editor.intiface.devices.value"
+                :known-devices="editor.intiface.knownDevices.value"
               />
             </UFormField>
             <UFormField

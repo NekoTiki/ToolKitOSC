@@ -128,7 +128,11 @@ export interface ControlEditor {
   showAllAddresses: Ref<boolean>
   presetId: WritableComputedRef<string>
   openShockAvailable: ComputedRef<boolean>
-  intiface: { available: ComputedRef<boolean>; devices: ReturnType<typeof useIntiface>['devices'] }
+  intiface: {
+    available: ComputedRef<boolean>
+    devices: ReturnType<typeof useIntiface>['devices']
+    knownDevices: ReturnType<typeof useIntiface>['knownDevices']
+  }
   hasPresets: ComputedRef<boolean>
   shockerList: Ref<ShockerOption[]>
   previewUnavailable: ComputedRef<boolean>
@@ -140,7 +144,7 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
   const { getControl, addControl, updateControl, deleteControl } = useControls()
   const { avatarDetails } = useAvatarDetails()
   const { getShockers, isAvailable: openShockAvailable } = useOpenShock()
-  const { devices: intifaceDevices, isAvailable: intifaceAvailable } = useIntiface()
+  const { devices: intifaceDevices, knownDevices: intifaceKnownDevices, isAvailable: intifaceAvailable } = useIntiface()
   const { presets } = usePresets()
 
   // `getControl` returns the computed copy with flags derived from the profile and services - strip
@@ -318,7 +322,7 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
     showAllAddresses,
     presetId,
     openShockAvailable,
-    intiface: { available: intifaceAvailable, devices: intifaceDevices },
+    intiface: { available: intifaceAvailable, devices: intifaceDevices, knownDevices: intifaceKnownDevices },
     hasPresets: computed(() => presets.value.length > 0),
     shockerList,
     previewUnavailable,

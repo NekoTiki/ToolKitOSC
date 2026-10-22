@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Actuator {
     pub index: u32,
@@ -15,15 +15,17 @@ pub struct Actuator {
     pub actuator_type: String
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Device {
     pub index: u32,
     pub name: String,
     pub actuators: Vec<Actuator>,
     /// Position of its Battery entry in SensorReadCmd, if it has one. Most BLE toys don't.
+    #[serde(default)]
     pub battery_sensor_index: Option<u32>,
     /// 0–1, once a reading came back.
+    #[serde(default)]
     pub battery: Option<f64>
 }
 
