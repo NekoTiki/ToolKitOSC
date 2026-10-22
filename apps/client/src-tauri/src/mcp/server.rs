@@ -2,9 +2,8 @@
 //! itself refuses any `Host` but loopback and any `Origin` but none or `null`, as the MCP spec asks
 //! of local servers, so a web page can't reach it through DNS rebinding. Each MCP session gets its
 //! own `Session`, which passes every call through `guard`.
-use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use axum::extract::Request;
 use axum::http::{header, StatusCode};
@@ -13,7 +12,7 @@ use axum::response::{IntoResponse, Response};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::tool::ToolCallContext;
 use rmcp::model::{CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, GetPromptRequestParams, GetPromptResponse, Implementation, ListPromptsResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, ServerCapabilities, ServerConfig};
-use rmcp::service::{NotificationContext, RequestContext};
+use rmcp::service::RequestContext;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use rmcp::{ErrorData, RoleServer, ServerHandler};
@@ -21,7 +20,7 @@ use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 
 use super::bridge;
-use super::guard::{self, RateLimit};
+use super::guard;
 use super::model::Permission;
 
 /// How long "Allow for 10 min" covers the same tool from the same assistant.
@@ -73,25 +72,23 @@ async fn check_key(key: Option<String>, request: Request, next: Next) -> Respons
     }
 }
 
-/// One MCP session: one connected assistant.
+/// What answers an assistant: one per MCP session, or one per request for clients on protocol
+/// 2026-07-28, which have no session. Who's calling is kept in `super::assistants`, by name.
 pub struct Session {
     pub(super) app: AppHandle,
-    /// Its id in `super::clients` and its name, once its handshake is done.
-    client: Mutex<Option<(u64, String)>>,
-    rate: Mutex<RateLimit>,
-    /// Tools the host allowed for 10 minutes, until when.
-    allowed: Mutex<HashMap<String, Instant>>,
+    /// The assistant's name, from the last call's client info.
+    name: Mutex<Option<String>>,
     tools: ToolRouter<Self>
 }
 
 impl Session {
     fn new(app: AppHandle) -> Self {
-        Self { app, client: Mutex::new(None), rate: Mutex::new(RateLimit::default()), allowed: Mutex::new(HashMap::new()), tools: Self::read_router() + Self::play_router() + Self::edit_router() }
+        Self { app, name: Mutex::new(None), tools: Self::read_router() + Self::play_router() + Self::edit_router() }
     }
 
     /// The assistant's name, as the host sees it.
     pub(super) fn name(&self) -> String {
-        self.client.lock().unwrap().as_ref().map_or_else(|| "Assistant".to_owned(), |(_, name)| name.clone())
+        self.name.lock().unwrap().clone().unwrap_or_else(|| "Assistant".to_owned())
     }
 
     /// Asks the webview, as this assistant.
@@ -101,14 +98,14 @@ impl Session {
 
     /// The approval pop-up for a tool on Ask. Err is what the assistant is told.
     async fn approve(&self, tool: &str, arguments: Option<&serde_json::Map<String, serde_json::Value>>) -> Result<(), &'static str> {
-        if self.allowed.lock().unwrap().get(tool).is_some_and(|until| Instant::now() < *until) {
+        if super::allowed_for_now(&self.app, &self.name(), tool) {
             return Ok(());
         }
         let args = serde_json::json!({ "tool": tool, "arguments": arguments });
         match bridge::request(&self.app, "approve", &self.name(), args, bridge::APPROVAL_TIMEOUT).await {
             Ok(answer) if answer == "allow" => Ok(()),
             Ok(answer) if answer == "allow-10-min" => {
-                self.allowed.lock().unwrap().insert(tool.to_owned(), Instant::now() + ALLOW_FOR);
+                super::allow_for(&self.app, &self.name(), tool, ALLOW_FOR);
                 Ok(())
             }
             Ok(_) => Err("The host said no"),
@@ -120,14 +117,6 @@ impl Session {
     /// pop-up: only Read on On serves them.
     fn resources_allowed(&self) -> bool {
         guard::decide(&super::store::get(&self.app), "get_avatar", guard::Blocks::default()) == Ok(Permission::On)
-    }
-}
-
-impl Drop for Session {
-    fn drop(&mut self) {
-        if let Some((id, _)) = self.client.lock().unwrap().take() {
-            super::disconnected(&self.app, id);
-        }
     }
 }
 
@@ -147,12 +136,6 @@ impl ServerHandler for Session {
             .with_instructions(INSTRUCTIONS)
     }
 
-    async fn on_initialized(&self, context: NotificationContext<RoleServer>) {
-        let name = context.peer.peer_info().map_or_else(|| "Assistant".to_owned(), |info| info.client_info.title.clone().unwrap_or_else(|| info.client_info.name.clone()));
-        let id = super::connected(&self.app, name.clone());
-        *self.client.lock().unwrap() = Some((id, name));
-    }
-
     async fn list_tools(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListToolsResult, ErrorData> {
         let settings = super::store::get(&self.app);
         Ok(ListToolsResult::with_all_items(self.tools.list_all().into_iter().filter(|tool| guard::listed(&settings, &tool.name)).collect()))
@@ -160,10 +143,10 @@ impl ServerHandler for Session {
 
     async fn call_tool(&self, request: CallToolRequestParams, context: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
         let name = request.name.to_string();
-        if let Some((id, _)) = *self.client.lock().unwrap() {
-            super::note_call(&self.app, id, &name);
-        }
-        if !self.rate.lock().unwrap().allow(Instant::now()) {
+        // From the request itself on 2026-07-28, from the handshake before.
+        let client = context.client_info().map(|info| info.title.unwrap_or(info.name));
+        *self.name.lock().unwrap() = client;
+        if !super::note_call(&self.app, &self.name(), &name) {
             return Ok(refused("Too many calls: at most 10 per second"));
         }
         match guard::decide(&super::store::get(&self.app), &name, super::blocks(&self.app)) {
