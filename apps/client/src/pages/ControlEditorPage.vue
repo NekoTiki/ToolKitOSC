@@ -11,6 +11,7 @@ import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.
 import type { OwoOptions } from '@renderer/components/control-modal/OwoFields.vue'
 import OwoFields from '@renderer/components/control-modal/OwoFields.vue'
 import PresetField from '@renderer/components/control-modal/PresetField.vue'
+import DraftNotice from '@renderer/components/DraftNotice.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -264,6 +265,12 @@ onBeforeRouteLeave(async () => {
           </UButton>
         </template>
       </PageHeader>
+      <DraftNotice
+        v-if="model.createdBy"
+        :created-by="model.createdBy"
+        @keep="save"
+        @discard="remove"
+      />
     </template>
 
     <div class="grid items-start gap-4.5 lg:grid-cols-[minmax(0,1fr)_26rem]">

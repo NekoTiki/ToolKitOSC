@@ -26,10 +26,13 @@ pub struct Automation {
     pub retrigger: Retrigger,
     /// All of these have to be true for it to start.
     #[serde(default)]
-    pub only_if: Vec<Guard>
+    pub only_if: Vec<Guard>,
+    /// Set while it's an assistant's draft.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<crate::types::CreatedBy>
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Retrigger {
     #[default]
@@ -37,7 +40,7 @@ pub enum Retrigger {
     Ignore
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Trigger {
     #[serde(rename_all = "camelCase")]
@@ -66,7 +69,7 @@ pub enum Trigger {
     Leash { event: LeashEvent }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum AppEvent {
     /// A viewer uses a control: this one, any of this type (e.g. a shocker), or any.
@@ -86,7 +89,7 @@ pub enum AppEvent {
 }
 
 /// What happens to the avatar leash (see `crate::leash`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum LeashEvent {
     /// Someone grabs a leash that moves you.
@@ -115,7 +118,7 @@ impl AppEvent {
 
 /// Something that has to be true for an automation to start. Checked when it starts, not while
 /// it runs.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Guard {
     /// Another parameter is in a state (`is-on`, `is`, `is-above`), or isn't (`not`).
@@ -169,14 +172,14 @@ impl Trigger {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum ValueType {
     Bool,
     Int,
     Float
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Condition {
     TurnsOn,
@@ -191,7 +194,7 @@ pub enum Condition {
 }
 
 /// One thing an automation does: an action, plus how long after the trigger it starts.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Step {
     #[serde(flatten)]
@@ -213,7 +216,7 @@ fn one_or_many<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Step>, 
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Action {
     #[serde(rename_all = "camelCase")]
@@ -286,7 +289,7 @@ pub enum Action {
 /// How a step runs a control. Values are what the control's command takes (see shared-ui
 /// `CommandWithoutIds`): a bool for toggles, an option index for enums, 0–1 for sliders and toys,
 /// a pattern id for patterns.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ControlRun {
     Set { value: serde_json::Value },
@@ -323,7 +326,7 @@ pub const MAX_TOY_PULSE_MS: u32 = 60_000;
 /// The longest a bHaptics pulse step plays.
 pub const MAX_BHAPTICS_PULSE_MS: u32 = 30_000;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ParameterAction {
     /// Sets it to a value (Bools are 0/1).
@@ -336,7 +339,7 @@ pub enum ParameterAction {
     Follow { min: f64, max: f64 }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum OutputAction {
     #[serde(rename_all = "camelCase")]
@@ -728,7 +731,8 @@ mod tests {
             then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output, chatbox: false }, delay_ms: 0 }],
             cooldown_ms: 0,
             retrigger: Retrigger::Restart,
-            only_if: Vec::new()
+            only_if: Vec::new(),
+            created_by: None
         }
     }
 

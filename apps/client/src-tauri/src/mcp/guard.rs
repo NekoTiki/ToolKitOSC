@@ -12,7 +12,9 @@ pub enum Level {
     /// `stop_everything`: an assistant may always stop, never resume.
     Always,
     Read,
-    Play
+    Play,
+    /// Makes drafts.
+    Edit
 }
 
 /// The level a tool belongs to. A tool missing here is refused, so a new one can't slip out at a
@@ -22,6 +24,7 @@ pub fn level_of(tool: &str) -> Option<Level> {
         "stop_everything" => Level::Always,
         "get_status" | "get_avatar" | "list_presets" | "list_patterns" | "list_automations" | "list_boards" | "list_controls" | "get_control" | "list_profiles" | "list_viewer_groups" | "list_viewers" | "get_activity" => Level::Read,
         "run_control" | "send_chatbox" | "set_parameter" | "switch_profile" => Level::Play,
+        "save_automation" | "test_automation" | "save_pattern" | "create_controls" | "update_control" | "save_profile" | "delete_draft" => Level::Edit,
         _ => return None
     })
 }
@@ -35,7 +38,8 @@ fn permission(settings: &McpSettings, tool: &str) -> Permission {
         Some(_) if switched_off => Permission::Off,
         Some(Level::Always) => Permission::On,
         Some(Level::Read) => settings.levels.read,
-        Some(Level::Play) => settings.levels.play
+        Some(Level::Play) => settings.levels.play,
+        Some(Level::Edit) => settings.levels.edit
     }
 }
 
@@ -121,6 +125,7 @@ mod tests {
         assert!(listed(&settings, "get_status"));
         assert_eq!(decide(&settings, "get_status", Blocks::default()), Ok(Permission::Ask));
         assert_eq!(decide(&McpSettings::default(), "get_status", Blocks::default()), Ok(Permission::On));
+        assert_eq!(decide(&McpSettings::default(), "save_automation", Blocks::default()), Ok(Permission::Ask), "Edit starts on Ask");
     }
 
     #[test]

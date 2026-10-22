@@ -1,6 +1,6 @@
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { getUUID } from '@renderer/utils/uuid'
-import type { ControlLimits, ViewerGroupRule } from '@toolkitosc/shared-ui'
+import type { ControlLimits, CreatedBy, ViewerGroupRule } from '@toolkitosc/shared-ui'
 import { computed, ref, watch } from 'vue'
 
 export type LockedControlGroup = {
@@ -14,6 +14,8 @@ export type LockedControlGroup = {
   // rule for is the same for the group as for everyone. Optional: older profiles load as "no group
   // rules".
   groupOverrides?: Record<string, GroupOverrides>
+  // Set while it's an AI assistant's draft. Saving it yourself makes it yours.
+  createdBy?: CreatedBy
 }
 
 export type GroupOverrides = Record<string, ViewerGroupRule>
@@ -117,6 +119,7 @@ export function useLockedControls(): {
       group.lockedControls = lockedControlsGroup.lockedControls
       group.limits = lockedControlsGroup.limits
       group.groupOverrides = lockedControlsGroup.groupOverrides
+      group.createdBy = lockedControlsGroup.createdBy
     }
 
     saveLockedControlsGroups()

@@ -1,5 +1,6 @@
 import { api } from '@renderer/lib/tauri-bridge'
 import { getUUID } from '@renderer/utils/uuid'
+import type { CreatedBy } from '@toolkitosc/shared-ui'
 import type { Ref } from 'vue'
 import { ref } from 'vue'
 
@@ -14,6 +15,8 @@ export interface SavedPattern {
   // Intensities 0-100, one every PATTERN_SAMPLE_MS. Playback loops them.
   samples: number[]
   updatedAt: number
+  // Set while it's an AI assistant's draft. Rust drops it when you save the pattern.
+  createdBy?: CreatedBy
 }
 
 export { PATTERN_MAX_MS, PATTERN_MIN_MS, PATTERN_SAMPLE_MS } from '@toolkitosc/shared-ui'
@@ -68,7 +71,8 @@ const addPattern = (pattern: Pick<SavedPattern, 'name' | 'icon' | 'samples'>): S
 const updatePattern = (id: string, changes: Partial<Pick<SavedPattern, 'name' | 'icon' | 'samples'>>): void => {
   const pattern = getSavedPattern(id)
 
-  if (pattern) store({ ...pattern, ...changes, updatedAt: Date.now() })
+  // Saved by you, so no longer an AI assistant's draft.
+  if (pattern) store({ ...pattern, ...changes, createdBy: undefined, updatedAt: Date.now() })
 }
 
 const deletePattern = (id: string): void => {

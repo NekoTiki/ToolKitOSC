@@ -720,7 +720,8 @@ mod tests {
             then,
             cooldown_ms: 0,
             retrigger: Retrigger::Restart,
-            only_if: Vec::new()
+            only_if: Vec::new(),
+            created_by: None
         }
     }
 

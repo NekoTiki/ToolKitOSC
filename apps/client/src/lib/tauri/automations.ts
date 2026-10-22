@@ -1,7 +1,7 @@
 // Automations - src-tauri/src/automations/.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { BhapticsPosition, OwoMuscle } from '@toolkitosc/shared-ui'
+import type { BhapticsPosition, CreatedBy, OwoMuscle } from '@toolkitosc/shared-ui'
 
 // Automations - mirrors src-tauri/src/automations/model.rs. "When" and "do" are tagged on `kind`
 // so other kinds (app events, chatbox...) can be added next to these.
@@ -172,6 +172,8 @@ export interface Automation {
   retrigger: 'restart' | 'ignore'
   // All of these have to be true for it to start.
   onlyIf: AutomationGuard[]
+  // Set while it's an AI assistant's draft. Rust drops it when you save the automation.
+  createdBy?: CreatedBy
 }
 
 export interface AutomationActivity {

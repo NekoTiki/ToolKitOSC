@@ -62,7 +62,8 @@ pub fn patterns_saved_list(app: AppHandle) -> Vec<super::saved::SavedPattern> {
 /// Adds a recorded pattern, or replaces the one with its id.
 #[tauri::command]
 pub fn patterns_save(app: AppHandle, pattern: super::saved::SavedPattern) {
-    super::saved::save(&app, pattern);
+    // Saved by you, so no longer an assistant's draft.
+    super::saved::save(&app, super::saved::SavedPattern { created_by: None, ..pattern });
 }
 
 #[tauri::command]

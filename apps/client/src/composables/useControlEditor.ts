@@ -285,7 +285,8 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
   const save = (): boolean => {
     if (!validate()) return false
 
-    const control = { ...model.value, name: model.value.name!.trim() } as ControlType
+    // Saved by you, so no longer an AI assistant's draft.
+    const control = { ...model.value, name: model.value.name!.trim(), createdBy: undefined } as ControlType
 
     // Drop the empty rows the address lists start with, so they never become OSC addresses.
     if (control.type === 'boolean-enum') {

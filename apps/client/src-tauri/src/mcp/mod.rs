@@ -7,6 +7,7 @@ mod bridge;
 pub mod commands;
 mod guard;
 pub mod model;
+mod prompts;
 mod server;
 mod store;
 mod tools;

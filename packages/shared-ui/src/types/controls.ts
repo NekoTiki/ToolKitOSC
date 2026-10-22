@@ -76,6 +76,14 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
 // renders using the server's own bundled shared-ui build) can't display yet.
 export const KNOWN_CONTROL_TYPES: ControlTypes[] = Object.keys(CONTROL_TYPE_LABELS) as ControlTypes[]
 
+// An AI assistant on the host's PC made it (the desktop app's MCP server), and the host hasn't
+// kept or edited it yet: a draft.
+export interface CreatedBy {
+  assistant: string
+  // Unix ms.
+  at: number
+}
+
 export interface BaseControl {
   id: string
   name: string
@@ -110,6 +118,8 @@ export interface BaseControl {
   size?: ControlSize
   // Listed under Pinned at the top of the desktop client's Controls page. Viewers ignore it.
   pinned?: boolean
+  // Set while it's an assistant's draft. Viewers never see drafts: they sit in a hidden group.
+  createdBy?: CreatedBy
 }
 
 export type ControlSize = 'normal' | 'wide'
