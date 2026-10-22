@@ -5,7 +5,8 @@
 //
 // `busy` spins a ring around the icon while the page's work runs in the background; `alert` is a
 // dot saying how that work ended, shown until the user opens the page. `addon` gives a page an
-// add-on brings a dashed outline, to tell it from the core pages.
+// add-on brings a dashed outline, to tell it from the core pages. `reordering` swaps the badge for
+// a grip, while AppRail lets you drag the pages.
 defineProps<{
   icon: string
   label: string
@@ -16,6 +17,7 @@ defineProps<{
   alert?: 'success' | 'error' | null
   addon?: boolean
   collapsed?: boolean
+  reordering?: boolean
 }>()
 </script>
 
@@ -27,7 +29,8 @@ defineProps<{
       // The 9px padding puts the icon where it sits when collapsed, so it doesn't jump on toggle.
       collapsed ? 'justify-center' : 'gap-2.5 px-2.25',
       active ? 'bg-primary/15 text-highlighted' : 'text-muted hover:bg-elevated/60 hover:text-default',
-      addon && 'border border-dashed border-primary/45'
+      addon && 'border border-dashed border-primary/45',
+      reordering && 'cursor-grab active:cursor-grabbing'
     ]"
     :disabled="disabled"
     :aria-current="active ? 'page' : undefined"
@@ -53,8 +56,14 @@ defineProps<{
       v-if="!collapsed"
       class="text-sm whitespace-nowrap"
     >{{ label }}</span>
+    <UIcon
+      v-if="reordering"
+      name="i-lucide-grip-vertical"
+      class="shrink-0 text-muted"
+      :class="collapsed ? 'absolute top-1 right-0.5 size-3.5' : 'ml-auto size-4'"
+    />
     <span
-      v-if="badge"
+      v-else-if="badge"
       class="grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 font-mono text-[10px] font-semibold text-inverted"
       :class="collapsed ? 'absolute top-1 right-1' : 'ml-auto'"
     >{{ badge }}</span>
