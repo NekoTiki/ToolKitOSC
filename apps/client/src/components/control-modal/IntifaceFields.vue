@@ -3,11 +3,40 @@ import type { IntifaceDevice } from '@renderer/composables/useIntiface'
 import type { IntifaceToyControl } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
-const props = defineProps<{ devices: Map<number, IntifaceDevice> }>()
+const props = defineProps<{ devices: Map<number, IntifaceDevice>; knownDevices: IntifaceDevice[] }>()
 
 const actuators = defineModel<IntifaceToyControl['actuators']>('actuators', { required: true })
 
-const deviceList = computed(() => Array.from(props.devices.values()))
+// Connected toys, then the ones that are off: every toy Intiface has listed before, and the toys
+// this control already picked (it may predate the remembered list). By name within each.
+const deviceList = computed(() => {
+  const offline = new Map<number, IntifaceDevice>()
+  for (const device of props.knownDevices) {
+    if (!props.devices.has(device.index)) offline.set(device.index, { ...device })
+  }
+  for (const actuator of actuators.value) {
+    if (props.devices.has(actuator.deviceIndex)) continue
+    const device = offline.get(actuator.deviceIndex) ?? {
+      index: actuator.deviceIndex,
+      name: actuator.deviceName,
+      actuators: [],
+      batterySensorIndex: null,
+      battery: null
+    }
+    if (!device.actuators.some((a) => a.index === actuator.actuatorIndex)) {
+      device.actuators = [
+        ...device.actuators,
+        { index: actuator.actuatorIndex, description: actuator.actuatorDescription, actuatorType: actuator.actuatorType }
+      ].sort((a, b) => a.index - b.index)
+    }
+    offline.set(device.index, device)
+  }
+  const byName = (a: IntifaceDevice, b: IntifaceDevice): number => a.name.localeCompare(b.name) || a.index - b.index
+  return [
+    ...Array.from(props.devices.values()).sort(byName).map((device) => ({ device, online: true })),
+    ...Array.from(offline.values()).sort(byName).map((device) => ({ device, online: false }))
+  ]
+})
 
 const isSelected = (deviceIndex: number, actuatorIndex: number): boolean =>
   actuators.value.some((a) => a.deviceIndex === deviceIndex && a.actuatorIndex === actuatorIndex)
@@ -52,20 +81,29 @@ const toggle = (
       v-if="deviceList.length === 0"
       class="text-sm text-muted"
     >
-      No toys connected. Make sure Intiface Central is running and a toy is paired.
+      No toys yet. Make sure Intiface Central is running and a toy is paired.
     </div>
     <div
       v-else
       class="flex flex-col gap-3"
     >
       <div
-        v-for="device in deviceList"
+        v-for="{ device, online } in deviceList"
         :key="device.index"
         class="flex flex-col gap-1.5 rounded-lg border border-default p-3"
       >
-        <p class="text-sm font-medium">
-          {{ device.name }}
-        </p>
+        <div class="flex items-center gap-2">
+          <p class="text-sm font-medium">
+            {{ device.name }}
+          </p>
+          <UBadge
+            v-if="!online"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+            label="Offline"
+          />
+        </div>
         <!-- Explicit, per-checkbox id: without one, Nuxt UI's useFormField() has every checkbox
         here inherit the *same* id from the single enclosing UFormField, so their <label for>
         all point at the first checkbox's input - clicking any row's label text then toggles

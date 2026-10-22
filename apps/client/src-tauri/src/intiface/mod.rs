@@ -58,7 +58,11 @@ struct Settings {
     #[serde(default, skip_serializing)]
     enabled: bool,
     #[serde(default)]
-    auto_launch: bool
+    auto_launch: bool,
+    /// Every toy Intiface has listed, by index, so a control's toy list keeps the ones that are
+    /// off right now.
+    #[serde(default)]
+    known_devices: Vec<Device>
 }
 
 pub enum LinkCommand {
@@ -97,6 +101,7 @@ pub struct View {
     auto_launch: bool,
     status: Status,
     devices: Vec<Device>,
+    known_devices: Vec<Device>,
     installed: bool,
     launch_attempts: u32,
     max_launch_attempts: u32,
@@ -280,6 +285,7 @@ pub fn view(app: &AppHandle) -> View {
         auto_launch: inner.settings.auto_launch,
         status: inner.status.unwrap_or(Status::Disabled),
         devices: inner.devices.values().cloned().collect(),
+        known_devices: inner.settings.known_devices.clone(),
         installed: inner.installed,
         launch_attempts: inner.launch_attempts,
         max_launch_attempts: MAX_LAUNCH_ATTEMPTS,
@@ -336,16 +342,42 @@ fn set_status(app: &AppHandle, id: u64, status: Status) {
 }
 
 fn set_devices(app: &AppHandle, id: u64, change: impl FnOnce(&mut BTreeMap<u32, Device>)) {
-    {
+    ensure_loaded(app);
+    let learned = {
         let mut inner = intiface(app).inner.lock().unwrap();
         if !is_current(&inner, id) {
             return;
         }
         change(&mut inner.devices);
+        let Inner { settings, devices, .. } = &mut *inner;
+        remember(&mut settings.known_devices, devices.values()).then(|| settings.clone())
+    };
+    if let Some(settings) = learned {
+        save_settings(app, &settings);
     }
     crate::toys::devices_changed(app);
     crate::haptics::devices_changed(app);
     emit_state(app);
+}
+
+/// Adds or refreshes `devices` in `known`, kept by index. Whether anything changed.
+fn remember<'a>(known: &mut Vec<Device>, devices: impl IntoIterator<Item = &'a Device>) -> bool {
+    let mut changed = false;
+    for device in devices {
+        let device = Device { battery: None, ..device.clone() };
+        match known.binary_search_by_key(&device.index, |known| known.index) {
+            Ok(at) if known[at] == device => {}
+            Ok(at) => {
+                known[at] = device;
+                changed = true;
+            }
+            Err(at) => {
+                known.insert(at, device);
+                changed = true;
+            }
+        }
+    }
+    changed
 }
 
 pub(crate) fn devices(app: &AppHandle) -> Vec<Device> {
@@ -473,5 +505,25 @@ impl crate::addons::Addon for Addon {
 
     fn was_in_use(&self, app: &AppHandle) -> bool {
         load_settings(app).is_some_and(|settings| settings.enabled)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn toy(index: u32, name: &str) -> Device {
+        Device { index, name: name.into(), actuators: Vec::new(), battery_sensor_index: None, battery: Some(0.5) }
+    }
+
+    #[test]
+    fn remember_adds_new_and_renamed_toys_only() {
+        let mut known = Vec::new();
+        assert!(remember(&mut known, &[toy(2, "Edge"), toy(0, "Lush")]));
+        assert_eq!(known.iter().map(|d| d.index).collect::<Vec<_>>(), [0, 2]);
+        assert_eq!(known[0].battery, None);
+        assert!(!remember(&mut known, &[toy(0, "Lush")]));
+        assert!(remember(&mut known, &[toy(2, "Max")]));
+        assert_eq!(known[1].name, "Max");
     }
 }

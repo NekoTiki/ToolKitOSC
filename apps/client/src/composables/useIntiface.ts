@@ -62,6 +62,7 @@ const url = computed(() => state.value?.url ?? '')
 const enabled = computed(() => state.value?.enabled ?? false)
 const status = computed<IntifaceStatus>(() => state.value?.status ?? 'disabled')
 const devices = computed(() => new Map((state.value?.devices ?? []).map((device) => [device.index, device] as const)))
+const knownDevices = computed(() => state.value?.knownDevices ?? [])
 const installed = computed(() => state.value?.installed ?? false)
 const autoLaunch = computed(() => state.value?.autoLaunch ?? false)
 const launchAttempts = computed(() => state.value?.launchAttempts ?? 0)
@@ -80,6 +81,7 @@ export function useIntiface(): {
   status: ComputedRef<IntifaceStatus>
   isAvailable: ComputedRef<boolean>
   devices: ComputedRef<Map<number, IntifaceDevice>>
+  knownDevices: ComputedRef<IntifaceDevice[]>
   installed: ComputedRef<boolean>
   launch: () => Promise<void>
   autoLaunch: ComputedRef<boolean>
@@ -110,6 +112,7 @@ export function useIntiface(): {
     status,
     isAvailable,
     devices,
+    knownDevices,
     installed,
     launch,
     autoLaunch,
