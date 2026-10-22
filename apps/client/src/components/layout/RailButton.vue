@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// One AppRail entry: an icon-only button, still 52px square for a VR pointer. The label is the
-// tooltip and the accessible name.
+// One AppRail entry, 52px tall for a VR pointer. Expanded, the page's name sits next to the icon;
+// collapsed, it's a 52px icon-only square with the label as the tooltip. The label is
+// always the accessible name.
 //
 // `busy` spins a ring around the icon while the page's work runs in the background; `alert` is a
 // dot saying how that work ended, shown until the user opens the page. `addon` gives a page an
@@ -14,24 +15,29 @@ defineProps<{
   busy?: boolean
   alert?: 'success' | 'error' | null
   addon?: boolean
+  collapsed?: boolean
 }>()
 </script>
 
 <template>
   <button
     type="button"
-    class="relative flex h-13 w-full shrink-0 cursor-pointer items-center justify-center rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+    class="relative flex h-13 w-full shrink-0 cursor-pointer items-center rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-40"
     :class="[
+      // The 9px padding puts the icon where it sits when collapsed, so it doesn't jump on toggle.
+      collapsed ? 'justify-center' : 'gap-2.5 px-2.25',
       active ? 'bg-primary/15 text-highlighted' : 'text-muted hover:bg-elevated/60 hover:text-default',
       addon && 'border border-dashed border-primary/45'
     ]"
     :disabled="disabled"
     :aria-current="active ? 'page' : undefined"
     :aria-busy="busy || undefined"
-    :title="busy ? `${label} - working…` : label"
+    :title="collapsed ? (busy ? `${label} - working…` : label) : undefined"
     :aria-label="label"
   >
-    <span class="relative grid size-8.5 place-items-center">
+    <span
+      class="relative grid size-8.5 shrink-0 place-items-center"
+    >
       <span
         v-if="busy"
         class="rail-busy-ring absolute inset-0 rounded-full"
@@ -44,13 +50,18 @@ defineProps<{
       />
     </span>
     <span
+      v-if="!collapsed"
+      class="text-sm whitespace-nowrap"
+    >{{ label }}</span>
+    <span
       v-if="badge"
-      class="absolute top-1 right-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 font-mono text-[10px] font-semibold text-inverted"
+      class="grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 font-mono text-[10px] font-semibold text-inverted"
+      :class="collapsed ? 'absolute top-1 right-1' : 'ml-auto'"
     >{{ badge }}</span>
     <span
       v-else-if="alert"
-      class="absolute top-1.5 right-1.5 size-3 rounded-full ring-2 ring-(--ui-bg)"
-      :class="alert === 'error' ? 'bg-error' : 'bg-success rail-alert-pulse'"
+      class="size-3 shrink-0 rounded-full ring-2 ring-(--ui-bg)"
+      :class="[collapsed ? 'absolute top-1.5 right-1.5' : 'ml-auto', alert === 'error' ? 'bg-error' : 'rail-alert-pulse bg-success']"
       :aria-label="alert === 'error' ? 'Failed' : 'Ready'"
     />
   </button>
