@@ -3,6 +3,7 @@ import { useAddons } from '@renderer/composables/useAddons'
 import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiSession } from '@renderer/composables/useAiSession'
 import { uniqueClientCount } from '@renderer/composables/useWebsocketHost'
+import { useLocalStorage } from '@vueuse/core'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -24,6 +25,9 @@ const router = useRouter()
 const { access: aiAccess } = useAiAccess()
 const { generating: aiGenerating, unseen: aiUnseen } = useAiSession()
 const { isOn } = useAddons()
+
+// Expanded shows each page's name next to its icon; collapsed is icons only.
+const collapsed = useLocalStorage('railCollapsed', false)
 
 const items = computed<RailItem[]>(() => [
   { key: 'controls', label: 'Controls', icon: 'i-lucide-layout-grid', to: '/controls' },
@@ -53,7 +57,8 @@ const select = (item: RailItem): void => void router.push(item.to)
 <template>
   <nav
     aria-label="Pages"
-    class="flex min-h-0 w-17 shrink-0 flex-col border-r border-default"
+    class="flex min-h-0 shrink-0 flex-col border-r border-default"
+    :class="collapsed ? 'w-17' : 'w-max min-w-50'"
   >
     <!-- The pages scroll when they don't fit, without a scrollbar; Settings stays at the bottom. -->
     <div class="no-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
@@ -67,16 +72,24 @@ const select = (item: RailItem): void => void router.push(item.to)
         :busy="item.busy"
         :alert="item.alert"
         :addon="item.addon"
+        :collapsed="collapsed"
         @click="select(item)"
       />
     </div>
 
-    <div class="shrink-0 p-2 pt-1">
+    <div class="flex shrink-0 flex-col gap-1 p-2 pt-1">
       <RailButton
         :icon="settings.icon"
         :label="settings.label"
         :active="isActive(settings)"
+        :collapsed="collapsed"
         @click="select(settings)"
+      />
+      <RailButton
+        :icon="collapsed ? 'i-lucide-panel-left-open' : 'i-lucide-panel-left-close'"
+        :label="collapsed ? 'Expand' : 'Collapse'"
+        :collapsed="collapsed"
+        @click="collapsed = !collapsed"
       />
     </div>
   </nav>
