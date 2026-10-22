@@ -47,6 +47,8 @@ export const mcpApi = {
   // A new key cuts off every assistant set up with the old one.
   mcpNewKey: (): Promise<string> => invoke('mcp_new_key'),
   mcpClients: (): Promise<McpClient[]> => invoke('mcp_clients'),
+  // What Claude Desktop starts: this app, with --mcp.
+  mcpCommand: (): Promise<string> => invoke('mcp_command'),
   mcpRespond: (id: number, answer: { result: unknown } | { error: string }): Promise<void> => invoke('mcp_respond', { id, ...answer }),
   onMcpRequest: (callback: (request: McpRequest) => void): void => {
     void listen<McpRequest>('mcp-request', (event) => callback(event.payload))

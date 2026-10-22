@@ -3,23 +3,26 @@
 //! levels in Settings › Assistants allow, play with your controls. It listens on 127.0.0.1 only,
 //! behind a key kept in the password store (see `crate::secrets`), and only while the add-on is
 //! on. Every call passes `guard` first. `mcp.json` (see `store`) holds the port and the levels.
+mod assistants;
 mod bridge;
 pub mod commands;
 mod guard;
 pub mod model;
 mod prompts;
 mod server;
+pub mod stdio;
 mod store;
 mod tools;
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
-use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio_util::sync::CancellationToken;
 
 use crate::state::AppState;
+pub use assistants::Client;
 
 /// The built-in viewer group every assistant is in (`ASSISTANTS_GROUP` in useViewerGroups.ts).
 pub const ASSISTANTS_GROUP: &str = "assistants";
@@ -31,19 +34,6 @@ const SWITCH_PARAMETER: &str = "/avatar/parameters/TKOSC/Assistants";
 /// The key's name in the password store.
 const KEY_SECRET: &str = "mcp-key";
 
-/// An assistant connected now.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Client {
-    id: u64,
-    /// From its MCP handshake, e.g. "claude-code".
-    name: String,
-    /// Unix ms.
-    since: u64,
-    calls: u32,
-    last_tool: Option<String>
-}
-
 #[derive(Default)]
 pub struct Mcp {
     /// `None` until read from disk (see `store`).
@@ -54,8 +44,8 @@ pub struct Mcp {
     running: Mutex<Option<CancellationToken>>,
     /// Why the server couldn't start, e.g. the port is taken.
     error: Mutex<Option<String>>,
-    clients: Mutex<Vec<Client>>,
-    next_client: AtomicU64,
+    /// Who's been calling tools lately (see `assistants`).
+    assistants: Mutex<assistants::Assistants>,
     /// Requests waiting for the webview (see `bridge`).
     bridge: bridge::Bridge,
     /// The avatar turned `TKOSC/Assistants` off.
@@ -115,6 +105,7 @@ fn start(app: &AppHandle) {
         let result = match key {
             Ok(key) => {
                 *mcp(&app).key.lock().unwrap() = Some(key);
+                tauri::async_runtime::spawn(prune_quiet(app.clone(), token.clone()));
                 server::serve(app.clone(), port, token.clone()).await
             }
             Err(err) => Err(format!("Couldn't read the key: {err}"))
@@ -134,8 +125,22 @@ fn stop(app: &AppHandle) {
     if let Some(token) = mcp(app).running.lock().unwrap().take() {
         token.cancel();
     }
-    mcp(app).clients.lock().unwrap().clear();
+    mcp(app).assistants.lock().unwrap().clear();
     clients_changed(app);
+}
+
+/// Takes assistants that went quiet off the connected list, while the server runs.
+async fn prune_quiet(app: AppHandle, token: CancellationToken) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(30));
+    loop {
+        tokio::select! {
+            _ = token.cancelled() => return,
+            _ = ticker.tick() => {}
+        }
+        if mcp(&app).assistants.lock().unwrap().prune(Instant::now()) {
+            clients_changed(&app);
+        }
+    }
 }
 
 /// Restarts the server after a port change, when it's on.
@@ -152,37 +157,29 @@ fn clients_changed(app: &AppHandle) {
 }
 
 pub fn clients(app: &AppHandle) -> Vec<Client> {
-    mcp(app).clients.lock().unwrap().clone()
+    mcp(app).assistants.lock().unwrap().clients()
 }
 
-/// An assistant finished its handshake. Returns its id, for `note_call` and `disconnected`.
-fn connected(app: &AppHandle, name: String) -> u64 {
-    let id = mcp(app).next_client.fetch_add(1, Ordering::Relaxed);
-    tracing::info!("MCP: {name} connected");
+/// A tool call from the assistant `name`. False when it's over the rate limit.
+fn note_call(app: &AppHandle, name: &str, tool: &str) -> bool {
     let since = chrono::Utc::now().timestamp_millis() as u64;
-    mcp(app).clients.lock().unwrap().push(Client { id, name, since, calls: 0, last_tool: None });
-    clients_changed(app);
-    id
-}
-
-fn disconnected(app: &AppHandle, id: u64) {
-    let removed = {
-        let mut clients = mcp(app).clients.lock().unwrap();
-        let before = clients.len();
-        clients.retain(|client| client.id != id);
-        clients.len() != before
-    };
-    if removed {
+    let call = mcp(app).assistants.lock().unwrap().call(name, tool, Instant::now(), since);
+    if call.joined {
+        tracing::info!("MCP: {name} connected");
         clients_changed(app);
+    } else {
+        let _ = app.emit("mcp-clients", clients(app));
     }
+    call.allowed
 }
 
-fn note_call(app: &AppHandle, id: u64, tool: &str) {
-    if let Some(client) = mcp(app).clients.lock().unwrap().iter_mut().find(|client| client.id == id) {
-        client.calls += 1;
-        client.last_tool = Some(tool.to_owned());
-    }
-    let _ = app.emit("mcp-clients", clients(app));
+/// Whether the host picked "Allow for 10 min" for this tool from this assistant, lately.
+fn allowed_for_now(app: &AppHandle, name: &str, tool: &str) -> bool {
+    mcp(app).assistants.lock().unwrap().is_allowed(name, tool, Instant::now())
+}
+
+fn allow_for(app: &AppHandle, name: &str, tool: &str, how_long: Duration) {
+    mcp(app).assistants.lock().unwrap().allow(name, tool, Instant::now() + how_long);
 }
 
 /// AI assistants as an add-on (see `crate::addons`).

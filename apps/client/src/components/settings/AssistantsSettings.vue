@@ -42,15 +42,21 @@ const LEVELS: { key: keyof McpLevels; label: string; description: string }[] = [
   { key: 'shock', label: 'Shock', description: 'OpenShock controls, with their usual limits' }
 ]
 
-type Client = 'claude-code' | 'cursor' | 'vscode'
+type Client = 'claude-code' | 'claude-desktop' | 'cursor' | 'vscode'
 
 const client = ref<Client>('claude-code')
 
 const CLIENTS: { value: Client; label: string }[] = [
   { value: 'claude-code', label: 'Claude Code' },
+  { value: 'claude-desktop', label: 'Claude Desktop' },
   { value: 'cursor', label: 'Cursor' },
   { value: 'vscode', label: 'VS Code' }
 ]
+
+// Claude Desktop starts this app with --mcp and talks to it over stdio; that reads the key itself.
+const command = ref('')
+
+void api.mcpCommand().then((value) => (command.value = value))
 
 const setup = (withKey: string): string => {
   const url = `http://127.0.0.1:${settings.value?.port}/mcp`
@@ -59,6 +65,8 @@ const setup = (withKey: string): string => {
   switch (client.value) {
     case 'claude-code':
       return `claude mcp add --transport http toolkitosc ${url} --header "Authorization: Bearer ${withKey}"`
+    case 'claude-desktop':
+      return JSON.stringify({ mcpServers: { toolkitosc: { command: command.value, args: ['--mcp'] } } }, null, 2)
     case 'cursor':
       return JSON.stringify({ mcpServers: { toolkitosc: { url, headers } } }, null, 2)
     case 'vscode':
@@ -68,6 +76,7 @@ const setup = (withKey: string): string => {
 
 const HOW: Record<Client, string> = {
   'claude-code': 'Run this in a terminal.',
+  'claude-desktop': 'In Claude Desktop, open Settings > Developer > Edit Config and add this to claude_desktop_config.json. It needs no key.',
   cursor: 'Add this to ~/.cursor/mcp.json.',
   vscode: 'Add this to .vscode/mcp.json, or run MCP: Add Server.'
 }
@@ -86,7 +95,7 @@ const copy = async (): Promise<void> => {
   try {
     await navigator.clipboard.writeText(setup(key.value ?? (await api.mcpKey())))
     toast.add({
-      title: 'Copied, with your key',
+      title: client.value === 'claude-desktop' ? 'Copied' : 'Copied, with your key',
       icon: 'i-lucide-clipboard-check',
       color: 'success'
     })
@@ -178,7 +187,7 @@ const savePort = (): void => {
         <div
           v-for="level in LEVELS"
           :key="level.key"
-          class="grid content-start gap-2 rounded-2xl bg-(--aurora-well) p-3"
+          class="grid content-start gap-2 rounded-field bg-(--aurora-well) p-3"
         >
           <div class="grid gap-0.5">
             <b class="font-semibold text-highlighted">{{ level.label }}</b>

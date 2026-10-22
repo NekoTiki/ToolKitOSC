@@ -46,6 +46,16 @@ pub fn mcp_new_key(app: AppHandle) -> Result<String, String> {
     Ok(key)
 }
 
+/// What Claude Desktop starts: this program with `--mcp` (see `super::stdio`). An AppImage runs from
+/// a temporary mount, so it's the AppImage file itself there.
+#[tauri::command]
+pub fn mcp_command() -> Result<String, String> {
+    if let Some(appimage) = std::env::var_os("APPIMAGE") {
+        return Ok(appimage.to_string_lossy().into_owned());
+    }
+    std::env::current_exe().map(|path| path.to_string_lossy().into_owned()).map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 pub fn mcp_clients(app: AppHandle) -> Vec<super::Client> {
     super::clients(&app)

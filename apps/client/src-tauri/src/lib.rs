@@ -79,6 +79,12 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<tauri::tray::TrayIcon> {
 
 /// `toolkitosc --overlay <port> <token>`: the wrist panel, started by the app (see `wrist`).
 /// Returns None for a normal launch.
+/// `ToolKitOSC --mcp`: the stdio side of the MCP server, for Claude Desktop (see `mcp::stdio`).
+pub fn run_mcp() -> Option<std::process::ExitCode> {
+    let args: Vec<String> = std::env::args().collect();
+    (args.len() == 2 && args[1] == "--mcp").then(mcp::stdio::run)
+}
+
 pub fn run_overlay() -> Option<std::process::ExitCode> {
     let args: Vec<String> = std::env::args().collect();
     let [_, flag, port, token] = args.as_slice() else {
@@ -239,6 +245,7 @@ pub fn run() {
             mcp::commands::mcp_key,
             mcp::commands::mcp_new_key,
             mcp::commands::mcp_clients,
+            mcp::commands::mcp_command,
             mcp::commands::mcp_respond
         ])
         .setup(|app| {
