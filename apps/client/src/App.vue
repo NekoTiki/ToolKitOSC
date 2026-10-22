@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AddonOff from '@renderer/components/AddonOff.vue'
 import AddonsFirstRun from '@renderer/components/AddonsFirstRun.vue'
+import ApprovalPopup from '@renderer/components/ApprovalPopup.vue'
 import AppRail from '@renderer/components/layout/AppRail.vue'
 import TopBar from '@renderer/components/layout/TopBar.vue'
 import TitleBar from '@renderer/components/TitleBar.vue'
@@ -8,6 +9,7 @@ import { useAddons } from '@renderer/composables/useAddons'
 import { useAppUpdater } from '@renderer/composables/useAppUpdater'
 import { useAutomationRunner } from '@renderer/composables/useAutomationRunner'
 import { useLogRetention } from '@renderer/composables/useLogRetention'
+import { useMcpBridge } from '@renderer/composables/useMcpBridge'
 import { useStopEverythingTriggers } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
 import { useVrOverlay } from '@renderer/composables/useVrOverlay'
@@ -26,10 +28,12 @@ useAppUpdater()
 useStopEverythingTriggers()
 useAutomationRunner()
 useVrOverlay()
+useMcpBridge()
 </script>
 
 <template>
   <UApp>
+    <ApprovalPopup />
     <div class="flex h-dvh flex-col">
       <TitleBar />
       <TopBar />

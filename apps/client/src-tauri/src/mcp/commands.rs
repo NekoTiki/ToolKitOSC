@@ -50,3 +50,10 @@ pub fn mcp_new_key(app: AppHandle) -> Result<String, String> {
 pub fn mcp_clients(app: AppHandle) -> Vec<super::Client> {
     super::clients(&app)
 }
+
+/// The webview's answer to an `mcp-request` (see `super::bridge`): `result`, or `error` when it
+/// couldn't do it.
+#[tauri::command]
+pub fn mcp_respond(app: AppHandle, id: u64, result: Option<serde_json::Value>, error: Option<String>) {
+    super::bridge::respond(&app, id, error.map_or(Ok(result.unwrap_or_default()), Err));
+}

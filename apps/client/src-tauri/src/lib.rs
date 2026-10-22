@@ -238,7 +238,8 @@ pub fn run() {
             mcp::commands::mcp_save,
             mcp::commands::mcp_key,
             mcp::commands::mcp_new_key,
-            mcp::commands::mcp_clients
+            mcp::commands::mcp_clients,
+            mcp::commands::mcp_respond
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
