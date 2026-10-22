@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Mutex;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::state::AppState;
@@ -30,7 +30,7 @@ pub struct Manifest {
     /// One line on what it does, shown while it's off.
     pub pitch: &'static str,
     pub platforms: &'static [&'static str],
-    /// Notes shown as badges: safety (`shocks`, `electrical`) or `beta`.
+    /// Notes shown as badges: safety (`shocks`, `electrical`), `beta` or `experimental`.
     pub badges: &'static [&'static str],
     /// Add-ons it can't work without.
     pub needs: &'static [&'static str],
@@ -44,7 +44,7 @@ pub struct Manifest {
     pub pages: &'static [&'static str]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum State {
     Off,

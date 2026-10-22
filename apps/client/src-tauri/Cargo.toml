@@ -61,6 +61,8 @@ tauri-plugin-global-shortcut = "2"
 winreg = "0.56"
 # Creates the .lnk shortcut VRCX's own "Launch with VRChat" folder watches (see src/vrcx.rs).
 mslnk = "0.1"
+# The wrist panel's frames go to SteamVR as Direct3D 11 textures (see src/wrist/texture.rs).
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common"] }
 
 # Text layout and tessellation for the wrist panel are slow unoptimized, even in dev.
 [profile.dev.package.toolkitosc-raster]

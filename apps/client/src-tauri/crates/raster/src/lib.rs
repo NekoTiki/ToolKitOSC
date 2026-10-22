@@ -102,28 +102,68 @@ fn triangle_into(texture: &Texture, v: [&Vertex; 3], ppp: f32, clip: [usize; 4],
     let min_y = (p.iter().map(|p| p[1]).fold(f32::MAX, f32::min).floor().max(0.0) as usize).max(clip[1]);
     let max_x = (p.iter().map(|p| p[0]).fold(f32::MIN, f32::max).ceil().max(0.0) as usize).min(clip[2]);
     let max_y = (p.iter().map(|p| p[1]).fold(f32::MIN, f32::max).ceil().max(0.0) as usize).min(clip[3]);
+    if min_x >= max_x || min_y >= max_y {
+        return;
+    }
     let colors = v.map(|v| rgba(v.color));
+    // Most of the panel is flat shapes, all at the font texture's white texel: one sample does.
+    let flat_uv = v[0].uv == v[1].uv && v[1].uv == v[2].uv;
+    let flat_texel = flat_uv.then(|| texture.sample(v[0].uv.x, v[0].uv.y));
+    let flat_color = (colors[0] == colors[1] && colors[1] == colors[2]).then_some(colors[0]);
 
+    // Each barycentric weight is linear in x and y: start it at the first pixel's center and step.
+    let inv = 1.0 / area;
+    let edge = |a: [f32; 2], b: [f32; 2]| {
+        let (dx, dy) = (-(b[1] - a[1]) * inv, (b[0] - a[0]) * inv);
+        let at = |x: f32, y: f32| ((b[0] - a[0]) * (y - a[1]) - (x - a[0]) * (b[1] - a[1])) * inv;
+        (at(min_x as f32 + 0.5, min_y as f32 + 0.5), dx, dy)
+    };
+    let edges = [edge(p[1], p[2]), edge(p[2], p[0]), edge(p[0], p[1])];
+    let columns = (max_x - min_x) as f32;
     for y in min_y..max_y {
-        for x in min_x..max_x {
-            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let edge = |a: [f32; 2], b: [f32; 2]| ((b[0] - a[0]) * (py - a[1]) - (px - a[0]) * (b[1] - a[1])) / area;
-            let w0 = edge(p[1], p[2]);
-            let w1 = edge(p[2], p[0]);
-            let w2 = edge(p[0], p[1]);
-            if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
-                continue;
+        let row = (y - min_y) as f32;
+        let mut w = edges.map(|(start, _, dy)| start + dy * row);
+        // The pixels of this row inside all three edges, give or take one: egui fills rounded
+        // shapes as fans of long thin triangles, whose boxes are mostly empty.
+        let (mut from, mut to) = (0.0f32, columns);
+        for (weight, (_, dx, _)) in w.iter().zip(&edges) {
+            if *dx > 0.0 {
+                from = from.max(-weight / dx - 1.0);
+            } else if *dx < 0.0 {
+                to = to.min(weight / -dx + 1.0);
+            } else if *weight < 0.0 {
+                to = -1.0;
             }
-            let u = w0 * v[0].uv.x + w1 * v[1].uv.x + w2 * v[2].uv.x;
-            let t = w0 * v[0].uv.y + w1 * v[1].uv.y + w2 * v[2].uv.y;
-            let tex = texture.sample(u, t);
-            let dst = &mut out[y * width + x];
-            let mut src = [0.0; 4];
-            for c in 0..4 {
-                src[c] = (w0 * colors[0][c] + w1 * colors[1][c] + w2 * colors[2][c]) * tex[c];
-            }
-            for c in 0..4 {
-                dst[c] = src[c] + dst[c] * (1.0 - src[3]);
+        }
+        if to < from {
+            continue;
+        }
+        let (from, to) = (from.max(0.0) as usize, (to.ceil() as usize).min(max_x - min_x));
+        let line = &mut out[y * width..(y + 1) * width];
+        let py = y as f32 + 0.5;
+        for (x, dst) in (min_x + from..).zip(&mut line[min_x + from..min_x + to]) {
+            // Exactly, not stepped: a pixel on an edge two triangles share must land in both, as
+            // rounding that piles up along a row would drop it from one.
+            let px = x as f32 + 0.5;
+            let exact = |a: [f32; 2], b: [f32; 2]| ((b[0] - a[0]) * (py - a[1]) - (px - a[0]) * (b[1] - a[1])) / area;
+            w = [exact(p[1], p[2]), exact(p[2], p[0]), exact(p[0], p[1])];
+            if w[0] >= 0.0 && w[1] >= 0.0 && w[2] >= 0.0 {
+                let tex = flat_texel.unwrap_or_else(|| {
+                    let u = w[0] * v[0].uv.x + w[1] * v[1].uv.x + w[2] * v[2].uv.x;
+                    let t = w[0] * v[0].uv.y + w[1] * v[1].uv.y + w[2] * v[2].uv.y;
+                    texture.sample(u, t)
+                });
+                let color = flat_color.unwrap_or_else(|| {
+                    let mut color = [0.0; 4];
+                    for (c, value) in color.iter_mut().enumerate() {
+                        *value = w[0] * colors[0][c] + w[1] * colors[1][c] + w[2] * colors[2][c];
+                    }
+                    color
+                });
+                let alpha = color[3] * tex[3];
+                for c in 0..4 {
+                    dst[c] = color[c] * tex[c] + dst[c] * (1.0 - alpha);
+                }
             }
         }
     }
@@ -134,8 +174,13 @@ pub fn to_rgba8(pixels: &[[f32; 4]], out: &mut Vec<u8>) {
     out.clear();
     for p in pixels {
         let a = p[3].clamp(0.0, 1.0);
-        let straight = |c: f32| if a > 0.0 { (c / a).clamp(0.0, 1.0) } else { 0.0 };
-        out.extend_from_slice(&[(straight(p[0]) * 255.0) as u8, (straight(p[1]) * 255.0) as u8, (straight(p[2]) * 255.0) as u8, (a * 255.0) as u8]);
+        if a <= 0.0 {
+            out.extend_from_slice(&[0; 4]);
+            continue;
+        }
+        let inv = 1.0 / a;
+        let straight = |c: f32| ((c * inv).clamp(0.0, 1.0) * 255.0) as u8;
+        out.extend_from_slice(&[straight(p[0]), straight(p[1]), straight(p[2]), (a * 255.0) as u8]);
     }
 }
 

@@ -360,7 +360,7 @@ onBeforeRouteLeave(async () => {
                 label="To your wrist"
                 :description="
                   controlId
-                    ? 'On the Pinned page of the VR overlay panel for this avatar, up to 6. Applies right away.'
+                    ? 'On the Pinned page of the VR overlay panel for this avatar. Applies right away.'
                     : 'Save the control first.'
                 "
                 :disabled="!controlId"

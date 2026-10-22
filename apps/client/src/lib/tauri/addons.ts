@@ -11,7 +11,7 @@ export interface AddonManifest {
   // One line on what it does, shown while it's off.
   pitch: string
   platforms: string[]
-  // Notes shown as badges: safety ('shocks', 'electrical') or 'beta'.
+  // Notes shown as badges: safety ('shocks', 'electrical'), 'beta' or 'experimental'.
   badges: string[]
   // Add-ons it can't work without.
   needs: string[]

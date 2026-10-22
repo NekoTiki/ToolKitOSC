@@ -38,6 +38,9 @@ const EVENTS: { key: Exclude<keyof OverlayNotify, 'to'>; label: string; descript
 const status = computed(() => getAddon('overlay')?.status.text)
 
 // Saved a moment after the last change, so a dragged slider isn't written on every step.
+// USlider can emit its value as a one-item array; Rust wants the number.
+const slider = (value: number | number[] | undefined, fallback: number): number => (Array.isArray(value) ? value[0] : value) ?? fallback
+
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 
 const change = (edit: (settings: OverlaySettings) => void): void => {
@@ -87,7 +90,7 @@ const sendTest = (): void => {
             :step="1"
             size="lg"
             aria-label="Size"
-            @update:model-value="change((s) => (s.panel.widthCm = $event ?? 16))"
+            @update:model-value="change((s) => (s.panel.widthCm = slider($event, 16)))"
           />
         </UFormField>
         <UFormField :label="`Opacity · ${Math.round(settings.panel.opacity * 100)} %`">
@@ -98,7 +101,7 @@ const sendTest = (): void => {
             :step="5"
             size="lg"
             aria-label="Opacity"
-            @update:model-value="change((s) => (s.panel.opacity = ($event ?? 90) / 100))"
+            @update:model-value="change((s) => (s.panel.opacity = slider($event, 90) / 100))"
           />
         </UFormField>
         <UFormField
@@ -112,7 +115,7 @@ const sendTest = (): void => {
             :step="5"
             size="lg"
             aria-label="Show when looking within"
-            @update:model-value="change((s) => (s.panel.showWithinDeg = $event ?? 35))"
+            @update:model-value="change((s) => (s.panel.showWithinDeg = slider($event, 35)))"
           />
         </UFormField>
       </template>

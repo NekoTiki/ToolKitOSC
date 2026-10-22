@@ -12,6 +12,8 @@ mod input;
 mod link;
 mod openvr;
 pub mod protocol;
+#[cfg(windows)]
+mod texture;
 mod ui;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -26,8 +28,9 @@ use openvr::{Actions, OpenVr, HMD, INVALID_DEVICE, ROLE_LEFT, ROLE_RIGHT};
 /// Pixels per egui point: the panel is drawn at twice its 380 × 270 layout.
 const SCALE: f32 = 2.0;
 const TICK: Duration = Duration::from_millis(11);
-/// Redraws at most this often.
-const FRAME: Duration = Duration::from_millis(33);
+/// Redraws at most this often: about 60 a second while something moves. A frame takes 5 to 10 ms
+/// to draw on the CPU.
+const FRAME: Duration = Duration::from_millis(16);
 /// The fade from fully shown to hidden spans this many degrees past `show_within_deg`.
 const FADE_DEG: f32 = 15.0;
 /// Fully faded for this long before it's hidden, so a glance away doesn't flicker it.
@@ -42,8 +45,10 @@ const POKE_RANGE: f32 = 0.05;
 const CURSOR_SIZE: f32 = 0.012;
 const CURSOR_LIFT: f32 = 0.002;
 const CURSOR_PRESSED: [f32; 3] = [0.65, 0.55, 0.98];
-/// SteamVR swaps a new image into an overlay asynchronously, and it blanks meanwhile. So the panel
-/// is two overlays in one place: a frame goes to the hidden one, which is shown this long after.
+/// With `SetOverlayRaw` (when Direct3D 11 isn't there), SteamVR swaps a new image into an overlay
+/// asynchronously, and it blanks meanwhile. So the panel is two overlays in one place: a frame goes
+/// to the hidden one, which is shown this long after. A texture is copied right away: it goes
+/// straight to the one shown.
 const SWAP_AFTER: Duration = Duration::from_millis(50);
 /// The hidden one stays barely visible, so SteamVR keeps its image loaded.
 const BACK_ALPHA: f32 = 0.01;
@@ -102,12 +107,15 @@ enum Pointer {
 }
 
 enum ToRender {
-    State(protocol::State),
-    Events(Vec<egui::Event>)
+    State(Box<protocol::State>),
+    Events(Vec<egui::Event>),
+    /// Shown or hidden: nothing is drawn while it's hidden.
+    Visible(bool)
 }
 
-/// Draws the panel whenever it gets new state or input, or a hold is filling, and once a second
-/// for "8 s ago". Stops when tracking does.
+/// Draws the panel while it's shown: whenever it gets new state or input, or a hold is filling,
+/// and once a second for "8 s ago". What comes in while it's hidden is drawn when it shows again.
+/// Stops when tracking does.
 fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mpsc::Receiver<ToRender>, pressed: std::sync::mpsc::Sender<protocol::ToApp>) {
     use std::sync::mpsc::RecvTimeoutError;
 
@@ -122,18 +130,36 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
     let mut pixels = vec![[0.0f32; 4]; width * height];
     let mut bytes = Vec::with_capacity(width * height * 4);
     let mut sent: Vec<u8> = Vec::new();
+    #[cfg(windows)]
+    let textures = match texture::Textures::new(width as u32, height as u32) {
+        Ok(textures) => Some(textures),
+        Err(err) => {
+            tracing::warn!("Panel: {err}, sending frames raw");
+            None
+        }
+    };
     let started = Instant::now();
     let mut events: Vec<egui::Event> = Vec::new();
     let mut again = false;
     let mut retry = false;
+    let mut visible = false;
     let mut last_frame = Instant::now() - FRAME;
 
     loop {
-        let mut apply = |message: ToRender| match message {
-            ToRender::State(state) => panel.state = state,
-            ToRender::Events(more) => events.extend(more)
+        let wait = if !visible {
+            // Nothing to draw until something comes in.
+            None
+        } else if again || retry {
+            Some(FRAME)
+        } else {
+            Some(Duration::from_secs(1))
         };
-        match rx.recv_timeout(if again || retry { FRAME } else { Duration::from_secs(1) }) {
+        let mut apply = |message: ToRender| match message {
+            ToRender::State(state) => panel.set_state(*state),
+            ToRender::Events(more) => events.extend(more),
+            ToRender::Visible(shown) => visible = shown
+        };
+        match wait.map_or_else(|| rx.recv().map_err(|_| RecvTimeoutError::Disconnected), |wait| rx.recv_timeout(wait)) {
             Ok(message) => apply(message),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return
@@ -142,6 +168,9 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
         std::thread::sleep(FRAME.saturating_sub(last_frame.elapsed()));
         while let Ok(message) = rx.try_recv() {
             apply(message);
+        }
+        if !visible {
+            continue;
         }
         let input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, ui::SIZE)),
@@ -160,18 +189,31 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
         toolkitosc_raster::to_rgba8(&pixels, &mut bytes);
         // Every upload can flicker in SteamVR, so only a frame that looks different goes out.
         if bytes != sent {
-            let back = 1 - front.load(Ordering::Relaxed);
-            match vr.set_raw(panels[back], &mut bytes, width as u32, height as u32) {
-                Ok(()) => {
-                    std::thread::sleep(SWAP_AFTER);
-                    front.store(back, Ordering::Relaxed);
+            let shown = front.load(Ordering::Relaxed);
+            let back = 1 - shown;
+            #[cfg(windows)]
+            let uploaded = match &textures {
+                Some(textures) => textures.upload(shown, &bytes, |texture| vr.set_texture(panels[shown], texture)).map(|()| false),
+                None => vr.set_raw(panels[back], &mut bytes, width as u32, height as u32).map(|()| true)
+            };
+            #[cfg(not(windows))]
+            let uploaded = vr.set_raw(panels[back], &mut bytes, width as u32, height as u32).map(|()| true);
+            match uploaded {
+                Ok(swap) => {
+                    if swap {
+                        std::thread::sleep(SWAP_AFTER);
+                        front.store(back, Ordering::Relaxed);
+                    }
                     std::mem::swap(&mut bytes, &mut sent);
                     retry = false;
                 }
                 // SteamVR refuses an upload while it's still taking the last one: the panel keeps
                 // what it shows, and the same frame goes again next time.
                 Err(err) => {
-                    tracing::debug!("Panel: {err}, trying again");
+                    // Once per run of failures, so it's in the panel's log without flooding it.
+                    if !retry {
+                        tracing::warn!("Panel: {err}, trying again");
+                    }
                     retry = true;
                 }
             }
@@ -198,8 +240,15 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
     let mut events: Vec<egui::Event> = Vec::new();
     let mut cursor_shown = false;
 
+    // What `render` was last told.
+    let mut told_visible = false;
+
     loop {
         std::thread::sleep(TICK);
+        if visible != told_visible {
+            told_visible = visible;
+            let _ = to_render.send(ToRender::Visible(visible));
+        }
         if vr.quit_requested() {
             tracing::info!("Panel: SteamVR is quitting");
             return Ok(());
@@ -208,7 +257,7 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
             match link.states.try_recv() {
                 Ok(state) => {
                     settings = state.panel.clone();
-                    let _ = to_render.send(ToRender::State(state));
+                    let _ = to_render.send(ToRender::State(Box::new(state)));
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => return Ok(())
