@@ -23,11 +23,43 @@ export interface OverlayPanel {
   showWithinDeg: number
 }
 
+export type OverlayCorner = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
+
+export interface OverlayHud {
+  enabled: boolean
+  corner: OverlayCorner
+  // Degrees in from the corner, 0-25.
+  insetDeg: number
+  // 0.5-2, 1 is the usual size.
+  size: number
+  opacity: number
+  // Meters.
+  distance: number
+  follow: 'lazy' | 'glued'
+  // 0.1-1.
+  catchUp: number
+  hideWithPanel: boolean
+  status: boolean
+  viewers: boolean
+  lastAction: boolean
+  toys: boolean
+  leash: boolean
+  warnings: boolean
+}
+
 export interface OverlaySettings {
   notify: OverlayNotify
   panel: OverlayPanel
+  hud: OverlayHud
   // Avatar id -> the controls pinned to the wrist (set with overlaySetPinned).
   pinned: Record<string, string[]>
+}
+
+// What each part of the overlay is doing (see overlay/commands.rs `OverlayStatus`).
+export interface OverlayStatus {
+  inVr: boolean
+  gaveUp: boolean
+  toastsTo: OverlayTarget | null
 }
 
 export type Rgb = [number, number, number]
@@ -44,6 +76,7 @@ export const overlayApi = {
   overlaySettings: (): Promise<OverlaySettings> => invoke('overlay_settings'),
   overlaySave: (settings: OverlaySettings): Promise<void> => invoke('overlay_save', { settings }),
   overlayTestToast: (): Promise<void> => invoke('overlay_test_toast'),
+  overlayStatus: (): Promise<OverlayStatus> => invoke('overlay_status'),
   overlaySetContext: (
     profiles: { id: string; name: string }[],
     profileId: string | null,

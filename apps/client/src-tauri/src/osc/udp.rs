@@ -108,6 +108,7 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Ori
         crate::leash::on_parameter(app, &osc_msg);
         crate::bhaptics::on_parameter(app, &osc_msg);
         crate::owo::on_parameter(app, &osc_msg);
+        crate::overlay::on_parameter(app, &osc_msg);
     }
 
     let avatar_id = state.avatar_details.lock().unwrap().as_ref().map(|d| d.id.clone());

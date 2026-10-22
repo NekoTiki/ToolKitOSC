@@ -2,7 +2,7 @@
 //! sends the whole state whenever it changes (it's small); the panel sends what you pressed.
 use serde::{Deserialize, Serialize};
 
-use crate::overlay::model::PanelSettings;
+use crate::overlay::model::{HudSettings, PanelSettings};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Profile {
@@ -71,7 +71,10 @@ pub struct AddonRow {
     /// Its card's dot.
     pub state: crate::addons::State,
     pub status: String,
-    pub level: Option<f64>
+    pub level: Option<f64>,
+    /// Intiface Central is installed but not running: the row has a button that starts it.
+    #[serde(default)]
+    pub launch: bool
 }
 
 /// A toy control of the avatar you're wearing, with its level now.
@@ -129,6 +132,7 @@ pub struct Pinned {
 pub struct State {
     pub paused: bool,
     pub panel: PanelSettings,
+    pub hud: HudSettings,
     pub theme: Theme,
     pub home: Home,
     /// What viewers did, newest first, at most 20: Home's Last and Viewers' Activity.
@@ -136,7 +140,20 @@ pub struct State {
     pub viewers: Vec<Viewer>,
     pub pinned: Pinned,
     pub addons: Vec<AddonRow>,
-    pub toys: Vec<ToyRow>
+    pub toys: Vec<ToyRow>,
+    /// Someone pulls your leash, for the HUD.
+    pub leash: Option<Pull>
+}
+
+/// Who pulls your leash, how hard, and where it moves you.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Pull {
+    pub who: String,
+    /// 0–1.
+    pub stretch: f64,
+    /// Where it walks you, -1–1: to your right, and forward.
+    pub right: f64,
+    pub forward: f64
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -148,6 +165,10 @@ pub enum ToApp {
     /// Only after the hold on Resume.
     Resume,
     Profile { id: Option<String> },
+    /// Shows or hides the HUD.
+    Hud { on: bool },
+    /// Starts Intiface Central.
+    LaunchIntiface,
     /// A pinned tile pressed: toggled, the next option, a preset, a shock after its hold. `level`
     /// for a slider or toy dragged to it, `pick` for what was picked from a `TileKind::Menu`.
     #[serde(rename_all = "camelCase")]

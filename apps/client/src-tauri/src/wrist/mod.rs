@@ -21,9 +21,10 @@ use std::time::{Duration, Instant};
 
 use egui::{Pos2, Rect};
 
-use crate::overlay::model::Hand;
+use crate::overlay::model::{Follow, Hand, HudSettings};
 use geometry::{look_angle, multiply, position, ray_hit, wrist_offset};
-use openvr::{Actions, OpenVr, HMD, INVALID_DEVICE, ROLE_LEFT, ROLE_RIGHT};
+use openvr::{Actions, Matrix34, OpenVr, TrackedDevicePose, HMD, INVALID_DEVICE, ROLE_LEFT, ROLE_RIGHT};
+use ui::View;
 
 /// Pixels per egui point: the panel is drawn at twice its 380 × 270 layout.
 const SCALE: f32 = 2.0;
@@ -52,6 +53,22 @@ const CURSOR_PRESSED: [f32; 3] = [0.65, 0.55, 0.98];
 const SWAP_AFTER: Duration = Duration::from_millis(50);
 /// The hidden one stays barely visible, so SteamVR keeps its image loaded.
 const BACK_ALPHA: f32 = 0.01;
+/// The HUD's width at size 1, per meter away: it keeps its size in your view at any distance.
+const HUD_WIDTH: f32 = 0.4;
+/// Lazy follow: within this many degrees of its place in your view, the HUD stays still, so the
+/// headset's small shakes don't move it. Past it, it glides back, slowly at first and at full speed
+/// once it's `LAZY_RAMP_DEG` further off.
+const LAZY_STILL_DEG: f32 = 1.0;
+const LAZY_RAMP_DEG: f32 = 5.0;
+/// How fast it glides at catch-up speed 1: the share of the way left it covers a second, as a rate.
+const CATCH_RATE: f32 = 8.0;
+
+/// Lazy follow's glide rate when the HUD is `off` degrees from its place: 0 while it's close
+/// enough, growing smoothly to the full rate.
+fn lazy_rate(off: f32, catch_up: f32) -> f32 {
+    let pull = ((off - LAZY_STILL_DEG) / LAZY_RAMP_DEG).clamp(0.0, 1.0);
+    catch_up.clamp(0.1, 1.0) * CATCH_RATE * pull * pull * (3.0 - 2.0 * pull)
+}
 
 /// Runs the panel until SteamVR quits or the app goes away.
 pub fn main(port: u16, token: String) -> Result<(), String> {
@@ -63,20 +80,30 @@ pub fn main(port: u16, token: String) -> Result<(), String> {
         vr.create_overlay("io.github.nekotiki.toolkitosc.wrist.back", "ToolKitOSC")?
     ];
     let front = AtomicUsize::new(0);
+    let huds = [
+        vr.create_overlay("io.github.nekotiki.toolkitosc.hud", "ToolKitOSC HUD")?,
+        vr.create_overlay("io.github.nekotiki.toolkitosc.hud.back", "ToolKitOSC HUD")?
+    ];
+    let hud_front = AtomicUsize::new(0);
     let cursor = vr.create_overlay("io.github.nekotiki.toolkitosc.wrist.cursor", "ToolKitOSC cursor")?;
     vr.set_width(cursor, CURSOR_SIZE);
     vr.set_sort_order(cursor, 2);
     vr.set_raw(cursor, &mut ring(64), 64, 64)?;
     tracing::info!("Panel: on the wrist");
     let (to_render, render_rx) = std::sync::mpsc::channel();
+    let (to_hud, hud_rx) = std::sync::mpsc::channel();
     let pressed = link.actions.clone();
-    // Drawing runs beside tracking, so the cursor keeps up however long a frame takes.
+    // Drawing runs beside tracking, so the cursor keeps up however long a frame takes. The HUD
+    // draws on its own, so neither waits for the other.
     let result = std::thread::scope(|scope| {
-        scope.spawn(|| render(&vr, panels, &front, render_rx, pressed));
-        run(&vr, &link, &actions, panels, &front, cursor, to_render)
+        scope.spawn(|| render::<ui::Panel>(&vr, panels, &front, render_rx, pressed));
+        scope.spawn(|| render::<ui::Hud>(&vr, huds, &hud_front, hud_rx, link.actions.clone()));
+        let mut panel = Pair::new(panels, &front);
+        let mut hud = Pair::new(huds, &hud_front);
+        run(&vr, &link, &actions, &mut panel, cursor, to_render, &mut hud, to_hud)
     });
     vr.destroy_overlay(cursor);
-    panels.iter().for_each(|&panel| vr.destroy_overlay(panel));
+    panels.iter().chain(&huds).for_each(|&overlay| vr.destroy_overlay(overlay));
     result
 }
 
@@ -106,6 +133,111 @@ enum Pointer {
     At([f32; 2], bool)
 }
 
+/// Two overlays in one place (see `SWAP_AFTER`): the one shown, and the one the next frame goes to
+/// when frames go raw.
+struct Pair<'a> {
+    overlays: [u64; 2],
+    front: &'a AtomicUsize,
+    visible: bool,
+    /// The alpha last set, and on which of the two.
+    alpha: f32,
+    alpha_front: usize
+}
+
+impl<'a> Pair<'a> {
+    fn new(overlays: [u64; 2], front: &'a AtomicUsize) -> Self {
+        Self { overlays, front, visible: false, alpha: -1.0, alpha_front: usize::MAX }
+    }
+
+    fn each(&self, f: impl Fn(u64)) {
+        self.overlays.iter().for_each(|&overlay| f(overlay));
+    }
+
+    fn set_visible(&mut self, vr: &OpenVr, visible: bool) {
+        if self.visible != visible {
+            self.each(|overlay| vr.set_visible(overlay, visible));
+            self.visible = visible;
+        }
+    }
+
+    /// The one shown at `alpha` and on top; the other one barely there.
+    fn set_alpha(&mut self, vr: &OpenVr, alpha: f32) {
+        let shown = self.front.load(Ordering::Relaxed);
+        if (self.alpha - alpha).abs() > 0.01 || shown != self.alpha_front {
+            self.alpha = alpha;
+            self.alpha_front = shown;
+            vr.set_alpha(self.overlays[shown], alpha);
+            vr.set_sort_order(self.overlays[shown], 1);
+            vr.set_alpha(self.overlays[1 - shown], alpha.min(BACK_ALPHA));
+            vr.set_sort_order(self.overlays[1 - shown], 0);
+        }
+    }
+}
+
+/// Where the HUD is, and how it follows your head.
+#[derive(Default)]
+struct HudPlace {
+    width: f32,
+    /// Lazy: where it is in the world now.
+    placed: Option<Matrix34>,
+    /// Glued: what it was attached to the headset with.
+    glued: Option<Matrix34>,
+    last_tick: Option<Instant>
+}
+
+impl HudPlace {
+    /// Shows, hides and moves the HUD for this tick. Returns whether it's shown.
+    fn update(&mut self, vr: &OpenVr, hud: &mut Pair, settings: &HudSettings, hmd: Option<&TrackedDevicePose>, panel_shown: bool) -> bool {
+        let now = Instant::now();
+        let dt = self.last_tick.replace(now).map_or(0.0, |last| now.duration_since(last).as_secs_f32());
+        let hmd = hmd.filter(|_| settings.enabled && !(settings.hide_with_panel && panel_shown) && !vr.dashboard_open());
+        hud.set_visible(vr, hmd.is_some());
+        let Some(hmd) = hmd else {
+            // It shows up in its place next time, not where it was left.
+            self.placed = None;
+            return false;
+        };
+        let size = settings.size.clamp(0.5, 2.0);
+        let distance = settings.distance.clamp(0.5, 3.0);
+        let width = HUD_WIDTH * distance * size;
+        if self.width != width {
+            hud.each(|overlay| vr.set_width(overlay, width));
+            self.width = width;
+        }
+        hud.set_alpha(vr, settings.opacity.clamp(0.3, 1.0));
+        let half_width = (HUD_WIDTH * size / 2.0).atan().to_degrees();
+        let half_height = (HUD_WIDTH * size / 2.0 * ui::HUD_SIZE.y / ui::HUD_SIZE.x).atan().to_degrees();
+        let offset = geometry::hud_offset(settings.corner, settings.inset_deg.clamp(0.0, 25.0), distance, half_width, half_height);
+        match settings.follow {
+            Follow::Glued => {
+                if self.glued.as_ref() != Some(&offset) {
+                    hud.each(|overlay| vr.attach(overlay, HMD, &offset));
+                    self.glued = Some(offset);
+                }
+                self.placed = None;
+            }
+            Follow::Lazy => {
+                self.glued = None;
+                let head = &hmd.device_to_absolute;
+                let eye = position(head);
+                let target = position(&multiply(head, &offset));
+                let at = self.placed.as_ref().map_or(target, position);
+                let off = geometry::angle_between(eye, at, target);
+                // Leaning in or back counts too: as much as turning by the same share of its distance.
+                let off = off.max(((geometry::distance(eye, at) - distance).abs() / distance).min(1.0).asin().to_degrees());
+                let rate = lazy_rate(off, settings.catch_up);
+                if rate > 0.0 || self.placed.is_none() {
+                    let share = if self.placed.is_some() { 1.0 - (-rate * dt).exp() } else { 1.0 };
+                    let placed = geometry::facing(geometry::lerp(at, target, share), eye, geometry::column(head, 1));
+                    hud.each(|overlay| vr.place(overlay, &placed));
+                    self.placed = Some(placed);
+                }
+            }
+        }
+        true
+    }
+}
+
 enum ToRender {
     State(Box<protocol::State>),
     Events(Vec<egui::Event>),
@@ -113,19 +245,19 @@ enum ToRender {
     Visible(bool)
 }
 
-/// Draws the panel while it's shown: whenever it gets new state or input, or a hold is filling,
-/// and once a second for "8 s ago". What comes in while it's hidden is drawn when it shows again.
-/// Stops when tracking does.
-fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mpsc::Receiver<ToRender>, pressed: std::sync::mpsc::Sender<protocol::ToApp>) {
+/// Draws the panel or the HUD while it's shown: whenever it gets new state or input, or a hold is
+/// filling, and once a second for "8 s ago". What comes in while it's hidden is drawn when it shows
+/// again. Stops when tracking does.
+fn render<V: View>(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mpsc::Receiver<ToRender>, pressed: std::sync::mpsc::Sender<protocol::ToApp>) {
     use std::sync::mpsc::RecvTimeoutError;
 
     let ctx = egui::Context::default();
     ctx.style_mut(|style| style.animation_time = 0.0);
     // Text is laid out for the pixels it's drawn at.
     ctx.set_pixels_per_point(SCALE);
-    let mut panel = ui::Panel::default();
+    let mut panel = V::default();
     let mut raster = toolkitosc_raster::Raster::default();
-    let size = ui::SIZE * SCALE;
+    let size = V::SIZE * SCALE;
     let (width, height) = (size.x as usize, size.y as usize);
     let mut pixels = vec![[0.0f32; 4]; width * height];
     let mut bytes = Vec::with_capacity(width * height * 4);
@@ -173,7 +305,7 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
             continue;
         }
         let input = egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, ui::SIZE)),
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, V::SIZE)),
             time: Some(started.elapsed().as_secs_f64()),
             events: std::mem::take(&mut events),
             ..Default::default()
@@ -224,13 +356,13 @@ fn render(vr: &OpenVr, panels: [u64; 2], front: &AtomicUsize, rx: std::sync::mps
 
 /// Tracks the hands every tick: shows and hides the panel, moves the cursor, and turns pokes and
 /// trigger pulls into presses for `render`.
-fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], front: &AtomicUsize, cursor: u64, to_render: std::sync::mpsc::Sender<ToRender>) -> Result<(), String> {
+#[allow(clippy::too_many_arguments)]
+fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panel: &mut Pair, cursor: u64, to_render: std::sync::mpsc::Sender<ToRender>, hud: &mut Pair, to_hud: std::sync::mpsc::Sender<ToRender>) -> Result<(), String> {
     let mut settings = crate::overlay::model::PanelSettings::default();
+    let mut hud_settings = HudSettings::default();
+    let mut hud_place = HudPlace::default();
     let mut attached: Option<(u32, Hand)> = None;
     let mut width_set = 0.0f32;
-    let mut alpha = -1.0f32;
-    let mut alpha_front = usize::MAX;
-    let mut visible = false;
     let mut faded_since: Option<Instant> = None;
     let mut shown_since: Option<Instant> = None;
     let mut pointer = Pointer::None;
@@ -240,14 +372,15 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
     let mut events: Vec<egui::Event> = Vec::new();
     let mut cursor_shown = false;
 
-    // What `render` was last told.
+    // What the render threads were last told.
     let mut told_visible = false;
+    let mut told_hud = false;
 
     loop {
         std::thread::sleep(TICK);
-        if visible != told_visible {
-            told_visible = visible;
-            let _ = to_render.send(ToRender::Visible(visible));
+        if panel.visible != told_visible {
+            told_visible = panel.visible;
+            let _ = to_render.send(ToRender::Visible(told_visible));
         }
         if vr.quit_requested() {
             tracing::info!("Panel: SteamVR is quitting");
@@ -257,17 +390,23 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
             match link.states.try_recv() {
                 Ok(state) => {
                     settings = state.panel.clone();
+                    hud_settings = state.hud.clone();
+                    let _ = to_hud.send(ToRender::State(Box::new(state.clone())));
                     let _ = to_render.send(ToRender::State(Box::new(state)));
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => return Ok(())
             }
         }
+        let poses = vr.poses();
+        let pose = |index: u32| poses.get(index as usize).filter(|pose| index != INVALID_DEVICE && pose.valid);
+        let hud_shown = hud_place.update(vr, hud, &hud_settings, pose(HMD), panel.visible);
+        if hud_shown != told_hud {
+            told_hud = hud_shown;
+            let _ = to_hud.send(ToRender::Visible(hud_shown));
+        }
         if !settings.enabled {
-            if visible {
-                panels.iter().for_each(|&panel| vr.set_visible(panel, false));
-                visible = false;
-            }
+            panel.set_visible(vr, false);
             continue;
         }
         let width_m = settings.width_cm.clamp(10.0, 30.0) / 100.0;
@@ -276,22 +415,17 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
         let left = settings.hand == Hand::Left;
         let role = if left { ROLE_LEFT } else { ROLE_RIGHT };
         let device = vr.controller(role);
-        let poses = vr.poses();
-        let pose = |index: u32| poses.get(index as usize).filter(|pose| index != INVALID_DEVICE && pose.valid);
         let (Some(hand_pose), Some(hmd)) = (pose(device), pose(HMD)) else {
-            if visible {
-                panels.iter().for_each(|&panel| vr.set_visible(panel, false));
-                visible = false;
-            }
+            panel.set_visible(vr, false);
             continue;
         };
 
         if attached != Some((device, settings.hand)) {
-            panels.iter().for_each(|&panel| vr.attach(panel, device, &wrist_offset(left)));
+            panel.each(|overlay| vr.attach(overlay, device, &wrist_offset(left)));
             attached = Some((device, settings.hand));
         }
         if width_set != width_m {
-            panels.iter().for_each(|&panel| vr.set_width(panel, width_m));
+            panel.each(|overlay| vr.set_width(overlay, width_m));
             width_set = width_m;
         }
 
@@ -304,23 +438,11 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
         let now = Instant::now();
         if fade > 0.0 {
             faded_since = None;
-            if !visible {
-                panels.iter().for_each(|&panel| vr.set_visible(panel, true));
-                visible = true;
-            }
-        } else if visible && now.duration_since(*faded_since.get_or_insert(now)) >= HIDE_AFTER {
-            panels.iter().for_each(|&panel| vr.set_visible(panel, false));
-            visible = false;
+            panel.set_visible(vr, true);
+        } else if panel.visible && now.duration_since(*faded_since.get_or_insert(now)) >= HIDE_AFTER {
+            panel.set_visible(vr, false);
         }
-        let shown = front.load(Ordering::Relaxed);
-        if (alpha - fade * opacity).abs() > 0.01 || shown != alpha_front {
-            alpha = fade * opacity;
-            alpha_front = shown;
-            vr.set_alpha(panels[shown], alpha);
-            vr.set_sort_order(panels[shown], 1);
-            vr.set_alpha(panels[1 - shown], alpha.min(BACK_ALPHA));
-            vr.set_sort_order(panels[1 - shown], 0);
-        }
+        panel.set_alpha(vr, fade * opacity);
         if fade >= 1.0 {
             shown_since.get_or_insert(now);
         } else {
@@ -334,7 +456,7 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
         let click = vr.click(actions, !left);
         let inside = |p: [f32; 2]| p[0].abs() <= width_m / 2.0 && p[1].abs() <= height_m / 2.0;
         let next = match other {
-            Some(other) if visible => {
+            Some(other) if panel.visible => {
                 let tip = geometry::into(&panel_world, position(&other));
                 let near = tip[2] < POKE_RANGE && tip[2] > -0.03 && inside([tip[0], tip[1]]);
                 if near {
@@ -405,3 +527,18 @@ fn run(vr: &OpenVr, link: &link::Link, actions: &Actions, panels: [u64; 2], fron
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lazy_follow_ignores_shakes_and_speeds_up_smoothly() {
+        assert_eq!(lazy_rate(0.5, 0.5), 0.0);
+        assert_eq!(lazy_rate(LAZY_STILL_DEG, 0.5), 0.0);
+        let rates: Vec<f32> = [1.5, 2.0, 3.0, 4.5].iter().map(|&off| lazy_rate(off, 0.5)).collect();
+        assert!(rates.windows(2).all(|pair| pair[0] > 0.0 && pair[0] < pair[1]), "{rates:?}");
+        assert_eq!(lazy_rate(30.0, 0.5), 0.5 * CATCH_RATE);
+        assert_eq!(lazy_rate(30.0, 1.0), CATCH_RATE);
+    }
+}

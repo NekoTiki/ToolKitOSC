@@ -16,9 +16,13 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
 
 use crate::state::AppState;
+use crate::types::{OscArg, OscMessage};
 use crate::wrist::protocol::{Profile, Theme};
 use model::{NotifySettings, Target};
 use notify::{Kind, Toast};
+
+/// Shows or hides the HUD, from the avatar's menu.
+const HUD_PARAMETER: &str = "/avatar/parameters/TKOSC/Hud";
 
 /// How often it looks for XSOverlay, OVR Toolkit and SteamVR.
 const SCAN_EVERY: Duration = Duration::from_secs(3);
@@ -155,6 +159,30 @@ pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<Stri
     panel::set_context(app, profiles, profile, groups, theme);
 }
 
+/// A live avatar parameter from VRChat: `TKOSC/Hud` shows or hides the HUD while the add-on is on.
+pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
+    if message.address != HUD_PARAMETER || overlay(app).toasts.lock().unwrap().is_none() {
+        return;
+    }
+    match message.args.first() {
+        Some(OscArg::Bool(on)) => set_hud(app, *on),
+        Some(OscArg::Number(value)) => set_hud(app, *value != 0.0),
+        _ => {}
+    }
+}
+
+/// Shows or hides the HUD: from `TKOSC/Hud` or the wrist panel.
+pub fn set_hud(app: &AppHandle, on: bool) {
+    let changed = store::with(app, |settings| {
+        let changed = settings.hud.enabled != on;
+        settings.hud.enabled = on;
+        (changed, changed)
+    });
+    if changed {
+        settings_changed(app);
+    }
+}
+
 /// The settings changed: the panel gets them, and may start again after crashing.
 fn settings_changed(app: &AppHandle) {
     overlay(app).panel.lock().unwrap().gave_up = false;
@@ -171,7 +199,7 @@ impl crate::addons::Addon for Addon {
             id: "overlay",
             name: "VR overlay",
             group: "vr",
-            pitch: "ToolKitOSC on your wrist in SteamVR, with Stop one poke away, and toasts in XSOverlay or OVR Toolkit",
+            pitch: "ToolKitOSC on your wrist in SteamVR, with Stop one poke away, a HUD in a corner of your view, and toasts in XSOverlay or OVR Toolkit",
             // Built and tried on Windows first; SteamVR on Linux follows.
             platforms: &["windows"],
             badges: &["experimental"],
@@ -201,10 +229,14 @@ impl crate::addons::Addon for Addon {
         if gave_up {
             return Status::new(State::Error, "Panel stopped after crashing 3 times");
         }
-        let panel = match (settings.panel.enabled, running) {
-            (false, _) => None,
-            (true, true) => Some("Panel on your wrist"),
-            (true, false) => Some("Panel waits for SteamVR")
+        let panel = match (settings.panel.enabled, settings.hud.enabled, running) {
+            (false, false, _) => None,
+            (true, false, true) => Some("Panel on your wrist"),
+            (false, true, true) => Some("HUD in your view"),
+            (true, true, true) => Some("Panel and HUD in VR"),
+            (true, false, false) => Some("Panel waits for SteamVR"),
+            (false, true, false) => Some("HUD waits for SteamVR"),
+            (true, true, false) => Some("Panel and HUD wait for SteamVR")
         };
         let toasts = match (settings.notify.to, destination(app)) {
             (Target::Off, _) => None,
@@ -216,7 +248,7 @@ impl crate::addons::Addon for Addon {
             (Some(panel), Some(toasts)) => format!("{panel} · {toasts}"),
             (Some(panel), None) => panel.to_owned(),
             (None, Some(toasts)) => notify::capitalize(toasts),
-            (None, None) => "Panel and toasts off".to_owned()
+            (None, None) => "Panel, HUD and toasts off".to_owned()
         };
         let waiting = !running && toasts.map_or(true, |toasts| toasts.starts_with("waiting"));
         Status::new(if waiting { State::Warn } else { State::Ok }, text)

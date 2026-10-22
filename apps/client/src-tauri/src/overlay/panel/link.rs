@@ -98,6 +98,13 @@ fn act(app: &AppHandle, action: ToApp) {
             super::pinned::press(app, group_id, control_id, *level, *pick);
             refresh(app);
         }
+        ToApp::Hud { on } => super::super::set_hud(app, *on),
+        // The connection picks it up once its server starts.
+        ToApp::LaunchIntiface => {
+            if let Err(err) = crate::intiface::launch_now() {
+                tracing::warn!("Panel: couldn't start Intiface Central: {err}");
+            }
+        }
         ToApp::Stop | ToApp::Resume | ToApp::Profile { .. } => {
             let _ = app.emit("overlay-action", &action);
         }

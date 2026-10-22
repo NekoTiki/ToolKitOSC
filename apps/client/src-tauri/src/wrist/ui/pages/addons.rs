@@ -5,7 +5,7 @@ use egui::{Rect, Sense, Ui, Vec2};
 
 use super::Page;
 use crate::addons::State as Status;
-use crate::wrist::protocol::{AddonRow, State, ToyRow};
+use crate::wrist::protocol::{AddonRow, State, ToApp, ToyRow};
 use crate::wrist::ui::theme::ROW_HEIGHT;
 use crate::wrist::ui::widgets::{self, Scroll};
 use crate::wrist::ui::Cx;
@@ -65,6 +65,9 @@ fn addon_row(ui: &mut Ui, cx: &mut Cx, addon: &AddonRow) {
         Status::Off => cx.theme.muted
     };
     widgets::dot_row(ui, cx, Some(dot), &addon.name, &addon.status, |ui, cx| {
+        if addon.launch && widgets::button(ui, cx, "Launch", Vec2::new(78.0, 30.0)) {
+            cx.actions.push(ToApp::LaunchIntiface);
+        }
         // The leash: how hard it pulls.
         if let Some(level) = addon.level {
             let rect = ui.allocate_exact_size(Vec2::new(66.0, 30.0), Sense::hover()).0;

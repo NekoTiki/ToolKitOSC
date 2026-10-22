@@ -1,5 +1,5 @@
-//! Home: sharing or stopped, the viewer count, the profile and the last action. Resuming after a
-//! Stop is the bar's (see `super::super::resume`).
+//! Home: sharing or stopped, the HUD on or off, the viewer count, the profile and the last action.
+//! Resuming after a Stop is the bar's (see `super::super::resume`).
 use egui::{Ui, Vec2};
 
 use super::Page;
@@ -35,6 +35,10 @@ impl Page for Home {
         widgets::header(ui, cx, "ToolKitOSC", |ui, cx| {
             let (label, color) = if state.paused { ("Stopped", cx.theme.stop) } else { ("Sharing", cx.theme.ok) };
             widgets::chip(ui, label, color, 120.0);
+            let on = state.hud.enabled;
+            if widgets::button(ui, cx, if on { "Hide HUD" } else { "Show HUD" }, Vec2::new(86.0, 26.0)) {
+                cx.actions.push(ToApp::Hud { on: !on });
+            }
         });
         let stats = [
             (home.watching.to_string(), format!("watching · {} signed in", home.signed_in)),

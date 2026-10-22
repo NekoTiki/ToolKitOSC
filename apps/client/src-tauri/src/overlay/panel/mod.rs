@@ -92,7 +92,8 @@ pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<Stri
 /// Starts, restarts or stops the panel process. Called every few seconds while the add-on is on,
 /// with whether SteamVR runs.
 pub fn supervise(app: &AppHandle, steamvr: bool) {
-    let want = steamvr && store::get(app).panel.enabled;
+    let settings = store::get(app);
+    let want = steamvr && (settings.panel.enabled || settings.hud.enabled);
     let mut changed = false;
     {
         let mut panel = overlay(app).panel.lock().unwrap();

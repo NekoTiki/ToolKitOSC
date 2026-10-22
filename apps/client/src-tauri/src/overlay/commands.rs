@@ -1,8 +1,9 @@
 //! The VR overlay commands the webview calls (see `super`).
 
+use serde::Serialize;
 use tauri::AppHandle;
 
-use super::model::OverlaySettings;
+use super::model::{OverlaySettings, Target};
 use crate::wrist::protocol::{Profile, Theme};
 
 #[tauri::command]
@@ -22,6 +23,27 @@ pub fn overlay_save(app: AppHandle, settings: OverlaySettings) -> Result<(), Str
     });
     super::settings_changed(&app);
     Ok(())
+}
+
+/// What each part of the overlay is doing, for its tab in Settings.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayStatus {
+    /// The panel process runs: SteamVR is on and the panel or the HUD is.
+    in_vr: bool,
+    /// The panel process crashed too often and stopped.
+    gave_up: bool,
+    /// Where toasts go now, None while off or nothing runs.
+    toasts_to: Option<Target>
+}
+
+#[tauri::command]
+pub fn overlay_status(app: AppHandle) -> OverlayStatus {
+    let (in_vr, gave_up) = {
+        let panel = super::overlay(&app).panel.lock().unwrap();
+        (panel.running(), panel.gave_up)
+    };
+    OverlayStatus { in_vr, gave_up, toasts_to: super::destination(&app) }
 }
 
 /// Sends a toast right away, to check it shows up in the headset.

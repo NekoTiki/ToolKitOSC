@@ -53,7 +53,7 @@ const SECTIONS: Section[] = [
   { key: 'bhaptics', label: 'bHaptics', description: 'Player and your gear · beta', icon: 'i-lucide-shirt', component: BhapticsSettings, addon: 'bhaptics' },
   { key: 'owo', label: 'OWO', description: 'The OWO app and your suit · beta', icon: 'i-lucide-zap', component: OwoSettings, addon: 'owo' },
   { key: 'esp32', label: 'ESP32 boards', description: 'Boards and outputs', icon: 'i-lucide-cpu', component: BoardsSettings, addon: 'boards' },
-  { key: 'vr-overlay', label: 'VR overlay', description: 'Wrist panel and toasts · experimental', icon: 'i-lucide-glasses', component: OverlaySettings, addon: 'overlay' }
+  { key: 'vr-overlay', label: 'VR overlay', description: 'Wrist panel, HUD and toasts · experimental', icon: 'i-lucide-glasses', component: OverlaySettings, addon: 'overlay', wide: true }
 ]
 
 const route = useRoute()
