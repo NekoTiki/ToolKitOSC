@@ -88,7 +88,7 @@ pub trait Addon: Sync {
 }
 
 /// Every add-on, in the order the Add-ons page lists them.
-static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::bhaptics::Addon, &crate::owo::Addon, &crate::boards::Addon];
+static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::bhaptics::Addon, &crate::owo::Addon, &crate::boards::Addon, &crate::overlay::Addon];
 
 /// Whether it runs on this OS. One that doesn't is left out everywhere: never listed, offered or
 /// started (bHaptics on Linux, where there's no bHaptics Player).
@@ -420,7 +420,8 @@ mod tests {
             Addon::manifest(&crate::leash::Addon),
             Addon::manifest(&crate::bhaptics::Addon),
             Addon::manifest(&crate::owo::Addon),
-            Addon::manifest(&crate::boards::Addon)
+            Addon::manifest(&crate::boards::Addon),
+            Addon::manifest(&crate::overlay::Addon)
         ]
     }
 

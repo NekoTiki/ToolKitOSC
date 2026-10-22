@@ -156,6 +156,10 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
     }
     let _ = app.emit("command-executed", executed);
 
+    // Toasts are only for you, so they name the viewer whatever the share page shows.
+    let value = outcome.shock.as_ref().or_else(|| sent.get("value"));
+    crate::overlay::viewer_command(app, &viewer.display_name, control.as_ref(), kind.unwrap_or_default(), control_name, value);
+
     // Automations can start from it. A shock that didn't go out (cooldown) doesn't count.
     if let Some(control) = &control {
         let control_type = text(control, "type").map(str::to_owned);
