@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
+import DraftNotice from '@renderer/components/DraftNotice.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
@@ -600,6 +601,12 @@ onBeforeRouteLeave(async () => {
           </UButton>
         </template>
       </PageHeader>
+      <DraftNotice
+        v-if="profile?.createdBy"
+        :created-by="profile.createdBy"
+        @keep="save"
+        @discard="remove"
+      />
 
       <!-- Name and Editing for stay put while the control groups scroll under them. basis-full puts them on their own row under the title and actions. -->
       <div class="grid w-full basis-full grid-cols-1 items-start gap-3.5 lg:grid-cols-2">

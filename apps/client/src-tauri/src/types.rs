@@ -14,6 +14,14 @@ pub enum OscArg {
     Str(String),
 }
 
+/// An AI assistant made it (see `mcp`), and you haven't kept or edited it yet: a draft.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreatedBy {
+    pub assistant: String,
+    /// Unix ms.
+    pub at: u64
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OscMessage {
     pub address: String,

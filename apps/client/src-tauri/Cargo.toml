@@ -53,6 +53,9 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "async-
 rmcp = { version = "3.6", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
 tokio-util = "0.7"
+# The tool input shapes assistants see (see src/mcp), from the same types the app saves. The version
+# rmcp uses.
+schemars = "1"
 # The wrist panel's UI (see src/wrist), drawn on the CPU into a SteamVR overlay.
 egui = "0.29"
 # Its own crate so it can be built optimized in dev too: unoptimized, a frame takes half a second.

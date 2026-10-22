@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AutomationGuardRow from '@renderer/components/automations/AutomationGuardRow.vue'
 import AutomationStepCard from '@renderer/components/automations/AutomationStepCard.vue'
+import DraftNotice from '@renderer/components/DraftNotice.vue'
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
@@ -427,6 +428,12 @@ onBeforeRouteLeave(async () => {
           <span class="rounded-full bg-secondary/15 px-2.5 py-1 text-xs font-medium text-secondary">Running</span>
         </template>
       </PageHeader>
+      <DraftNotice
+        v-if="stored?.createdBy"
+        :created-by="stored.createdBy"
+        @keep="submit"
+        @discard="deleteAutomation"
+      />
     </template>
 
     <div

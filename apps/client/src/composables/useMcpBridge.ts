@@ -6,7 +6,10 @@ import { db as clientsDb } from '@renderer/db/clients.db'
 import { db as commandsDb } from '@renderer/db/commands.db'
 import type { McpClient, McpRequest } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
+import { getUUID } from '@renderer/utils/uuid'
 import { ownsCommand, viewerLookup } from '@renderer/utils/viewers'
+import type { ControlType, CreatedBy } from '@toolkitosc/shared-ui'
+import { KNOWN_CONTROL_TYPES } from '@toolkitosc/shared-ui'
 import type { Ref } from 'vue'
 import { ref, toRaw } from 'vue'
 
@@ -48,8 +51,9 @@ export function useMcpClients(): Ref<McpClient[]> {
 const MAX_ACTIVITY = 500
 
 export function useMcpBridge(): void {
-  const { controls } = useControls()
-  const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
+  const { controls, getControl, addGroup, updateGroup, setGroupHidden, addControl, updateControl, deleteControl } = useControls()
+  const { lockedControlGroups, currentLockedControlsGroup, addLockedControlGroup, updateLockedControlGroup, removeLockedControlGroup } =
+    useLockedControls()
   const { viewerGroups, memberCount, membershipsOf } = useViewerGroups()
   const { isOnline } = useClientsDb()
 
@@ -98,6 +102,82 @@ export function useMcpBridge(): void {
     }))
   }
 
+  // Drafts: what an assistant makes carries its name until you keep it or edit it.
+  const draftOf = (createdBy: CreatedBy | undefined, client: string): boolean => createdBy?.assistant === client
+
+  // New controls go into a hidden group per assistant, so viewers never see a draft.
+  const createControls = (args: Record<string, unknown>, client: string): unknown => {
+    const list = Array.isArray(args.controls) ? args.controls : []
+    const invalid = list.findIndex(
+      (control) => typeof control?.name !== 'string' || !KNOWN_CONTROL_TYPES.includes(control?.type)
+    )
+    if (!list.length || invalid !== -1) throw new Error(`Control ${invalid + 1} needs a name and a type from tkosc://docs/control-types`)
+
+    const name = `From ${client}`
+    let groupId = controls.value.find((group) => group.name === name)?.id
+    if (!groupId) {
+      groupId = addGroup()
+      updateGroup(groupId, name)
+      setGroupHidden(groupId, true)
+    }
+
+    const createdBy = { assistant: client, at: Date.now() }
+    const ids = list.map((control) => {
+      const id = getUUID()
+      addControl(groupId!, { ...control, id, createdBy } as ControlType)
+
+      return id
+    })
+
+    return { groupId, controlIds: ids }
+  }
+
+  const updateOneControl = (args: Record<string, unknown>): unknown => {
+    const control = getControl(String(args.groupId), String(args.controlId))
+    if (!control) throw new Error('No such control: get the ids from list_controls')
+    const changes = { ...(args.changes as Record<string, unknown>) }
+    delete changes.id
+    delete changes.type
+    delete changes.createdBy
+    updateControl(String(args.groupId), { ...control, ...changes } as ControlType)
+
+    return null
+  }
+
+  const saveProfile = (args: Record<string, unknown>, client: string): unknown => {
+    const data = {
+      name: String(args.name),
+      lockedControls: (args.lockedControls ?? {}) as Record<string, boolean>,
+      limits: (args.limits ?? {}) as never,
+      groupOverrides: (args.groupOverrides ?? {}) as never,
+      createdBy: { assistant: client, at: Date.now() }
+    }
+    if (!args.id) return { id: addLockedControlGroup(data) }
+
+    const existing = lockedControlGroups.value.find((profile) => profile.id === args.id)
+    if (!existing) throw new Error('No such profile: leave id out to make a new one')
+    if (!draftOf(existing.createdBy, client)) throw new Error("That one isn't your draft: the host made it, or kept it")
+    updateLockedControlGroup(existing.id, data)
+
+    return { id: existing.id }
+  }
+
+  const deleteDraft = (args: Record<string, unknown>, client: string): unknown => {
+    if (args.kind === 'control') {
+      const control = getControl(String(args.groupId), String(args.id))
+      if (!control) throw new Error('No such control')
+      if (!draftOf(control.createdBy, client)) throw new Error("That one isn't your draft")
+      deleteControl(String(args.groupId), control.id)
+    } else {
+      const profile = lockedControlGroups.value.find((p) => p.id === args.id)
+      if (!profile) throw new Error('No such profile')
+      if (!draftOf(profile.createdBy, client)) throw new Error("That one isn't your draft")
+      removeLockedControlGroup(profile.id)
+    }
+
+    return null
+  }
+
   const handlers: Record<string, (args: Record<string, unknown>, request: McpRequest) => unknown> = {
     list_controls: () => plain(controls.value),
     get_control: (args) => findControl(args.groupId, args.controlId),
@@ -111,6 +191,10 @@ export function useMcpBridge(): void {
       return null
     },
     get_activity: (args) => activity(args),
+    create_controls: (args, request) => createControls(args, request.client),
+    update_control: (args) => updateOneControl(args),
+    save_profile: (args, request) => saveProfile(args, request.client),
+    delete_draft: (args, request) => deleteDraft(args, request.client),
     approve: (args, request) => {
       approvals.value = [
         ...approvals.value,

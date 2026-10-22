@@ -20,7 +20,10 @@ pub struct SavedPattern {
     pub icon: Option<String>,
     /// Intensities 0–100, one per 50 ms. Playback loops them.
     pub samples: Vec<f64>,
-    pub updated_at: u64
+    pub updated_at: u64,
+    /// Set while it's an assistant's draft.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<crate::types::CreatedBy>
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

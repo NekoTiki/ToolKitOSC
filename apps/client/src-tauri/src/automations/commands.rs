@@ -12,7 +12,8 @@ pub fn automations_list(app: AppHandle) -> Vec<Automation> {
 /// Creates or replaces an automation, or fails with a message to show.
 #[tauri::command]
 pub fn automation_save(app: AppHandle, automation: Automation) -> Result<(), String> {
-    super::save(&app, automation)
+    // Saved by you, so no longer an assistant's draft.
+    super::save(&app, Automation { created_by: None, ..automation })
 }
 
 #[tauri::command]

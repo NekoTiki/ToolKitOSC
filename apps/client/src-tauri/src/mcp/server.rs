@@ -12,7 +12,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::tool::ToolCallContext;
-use rmcp::model::{CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation, ListResourcesResult, ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, ServerCapabilities, ServerConfig};
+use rmcp::model::{CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, GetPromptRequestParams, GetPromptResponse, Implementation, ListPromptsResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, ServerCapabilities, ServerConfig};
 use rmcp::service::{NotificationContext, RequestContext};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -86,7 +86,7 @@ pub struct Session {
 
 impl Session {
     fn new(app: AppHandle) -> Self {
-        Self { app, client: Mutex::new(None), rate: Mutex::new(RateLimit::default()), allowed: Mutex::new(HashMap::new()), tools: Self::read_router() + Self::play_router() }
+        Self { app, client: Mutex::new(None), rate: Mutex::new(RateLimit::default()), allowed: Mutex::new(HashMap::new()), tools: Self::read_router() + Self::play_router() + Self::edit_router() }
     }
 
     /// The assistant's name, as the host sees it.
@@ -133,6 +133,8 @@ impl Drop for Session {
 
 const AVATAR: &str = "tkosc://avatar/current";
 const ACTIVITY: &str = "tkosc://activity/live";
+const AUTOMATION_DOCS: &str = "tkosc://docs/automations";
+const CONTROL_DOCS: &str = "tkosc://docs/control-types";
 
 fn refused(text: &str) -> CallToolResponse {
     CallToolResult::error(vec![ContentBlock::text(text)]).into()
@@ -140,7 +142,7 @@ fn refused(text: &str) -> CallToolResponse {
 
 impl ServerHandler for Session {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().enable_prompts().build())
             .with_server_info(Implementation::new("ToolKitOSC", env!("CARGO_PKG_VERSION")))
             .with_instructions(INSTRUCTIONS)
     }
@@ -176,6 +178,14 @@ impl ServerHandler for Session {
         self.tools.call(ToolCallContext::new(self, request, context)).await
     }
 
+    async fn list_prompts(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListPromptsResult, ErrorData> {
+        Ok(ListPromptsResult::with_all_items(super::prompts::list()))
+    }
+
+    async fn get_prompt(&self, request: GetPromptRequestParams, _context: RequestContext<RoleServer>) -> Result<GetPromptResponse, ErrorData> {
+        super::prompts::get(&request.name, request.arguments.as_ref()).map(Into::into).ok_or_else(|| ErrorData::invalid_params(format!("No prompt {}", request.name), None))
+    }
+
     async fn list_resources(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListResourcesResult, ErrorData> {
         if !self.resources_allowed() {
             return Ok(ListResourcesResult::default());
@@ -183,7 +193,9 @@ impl ServerHandler for Session {
         let resource = |uri: &str, name: &str, description: &str| Resource::new(uri, name).with_description(description).with_mime_type("application/json");
         Ok(ListResourcesResult::with_all_items(vec![
             resource(AVATAR, "Current avatar", "The avatar you're wearing, its parameters and their last values"),
-            resource(ACTIVITY, "Activity", "The last 50 things viewers and assistants did")
+            resource(ACTIVITY, "Activity", "The last 50 things viewers and assistants did"),
+            resource(AUTOMATION_DOCS, "Automation shapes", "JSON Schema of what save_automation takes: every kind of when, only if and then"),
+            resource(CONTROL_DOCS, "Control shapes", "JSON Schema of every control type, for create_controls")
         ]))
     }
 
@@ -194,6 +206,8 @@ impl ServerHandler for Session {
         let text = match request.uri.as_str() {
             AVATAR => self.avatar(),
             ACTIVITY => self.ask_webview("get_activity", serde_json::json!({ "limit": 50 })).await.map(|value| value.to_string()),
+            AUTOMATION_DOCS => Ok(super::tools::automation_docs()),
+            CONTROL_DOCS => Ok(super::tools::CONTROL_TYPES_DOCS.to_owned()),
             _ => return Err(ErrorData::resource_not_found(format!("No resource {}", request.uri), None))
         };
         let text = text.map_err(|err| ErrorData::internal_error(err, None))?;

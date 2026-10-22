@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DraftNotice from '@renderer/components/DraftNotice.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import PatternRecorder from '@renderer/components/patterns/PatternRecorder.vue'
 import PatternSparkline from '@renderer/components/patterns/PatternSparkline.vue'
@@ -217,6 +218,12 @@ onBeforeRouteLeave(async () => {
           </UButton>
         </template>
       </PageHeader>
+      <DraftNotice
+        v-if="pattern?.createdBy"
+        :created-by="pattern.createdBy"
+        @keep="save"
+        @discard="remove"
+      />
     </template>
 
     <EmptyState
