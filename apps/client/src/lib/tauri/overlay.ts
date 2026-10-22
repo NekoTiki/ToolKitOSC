@@ -26,6 +26,8 @@ export interface OverlayPanel {
 export interface OverlaySettings {
   notify: OverlayNotify
   panel: OverlayPanel
+  // Avatar id -> the controls pinned to the wrist (set with overlaySetPinned).
+  pinned: Record<string, string[]>
 }
 
 export type OverlayAction = { type: 'stop' } | { type: 'resume' } | { type: 'profile'; id: string | null }
@@ -34,8 +36,11 @@ export const overlayApi = {
   overlaySettings: (): Promise<OverlaySettings> => invoke('overlay_settings'),
   overlaySave: (settings: OverlaySettings): Promise<void> => invoke('overlay_save', { settings }),
   overlayTestToast: (): Promise<void> => invoke('overlay_test_toast'),
-  overlaySetContext: (profiles: { id: string; name: string }[], profileId: string | null): Promise<void> =>
-    invoke('overlay_set_context', { profiles, profileId }),
+  overlaySetContext: (profiles: { id: string; name: string }[], profileId: string | null, viewerGroups: { id: string; name: string }[]): Promise<void> =>
+    invoke('overlay_set_context', { profiles, profileId, viewerGroups }),
+  // The controls pinned to your wrist on the avatar you're wearing.
+  overlayPinned: (): Promise<string[]> => invoke('overlay_pinned'),
+  overlaySetPinned: (controlId: string, pinned: boolean): Promise<void> => invoke('overlay_set_pinned', { controlId, pinned }),
   // Something pressed on the wrist panel.
   onOverlayAction: (callback: (action: OverlayAction) => void): void => {
     void listen<OverlayAction>('overlay-action', (event) => callback(event.payload))

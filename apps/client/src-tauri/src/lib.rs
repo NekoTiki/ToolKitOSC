@@ -228,7 +228,9 @@ pub fn run() {
             overlay::commands::overlay_settings,
             overlay::commands::overlay_save,
             overlay::commands::overlay_test_toast,
-            overlay::commands::overlay_set_context
+            overlay::commands::overlay_set_context,
+            overlay::commands::overlay_pinned,
+            overlay::commands::overlay_set_pinned
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;

@@ -169,6 +169,25 @@ pub fn viewer_counts(app: &AppHandle) -> (usize, usize) {
     (inner.clients.len(), signed_in)
 }
 
+/// The viewers on the share page now, each with the viewer groups they're in.
+pub fn viewers(app: &AppHandle) -> Vec<(viewer::Viewer, Vec<String>)> {
+    let inner = server(app).inner.lock().unwrap();
+    inner
+        .clients
+        .iter()
+        .filter_map(viewer::describe)
+        .map(|viewer| {
+            let groups = inner.policy.as_ref().and_then(|policy| policy.memberships.get(&viewer.key).cloned()).unwrap_or_default();
+            (viewer, groups)
+        })
+        .collect()
+}
+
+/// The control groups of the avatar you're wearing, as the webview last pushed them.
+pub fn control_groups(app: &AppHandle) -> Vec<serde_json::Value> {
+    server(app).inner.lock().unwrap().policy.as_ref().map(|policy| policy.groups.clone()).unwrap_or_default()
+}
+
 /// A control of the avatar you're wearing, as the webview last pushed it.
 pub fn find_control(app: &AppHandle, group_id: &str, control_id: &str) -> Option<serde_json::Value> {
     let inner = server(app).inner.lock().unwrap();

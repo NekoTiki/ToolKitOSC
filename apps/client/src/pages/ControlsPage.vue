@@ -16,6 +16,7 @@ import { useControlsView } from '@renderer/composables/useControlsView'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
 import { usePresets } from '@renderer/composables/usePresets'
+import { useWristPins } from '@renderer/composables/useVrOverlay'
 import type { CommandWithoutIds, ControlGroup, ControlType, PresetControl } from '@toolkitosc/shared-ui'
 import { Control, controlTileSpan } from '@toolkitosc/shared-ui'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -28,6 +29,8 @@ import { useRoute, useRouter } from 'vue-router'
 // drag handles, and group checkboxes for bulk actions - so nothing can be moved or deleted by
 // accident while in use.
 const PINNED = 'pinned'
+// The controls pinned to your wrist (the VR overlay panel's Pinned page), while that add-on is on.
+const WRIST = 'wrist'
 // Every preset of the current avatar as a tile, so applying one is a single tap - without having
 // to make a Preset control for each of them first.
 const PRESETS = 'presets'
@@ -57,7 +60,8 @@ const { lockedControlGroups, currentLockedControlsGroup, defaultLockedControlsGr
 const { density, editMode } = useControlsView()
 const { openModal: confirm } = useAreYouSureModal()
 const { presets, applyPreset } = usePresets()
-const { offAddonForControlType } = useAddons()
+const { offAddonForControlType, isOn } = useAddons()
+const { wristPins, setWristPin } = useWristPins()
 const { setAddon } = useAddonSwitch()
 const toast = useToast()
 
@@ -72,7 +76,7 @@ const selectedId = computed(() => {
   const param = route.params.groupId
   const id = Array.isArray(param) ? param[0] : param
 
-  if (id === PINNED || id === PRESETS) return id
+  if (id === PINNED || id === PRESETS || (id === WRIST && isOn('overlay'))) return id
 
   return controls.value.find((group) => group.id === id)?.id ?? controls.value[0]?.id ?? null
 })
@@ -108,6 +112,13 @@ const shownInGroup = computed<ShownControl[]>(() => {
     return controls.value.flatMap((group) => group.controls.filter((control) => control.pinned).map((control) => ({ control, groupId: group.id })))
   }
 
+  // In the order the panel shows them.
+  if (selectedId.value === WRIST) {
+    const all = controls.value.flatMap((group) => group.controls.map((control) => ({ control, groupId: group.id })))
+
+    return wristPins.value.flatMap((id) => all.filter((item) => item.control.id === id))
+  }
+
   return selectedGroup.value?.controls.map((control) => ({ control, groupId: selectedGroup.value!.id })) ?? []
 })
 
@@ -136,8 +147,15 @@ const presetContextItems = (tile: PresetControl): ContextMenuItem[][] => [
 
 const pinnedCount = computed(() => controls.value.reduce((n, group) => n + group.controls.filter((c) => c.pinned).length, 0))
 
+const wristCount = computed(() => {
+  const ids = new Set(controls.value.flatMap((group) => group.controls.map((control) => control.id)))
+
+  return wristPins.value.filter((id) => ids.has(id)).length
+})
+
 const builtInViews = computed(() => [
   { id: PINNED, label: 'Pinned', icon: 'i-lucide-star', count: pinnedCount.value, hint: `${pinnedCount.value} pinned from any group` },
+  ...(isOn('overlay') ? [{ id: WRIST, label: 'On your wrist', icon: 'i-lucide-watch', count: wristCount.value, hint: `${wristCount.value} of 6 on the VR overlay panel` }] : []),
   { id: PRESETS, label: 'Presets', icon: 'i-lucide-layers', count: presets.value.length, hint: `${presets.value.length} presets for this avatar` }
 ])
 
@@ -348,6 +366,22 @@ const togglePinned = ({ control, groupId }: ShownControl): void => {
   toast.add({ title: control.pinned ? `Unpinned ${control.name}` : `Pinned ${control.name}`, icon: 'i-lucide-pin' })
 }
 
+// With the VR overlay on, Pin opens a submenu: in the app, or to your wrist (the panel's Pinned page).
+const pinItem = (item: ShownControl): ContextMenuItem => {
+  if (!isOn('overlay')) return { label: item.control.pinned ? 'Unpin' : 'Pin', icon: 'i-lucide-pin', onSelect: () => togglePinned(item) }
+
+  const onWrist = wristPins.value.includes(item.control.id)
+
+  return {
+    label: 'Pin',
+    icon: 'i-lucide-pin',
+    children: [
+      { type: 'checkbox', label: 'In the app', checked: !!item.control.pinned, onUpdateChecked: () => togglePinned(item) },
+      { type: 'checkbox', label: 'To your wrist', checked: onWrist, onUpdateChecked: (checked: boolean) => setWristPin(item.control.id, checked) }
+    ]
+  }
+}
+
 // Right-click shortcuts for desktop users; the same actions are on the tiles in Edit mode for VR.
 //
 // One context menu per list, not one per tile or group row: wrapping each draggable item in its own
@@ -377,7 +411,7 @@ const contextItems = (item: ShownControl): ContextMenuItem[][] => [
   [
     { label: 'Edit', icon: 'i-lucide-pen', onSelect: () => openEditor(item.groupId, item.control.id) },
     { label: 'Activity', icon: 'i-lucide-history', onSelect: () => openActivity(item.control.id) },
-    { label: item.control.pinned ? 'Unpin' : 'Pin', icon: 'i-lucide-pin', onSelect: () => togglePinned(item) },
+    pinItem(item),
     { label: 'Move to', icon: 'i-lucide-folder-input', disabled: controls.value.length < 2, children: moveItems(item) }
   ],
   [{ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteTile(item) }]
@@ -396,6 +430,7 @@ const activeProfile = computed(() => lockedControlGroups.value.find((group) => g
 const title = computed(() => {
   if (search.value) return 'Search'
   if (selectedId.value === PINNED) return 'Pinned'
+  if (selectedId.value === WRIST) return 'On your wrist'
   if (selectedId.value === PRESETS) return 'Presets'
 
   return selectedGroup.value?.name ?? 'Controls'
@@ -405,6 +440,7 @@ const meta = computed(() => {
   if (search.value) return `${shown.value.length} controls match "${query.value.trim()}"`
 
   if (selectedId.value === PRESETS) return `${presets.value.length} ${presets.value.length === 1 ? 'preset' : 'presets'} for this avatar`
+  if (selectedId.value === WRIST) return `${shown.value.length} of 6 · in the order the VR overlay panel shows them`
 
   const count = `${shown.value.length} ${shown.value.length === 1 ? 'control' : 'controls'}`
 
@@ -837,6 +873,12 @@ const mode = computed<'use' | 'edit'>({
         icon="i-lucide-star"
         title="Nothing pinned yet"
         description="Pin the controls you use most to reach them here from any group. Right-click a tile, or open it in Edit mode."
+      />
+      <EmptyState
+        v-else-if="selectedId === WRIST"
+        icon="i-lucide-watch"
+        title="Nothing on your wrist yet"
+        description="Until you pin some, the panel shows this avatar's first 4 controls. Right-click a tile, then Pin › To your wrist, up to 6."
       />
       <EmptyState
         v-else-if="selectedGroup"

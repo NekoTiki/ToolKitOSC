@@ -15,12 +15,16 @@ use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::{overlay, store};
-use crate::wrist::protocol::{LastAction, Profile, State, ToApp};
+use crate::wrist::protocol::{AddonRow, Entry, Profile, State, ToApp, Viewer};
 
 /// The panel crashing this many times within `CRASH_WINDOW` stops it until you change a setting.
 const MAX_CRASHES: usize = 3;
 const CRASH_WINDOW: Duration = Duration::from_secs(60);
 const RECENT: Duration = Duration::from_secs(60);
+const ACTIVITY: usize = 20;
+/// While the panel is connected, its state is checked this often: toy levels, the leash and touch
+/// change without an event of their own.
+const LIVE_EVERY: Duration = Duration::from_millis(250);
 
 #[derive(Default)]
 pub struct Panel {
@@ -35,7 +39,10 @@ pub struct Panel {
     /// Profiles and the active one, from the webview (see `set_context`).
     profiles: Vec<Profile>,
     profile: Option<String>,
-    last: Option<LastAction>,
+    /// Viewer groups by id, for their names.
+    groups: Vec<Profile>,
+    /// Newest first.
+    activity: VecDeque<Entry>,
     recent: VecDeque<Instant>
 }
 
@@ -85,8 +92,10 @@ async fn serve(app: &AppHandle, stream: tokio::net::TcpStream, token: &str) -> R
     }
     let mut states = overlay(app).panel.lock().unwrap().state.as_ref().ok_or("the add-on is off")?.subscribe();
     states.mark_changed();
+    let mut live = tokio::time::interval(LIVE_EVERY);
     loop {
         tokio::select! {
+            _ = live.tick() => refresh(app),
             changed = states.changed() => {
                 changed.map_err(|_| "the add-on stopped")?;
                 let json = serde_json::to_string(&*states.borrow_and_update()).unwrap();
@@ -115,8 +124,15 @@ fn act(app: &AppHandle, action: ToApp) {
             crate::addons::stop_everything(&handle).await;
         });
     }
-    if !matches!(action, ToApp::Hello { .. }) {
-        let _ = app.emit("overlay-action", &action);
+    match &action {
+        ToApp::Control { group_id, control_id, level } => {
+            super::tiles::press(app, group_id, control_id, *level);
+            refresh(app);
+        }
+        ToApp::Stop | ToApp::Resume | ToApp::Profile { .. } => {
+            let _ = app.emit("overlay-action", &action);
+        }
+        ToApp::Hello { .. } => {}
     }
 }
 
@@ -124,31 +140,82 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
-/// A viewer's action, for Last and the count of the last minute.
-pub fn note_action(app: &AppHandle, text: String) {
+/// A viewer's action, for Activity, Last and the count of the last minute.
+pub fn note_action(app: &AppHandle, who: &str, what: &str) {
     {
         let mut panel = overlay(app).panel.lock().unwrap();
-        panel.last = Some(LastAction { at: now_ms(), text });
+        panel.activity.push_front(Entry { at: now_ms(), who: who.to_owned(), what: what.to_owned() });
+        panel.activity.truncate(ACTIVITY);
         panel.recent.push_back(Instant::now());
     }
     refresh(app);
 }
 
-pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>) {
+pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>) {
     {
         let mut panel = overlay(app).panel.lock().unwrap();
         panel.profiles = profiles;
         panel.profile = profile;
+        panel.groups = groups;
     }
     refresh(app);
 }
 
+fn text<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a str> {
+    value.get(key).and_then(serde_json::Value::as_str)
+}
+
+/// The add-ons that are on, as their cards say, and a row per toy control with its level.
+fn addon_rows(app: &AppHandle) -> Vec<AddonRow> {
+    let mut rows: Vec<AddonRow> = crate::addons::statuses(app)
+        .into_iter()
+        .filter(|(id, _, _)| *id != "overlay")
+        .map(|(id, name, status)| {
+            // The leash says who pulls and how hard.
+            let leash = (id == "leash").then(|| crate::leash::view(app)).filter(|view| view.active.is_some());
+            AddonRow {
+                name: name.to_owned(),
+                status: leash.as_ref().and_then(|view| view.active.clone()).map_or(status.text.clone(), |active| format!("{active} · {}", status.text)),
+                level: leash.map(|view| view.stretch),
+                touched: false
+            }
+        })
+        .collect();
+    let groups = crate::server::control_groups(app);
+    let toys = groups.iter().filter_map(|group| group.get("controls")?.as_array()).flatten().filter(|control| text(control, "type") == Some("intiface-toy"));
+    for control in toys {
+        rows.push(AddonRow {
+            name: text(control, "name").unwrap_or_default().to_owned(),
+            status: "Toy".into(),
+            level: Some(crate::controls::toy_level(text(control, "id").unwrap_or_default())),
+            touched: control.get("paused").and_then(serde_json::Value::as_bool).unwrap_or(false)
+        });
+    }
+    rows
+}
+
 /// Sends the panel the state again, if it changed.
 pub fn refresh(app: &AppHandle) {
+    if overlay(app).panel.lock().unwrap().state.is_none() {
+        return;
+    }
     let paused = crate::automations::is_paused(app);
     let (watching, signed_in) = crate::server::viewer_counts(app);
+    let viewers = crate::server::viewers(app);
     let settings = store::get(app).panel;
+    let (pinned, nothing_pinned) = super::tiles::pinned(app);
+    let addons = addon_rows(app);
+    let avatar = app.state::<crate::state::AppState>().avatar_details.lock().unwrap().as_ref().map(|details| details.name.clone());
     let mut panel = overlay(app).panel.lock().unwrap();
+    let viewers = viewers
+        .into_iter()
+        .map(|(viewer, groups)| Viewer {
+            last: panel.activity.iter().find(|entry| entry.who == viewer.display_name).cloned(),
+            groups: groups.iter().filter_map(|id| panel.groups.iter().find(|group| &group.id == id).map(|group| group.name.clone())).collect(),
+            signed_in: viewer.discord_id.is_some(),
+            name: viewer.display_name
+        })
+        .collect();
     while panel.recent.front().is_some_and(|at| at.elapsed() > RECENT) {
         panel.recent.pop_front();
     }
@@ -158,8 +225,13 @@ pub fn refresh(app: &AppHandle) {
         signed_in,
         profile: panel.profile.clone(),
         profiles: panel.profiles.clone(),
-        last: panel.last.clone(),
+        activity: panel.activity.iter().cloned().collect(),
         recent: panel.recent.len(),
+        viewers,
+        avatar,
+        pinned,
+        nothing_pinned,
+        addons,
         panel: settings
     };
     if let Some(tx) = &panel.state {
