@@ -36,8 +36,38 @@ impl Default for NotifySettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Hand {
+    #[default]
+    Left,
+    Right
+}
+
+/// The panel on your wrist.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PanelSettings {
+    pub enabled: bool,
+    pub hand: Hand,
+    /// 10–30.
+    pub width_cm: f32,
+    /// 0.3–1.
+    pub opacity: f32,
+    /// Fully shown within this angle between the panel's face and your eyes; it fades out over the
+    /// next 15°.
+    pub show_within_deg: f32
+}
+
+impl Default for PanelSettings {
+    fn default() -> Self {
+        Self { enabled: true, hand: Hand::Left, width_cm: 16.0, opacity: 0.9, show_within_deg: 35.0 }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OverlaySettings {
-    pub notify: NotifySettings
+    pub notify: NotifySettings,
+    pub panel: PanelSettings
 }

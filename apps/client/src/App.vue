@@ -10,6 +10,7 @@ import { useAutomationRunner } from '@renderer/composables/useAutomationRunner'
 import { useLogRetention } from '@renderer/composables/useLogRetention'
 import { useStopEverythingTriggers } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
+import { useVrOverlay } from '@renderer/composables/useVrOverlay'
 import { api } from '@renderer/lib/tauri-bridge'
 import { onMounted } from 'vue'
 
@@ -24,6 +25,7 @@ useLogRetention()
 useAppUpdater()
 useStopEverythingTriggers()
 useAutomationRunner()
+useVrOverlay()
 </script>
 
 <template>

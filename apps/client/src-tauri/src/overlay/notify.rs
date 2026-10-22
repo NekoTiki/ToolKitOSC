@@ -55,7 +55,7 @@ impl Toast {
     }
 }
 
-fn capitalize(text: &str) -> String {
+pub fn capitalize(text: &str) -> String {
     let mut chars = text.chars();
     chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }
@@ -173,13 +173,8 @@ async fn send_ovr_toolkit(title: &str, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Which of the two runs now, XSOverlay first.
-pub fn detect() -> Option<Target> {
-    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
-
-    let mut system = System::new();
-    system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
-    let names: Vec<String> = system.processes().values().map(|process| process.name().to_string_lossy().to_lowercase()).collect();
+/// Which of the two runs, XSOverlay first, from the running processes' names in lower case.
+pub fn detect(names: &[String]) -> Option<Target> {
     if names.iter().any(|name| name.starts_with("xsoverlay")) {
         Some(Target::Xsoverlay)
     } else if names.iter().any(|name| name.starts_with("ovr toolkit")) {

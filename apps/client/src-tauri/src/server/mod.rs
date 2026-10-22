@@ -162,6 +162,13 @@ pub fn set_policy(app: &AppHandle, policy: policy::Policy) {
     policy::clamp_running(app, previous.as_ref(), &policy);
 }
 
+/// How many viewers are on the share page, and how many of them signed in.
+pub fn viewer_counts(app: &AppHandle) -> (usize, usize) {
+    let inner = server(app).inner.lock().unwrap();
+    let signed_in = inner.clients.iter().filter_map(viewer::describe).filter(|viewer| viewer.discord_id.is_some()).count();
+    (inner.clients.len(), signed_in)
+}
+
 /// A control of the avatar you're wearing, as the webview last pushed it.
 pub fn find_control(app: &AppHandle, group_id: &str, control_id: &str) -> Option<serde_json::Value> {
     let inner = server(app).inner.lock().unwrap();
@@ -312,6 +319,9 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
 
     if !joined.is_empty() {
         crate::overlay::viewers_joined(app, joined, watching);
+    }
+    if kind.as_deref() == Some("client-list") {
+        crate::overlay::viewers_changed(app);
     }
 
     if kind.as_deref() == Some("command") {

@@ -23,6 +23,7 @@ mod steamvr;
 mod toys;
 mod types;
 mod vrcx;
+mod wrist;
 
 use std::sync::atomic::Ordering;
 
@@ -73,6 +74,27 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<tauri::tray::TrayIcon> {
         .inspect(|tray| {
             let _ = tray.set_visible(false);
         })
+}
+
+/// `toolkitosc --overlay <port> <token>`: the wrist panel, started by the app (see `wrist`).
+/// Returns None for a normal launch.
+pub fn run_overlay() -> Option<std::process::ExitCode> {
+    let args: Vec<String> = std::env::args().collect();
+    let [_, flag, port, token] = args.as_slice() else {
+        return None;
+    };
+    if flag != "--overlay" {
+        return None;
+    }
+    logging::init();
+    let port = port.parse().ok()?;
+    Some(match wrist::main(port, token.clone()) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(err) => {
+            tracing::warn!("Panel: {err}");
+            std::process::ExitCode::FAILURE
+        }
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -205,7 +227,8 @@ pub fn run() {
             // VR overlay
             overlay::commands::overlay_settings,
             overlay::commands::overlay_save,
-            overlay::commands::overlay_test_toast
+            overlay::commands::overlay_test_toast,
+            overlay::commands::overlay_set_context
         ])
         .setup(|app| {
             let tray = setup_tray(app.handle())?;
