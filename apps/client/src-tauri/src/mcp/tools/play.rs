@@ -1,6 +1,7 @@
 //! Play tools: the assistant uses your controls like a viewer in the Assistants group (see
 //! `crate::server::viewer_commands::assistant`), writes to the chatbox, sets raw parameters, and
-//! switches profiles. Stop everything and `TKOSC/Assistants` hold them all back (see `guard`).
+//! switches profiles. `fire_shocker` is here too, behind its own Shock level. Stop everything and
+//! `TKOSC/Assistants` hold them all back (see `guard`).
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -35,6 +36,14 @@ pub struct RunRequest {
     /// Other fields a bhaptics or owo control needs, as the control's settings describe them.
     #[serde(default)]
     extra: serde_json::Map<String, Value>
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ShockRequest {
+    /// The shocker control's group, from list_controls.
+    group_id: String,
+    control_id: String
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -95,6 +104,20 @@ impl Session {
             message.insert("value".into(), value);
         }
         json(crate::server::viewer_commands::assistant(&self.app, &self.name(), &Value::Object(message))?)
+    }
+
+    #[tool(description = "Fires one of the host's OpenShock shocker controls, with the intensity and duration the control rolls, its cooldown, and what the active profile allows assistants")]
+    fn fire_shocker(&self, Parameters(ShockRequest { group_id, control_id }): Parameters<ShockRequest>) -> Result<String, String> {
+        let control = crate::server::find_control(&self.app, &group_id, &control_id).ok_or("No such control: get the ids from list_controls")?;
+        if control.get("type").and_then(Value::as_str) != Some("open-shock-shocker") {
+            return Err("That isn't a shocker control: use run_control".to_owned());
+        }
+        let message = json!({ "groupId": group_id, "controlId": control_id, "type": "open-shock-shocker" });
+        let accepted = crate::server::viewer_commands::assistant(&self.app, &self.name(), &message)?;
+        if accepted.get("value").is_none_or(Value::is_null) {
+            return Err("It didn't fire: the shocker is cooling down, or OpenShock can't be reached".to_owned());
+        }
+        json(accepted)
     }
 
     #[tool(description = "Posts a line to the VRChat chatbox above the host's avatar, for everyone nearby to read. At most once every 5 seconds.")]

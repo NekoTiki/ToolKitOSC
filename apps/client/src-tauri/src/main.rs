@@ -6,6 +6,10 @@ fn main() -> std::process::ExitCode {
     if let Some(code) = toolkitosc_lib::run_overlay() {
         return code;
     }
+    // An MCP client (Claude Desktop) talking to the running app over stdio.
+    if let Some(code) = toolkitosc_lib::run_mcp() {
+        return code;
+    }
     toolkitosc_lib::run();
     std::process::ExitCode::SUCCESS
 }

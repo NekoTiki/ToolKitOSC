@@ -9,6 +9,7 @@ mod guard;
 pub mod model;
 mod prompts;
 mod server;
+pub mod stdio;
 mod store;
 mod tools;
 

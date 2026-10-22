@@ -144,6 +144,16 @@ pub fn set(app: &AppHandle, key: &str, value: Option<&str>) -> Result<(), String
     file_set(app, key, Some(value))
 }
 
+/// For `ToolKitOSC --mcp`, which runs without the app: from the store, or from the file in the app
+/// data folder `dir`. Read only.
+pub fn get_in(dir: &std::path::Path, key: &str) -> Option<String> {
+    if let Ok(value) = entry(key).and_then(|entry| entry.get_password()) {
+        return Some(value);
+    }
+    let data = std::fs::read_to_string(dir.join(FILE)).ok()?;
+    serde_json::from_str::<BTreeMap<String, String>>(&data).ok()?.remove(key)
+}
+
 fn path(app: &AppHandle) -> Option<PathBuf> {
     let dir = app.path().app_data_dir().ok()?;
     std::fs::create_dir_all(&dir).ok()?;

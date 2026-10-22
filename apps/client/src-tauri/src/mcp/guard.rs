@@ -14,7 +14,8 @@ pub enum Level {
     Read,
     Play,
     /// Makes drafts.
-    Edit
+    Edit,
+    Shock
 }
 
 /// The level a tool belongs to. A tool missing here is refused, so a new one can't slip out at a
@@ -25,6 +26,7 @@ pub fn level_of(tool: &str) -> Option<Level> {
         "get_status" | "get_avatar" | "list_presets" | "list_patterns" | "list_automations" | "list_boards" | "list_controls" | "get_control" | "list_profiles" | "list_viewer_groups" | "list_viewers" | "get_activity" => Level::Read,
         "run_control" | "send_chatbox" | "set_parameter" | "switch_profile" => Level::Play,
         "save_automation" | "test_automation" | "save_pattern" | "create_controls" | "update_control" | "save_profile" | "delete_draft" => Level::Edit,
+        "fire_shocker" => Level::Shock,
         _ => return None
     })
 }
@@ -39,7 +41,8 @@ fn permission(settings: &McpSettings, tool: &str) -> Permission {
         Some(Level::Always) => Permission::On,
         Some(Level::Read) => settings.levels.read,
         Some(Level::Play) => settings.levels.play,
-        Some(Level::Edit) => settings.levels.edit
+        Some(Level::Edit) => settings.levels.edit,
+        Some(Level::Shock) => settings.levels.shock
     }
 }
 
@@ -151,6 +154,7 @@ mod tests {
         for blocks in [Blocks { paused: true, muted: false }, Blocks { paused: false, muted: true }] {
             assert!(decide(&settings, "run_control", blocks).is_err());
             assert!(decide(&settings, "send_chatbox", blocks).is_err());
+            assert!(decide(&settings, "fire_shocker", blocks).is_err());
             assert_eq!(decide(&settings, "get_avatar", blocks), Ok(Permission::On));
             assert_eq!(decide(&settings, "stop_everything", blocks), Ok(Permission::On));
         }

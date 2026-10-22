@@ -45,6 +45,20 @@ export function useAddonSwitch(): {
       return false
     }
 
+    // Assistants may fire shockers as soon as the add-on is on, within the profile's rules.
+    if (
+      addon.id === 'mcp' &&
+      byId('openshock')?.enabled &&
+      !(await confirm({
+        title: 'Assistants can fire your shockers',
+        message:
+          "With **AI assistants** on, an assistant on this PC can fire your OpenShock shockers like a viewer, within the active profile's limits for assistants. You can turn **Shock** off in Settings > Assistants.",
+        confirmText: 'Turn on'
+      }))
+    ) {
+      return false
+    }
+
     for (const need of missing) await setEnabled(need.id, true)
     await setEnabled(addon.id, true)
 
