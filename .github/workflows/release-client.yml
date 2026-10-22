@@ -58,7 +58,7 @@ jobs:
         run: |
           ID="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[] | select(.tag_name == env.TAG) | .id' | head -n1)"
           if [ -z "$ID" ]; then
-            args=(-f tag_name="$TAG" -f name="ToolKitOSC v$VERSION" -F draft=true -F prerelease="$PRERELEASE" -F generate_release_notes=true)
+            args=(-f tag_name="$TAG" -f name="v$VERSION" -F draft=true -F prerelease="$PRERELEASE" -F generate_release_notes=true)
             if [ -n "$PREVIOUS_TAG" ]; then
               args+=(-f previous_tag_name="$PREVIOUS_TAG")
             fi
