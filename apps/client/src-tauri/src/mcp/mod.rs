@@ -11,7 +11,7 @@ mod server;
 mod store;
 mod tools;
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -19,6 +19,13 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio_util::sync::CancellationToken;
 
 use crate::state::AppState;
+
+/// The built-in viewer group every assistant is in (`ASSISTANTS_GROUP` in useViewerGroups.ts).
+pub const ASSISTANTS_GROUP: &str = "assistants";
+
+/// Turns every assistant action off and on from the expression menu, without touching the add-on.
+/// Read tools keep working.
+const SWITCH_PARAMETER: &str = "/avatar/parameters/TKOSC/Assistants";
 
 /// The key's name in the password store.
 const KEY_SECRET: &str = "mcp-key";
@@ -49,7 +56,9 @@ pub struct Mcp {
     clients: Mutex<Vec<Client>>,
     next_client: AtomicU64,
     /// Requests waiting for the webview (see `bridge`).
-    bridge: bridge::Bridge
+    bridge: bridge::Bridge,
+    /// The avatar turned `TKOSC/Assistants` off.
+    muted: AtomicBool
 }
 
 fn mcp(app: &AppHandle) -> &Mcp {
@@ -69,6 +78,26 @@ fn load_key(app: &AppHandle) -> Result<String, String> {
     let key = new_key();
     crate::secrets::set(app, KEY_SECRET, Some(&key))?;
     Ok(key)
+}
+
+/// What holds Play, Edit and Shock tools back right now.
+fn blocks(app: &AppHandle) -> guard::Blocks {
+    guard::Blocks { muted: mcp(app).muted.load(Ordering::Relaxed), paused: crate::automations::is_paused(app) }
+}
+
+/// `TKOSC/Assistants` from the avatar. An avatar without it never sends it, so assistants stay on.
+pub fn on_parameter(app: &AppHandle, message: &crate::types::OscMessage) {
+    if message.address != SWITCH_PARAMETER {
+        return;
+    }
+    let on = match message.args.first() {
+        Some(crate::types::OscArg::Bool(on)) => *on,
+        Some(crate::types::OscArg::Number(value)) => *value != 0.0,
+        _ => return
+    };
+    if mcp(app).muted.swap(!on, Ordering::Relaxed) == on {
+        tracing::info!("MCP: assistants turned {} from the avatar", if on { "on" } else { "off" });
+    }
 }
 
 fn start(app: &AppHandle) {

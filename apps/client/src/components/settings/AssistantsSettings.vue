@@ -2,7 +2,8 @@
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
-import type { McpClient, McpLevels, McpPermission, McpSettings } from '@renderer/lib/tauri-bridge'
+import { useMcpClients } from '@renderer/composables/useMcpBridge'
+import type { McpLevels, McpPermission, McpSettings } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { timeAgo } from '@renderer/utils/time'
 import { computed, ref } from 'vue'
@@ -15,12 +16,10 @@ const toast = useToast()
 const { openModal } = useAreYouSureModal()
 
 const settings = ref<McpSettings | null>(null)
-const clients = ref<McpClient[]>([])
+const clients = useMcpClients()
 const key = ref<string | null>(null)
 
 void api.mcpSettings().then((value) => (settings.value = value))
-void api.mcpClients().then((value) => (clients.value = value))
-api.onMcpClients((value) => (clients.value = value))
 
 const PERMISSIONS: { value: McpPermission; label: string }[] = [
   { value: 'off', label: 'Off' },
@@ -147,8 +146,15 @@ const savePort = (): void => {
       title="Connected"
       :description="clients.length ? undefined : 'No assistant connected. Set one up below.'"
     >
-      <div v-if="clients.length" class="grid divide-y divide-(--ui-border)">
-        <div v-for="item in clients" :key="item.id" class="flex min-h-13 items-center gap-3">
+      <div
+        v-if="clients.length"
+        class="grid divide-y divide-(--ui-border)"
+      >
+        <div
+          v-for="item in clients"
+          :key="item.id"
+          class="flex min-h-13 items-center gap-3"
+        >
           <span
             class="size-2.5 shrink-0 rounded-full bg-success shadow-[0_0_8px_var(--ui-success)]"
           />
@@ -205,15 +211,23 @@ const savePort = (): void => {
       title="Connect an assistant"
       description="It only works on this PC, while ToolKitOSC runs."
     >
-      <SegmentedControl v-model="client" :items="CLIENTS" aria-label="Assistant" />
+      <SegmentedControl
+        v-model="client"
+        :items="CLIENTS"
+        aria-label="Assistant"
+      />
       <p class="text-sm text-muted">
         {{ HOW[client] }}
       </p>
       <pre
         class="overflow-x-auto rounded-2xl bg-(--aurora-well) p-3 font-mono text-xs whitespace-pre text-default"
-        >{{ shown }}</pre>
+      >{{ shown }}</pre>
       <div class="flex flex-wrap items-center gap-2">
-        <UButton label="Copy" icon="i-lucide-clipboard-copy" @click="copy" />
+        <UButton
+          label="Copy"
+          icon="i-lucide-clipboard-copy"
+          @click="copy"
+        />
         <UButton
           :label="key ? 'Hide key' : 'Show key'"
           :icon="key ? 'i-lucide-eye-off' : 'i-lucide-eye'"

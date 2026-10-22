@@ -12,7 +12,7 @@ import { computed, nextTick } from 'vue'
 // Viewer groups (Friends, Mods...): name and color each one, see who's in it, delete it. Viewers are
 // added from their own page; what a group gets is set per profile (Profiles > Editing for).
 const toast = useToast()
-const { viewerGroups, addGroup, updateGroup, deleteGroup, membershipsOf } = useViewerGroups()
+const { savedGroups: viewerGroups, addGroup, updateGroup, deleteGroup, membershipsOf } = useViewerGroups()
 const { openModal: confirm } = useAreYouSureModal()
 
 const members = useLiveQuery(
