@@ -4,6 +4,9 @@ declare module 'vue-router' {
   interface RouteMeta {
     // The add-on this page belongs to. While it's off, App.vue shows AddonOff instead.
     addon?: string
+    // Routes with the same `instance` share one page instance, so its sidebar (search, scroll)
+    // stays put while you move between them. Without it, every path gets a fresh instance.
+    instance?: string
   }
 }
 
@@ -17,7 +20,8 @@ export const router = createRouter({
     {
       path: '/controls/:groupId?',
       name: 'controls',
-      component: () => import('@renderer/pages/ControlsPage.vue')
+      component: () => import('@renderer/pages/ControlsPage.vue'),
+      meta: { instance: 'controls' }
     },
     {
       path: '/controls/:groupId/new',
@@ -45,24 +49,24 @@ export const router = createRouter({
       component: () => import('@renderer/pages/PatternsPage.vue'),
       meta: { addon: 'intiface' }
     },
-    { path: '/haptics', name: 'haptics', component: () => import('@renderer/pages/HapticsPage.vue'), meta: { addon: 'haptics' } },
+    { path: '/haptics', name: 'haptics', component: () => import('@renderer/pages/HapticsPage.vue'), meta: { addon: 'haptics', instance: 'haptics' } },
     {
       path: '/haptics/priority',
       name: 'haptics-priority',
       component: () => import('@renderer/pages/HapticsPage.vue'),
-      meta: { addon: 'haptics' }
+      meta: { addon: 'haptics', instance: 'haptics' }
     },
     {
       path: '/haptics/:actuator',
       name: 'haptics-toy',
       component: () => import('@renderer/pages/HapticsPage.vue'),
-      meta: { addon: 'haptics' }
+      meta: { addon: 'haptics', instance: 'haptics' }
     },
     {
       path: '/haptics/:actuator/sources/:index',
       name: 'haptics-source',
       component: () => import('@renderer/pages/HapticsPage.vue'),
-      meta: { addon: 'haptics' }
+      meta: { addon: 'haptics', instance: 'haptics' }
     },
     { path: '/leash', name: 'leash', component: () => import('@renderer/pages/LeashPage.vue'), meta: { addon: 'leash' } },
     {
@@ -84,12 +88,22 @@ export const router = createRouter({
     { path: '/profiles/new', name: 'profile-new', component: () => import('@renderer/pages/ProfilesPage.vue') },
     { path: '/profiles/:profileId', name: 'profile', component: () => import('@renderer/pages/ProfilesPage.vue') },
     { path: '/viewers/groups', name: 'viewer-groups', component: () => import('@renderer/pages/ViewerGroupsPage.vue') },
-    { path: '/viewers/:clientId?', name: 'viewers', component: () => import('@renderer/pages/ViewersPage.vue') },
+    {
+      path: '/viewers/:clientId?',
+      name: 'viewers',
+      component: () => import('@renderer/pages/ViewersPage.vue'),
+      meta: { instance: 'viewers' }
+    },
     { path: '/activity', name: 'activity', component: () => import('@renderer/pages/ActivityPage.vue') },
     { path: '/ai', name: 'ai', component: () => import('@renderer/pages/AiPage.vue') },
     // `:sub` is a section's sub-page (About › Credits). The board route below still wins for
     // `/settings/esp32/<id>`: a static segment ranks above a param.
-    { path: '/settings/:section?/:sub?', name: 'settings', component: () => import('@renderer/pages/SettingsPage.vue') },
+    {
+      path: '/settings/:section?/:sub?',
+      name: 'settings',
+      component: () => import('@renderer/pages/SettingsPage.vue'),
+      meta: { instance: 'settings' }
+    },
     {
       path: '/settings/esp32/:boardId',
       name: 'board',

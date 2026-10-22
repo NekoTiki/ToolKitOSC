@@ -24,11 +24,6 @@ useLogRetention()
 useAppUpdater()
 useStopEverythingTriggers()
 useAutomationRunner()
-
-// Pages that keep their instance across their own sub-routes: the Controls page keeps its search
-// when you switch groups, and Settings keeps its section list (and where it's scrolled to) when you
-// switch sections. Every other page gets a fresh instance per path.
-const KEEP_INSTANCE = new Set<unknown>(['controls', 'settings'])
 </script>
 
 <template>
@@ -48,7 +43,7 @@ const KEEP_INSTANCE = new Set<unknown>(['controls', 'settings'])
       >
         <AppRail />
         <!-- Keyed by path, so going from one control's editor to another's starts a fresh draft,
-        except the pages in KEEP_INSTANCE, which keep their instance across their sub-routes. -->
+        except routes with `meta.instance`, which share one instance across their sub-routes. -->
         <RouterView v-slot="{ Component, route }">
           <!-- A page of an add-on that's off (e.g. Patterns while Intiface toys is off). -->
           <AddonOff
@@ -59,7 +54,7 @@ const KEEP_INSTANCE = new Set<unknown>(['controls', 'settings'])
           <component
             :is="Component"
             v-else
-            :key="KEEP_INSTANCE.has(route.name) ? String(route.name) : route.fullPath"
+            :key="route.meta.instance ?? route.fullPath"
             class="min-w-0 flex-1"
           />
         </RouterView>

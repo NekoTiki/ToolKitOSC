@@ -60,17 +60,17 @@ const toyGroups = computed(() =>
   ].filter((group) => group.items.length || group.empty)
 )
 
-const isPriority = route.name === 'haptics-priority'
+const isPriority = computed(() => route.name === 'haptics-priority')
 const toyKey = computed(() => (typeof route.params.actuator === 'string' ? route.params.actuator : null))
 const toy = computed(() => toys.value.find((item) => item.key === toyKey.value))
 // /haptics/<toy>/sources/<n>: one of the toy's sources, as a sub-page of the toy.
-const sourceIndex = route.name === 'haptics-source' ? Number(route.params.index) : null
+const sourceIndex = computed(() => (route.name === 'haptics-source' ? Number(route.params.index) : null))
 
 // /haptics alone (or a toy that's gone) opens the first toy, or touch priority without any.
 watch(
   [toys, toyKey],
   () => {
-    if (isPriority || ((route.name === 'haptics-toy' || route.name === 'haptics-source') && toy.value)) return
+    if (isPriority.value || ((route.name === 'haptics-toy' || route.name === 'haptics-source') && toy.value)) return
 
     void router.replace(toys.value[0] ? `/haptics/${toys.value[0].key}` : '/haptics/priority')
   },
@@ -168,10 +168,13 @@ const setFill = (value: HapticsBhapticsTarget['fill']): void => {
   })
 }
 
-const editedSource = computed(() => (sourceIndex !== null && toy.value ? editedOutput(toy.value.key)?.sources[sourceIndex] : undefined))
+const editedSource = computed(() =>
+  sourceIndex.value !== null && toy.value ? editedOutput(toy.value.key)?.sources[sourceIndex.value] : undefined
+)
 
 const removeSource = async (): Promise<void> => {
-  if (!toy.value || !editedSource.value || sourceIndex === null) return
+  const index = sourceIndex.value
+  if (!toy.value || !editedSource.value || index === null) return
 
   const current = toy.value
   const kind = ZONE_KIND_LABEL[SOURCE_ZONE_KIND[editedSource.value.kind]].toLowerCase()
@@ -179,7 +182,7 @@ const removeSource = async (): Promise<void> => {
 
   if (!ok) return
 
-  change((target) => outputToEdit(target, current).sources.splice(sourceIndex, 1))
+  change((target) => outputToEdit(target, current).sources.splice(index, 1))
   void router.push(`/haptics/${current.key}`)
 }
 
@@ -415,6 +418,7 @@ const setAvatarEnabled = (enabled: boolean): void =>
     <!-- One of the toy's sources -->
     <HapticsSourceEditor
       v-else-if="toy && sourceIndex !== null"
+      :key="`${toy.key}/${sourceIndex}`"
       :toy="toy"
       :index="sourceIndex"
     />
