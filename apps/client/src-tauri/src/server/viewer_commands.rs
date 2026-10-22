@@ -11,6 +11,9 @@
 //! 5. A live recording only moves the toy. Anything else runs, is accepted (shown to every
 //!    viewer as the last action), may start automations, and goes to the webview to be logged and
 //!    announced (`command-executed`).
+//!
+//! An AI assistant's command (see `crate::mcp`) goes through `assistant`: the same steps, as a
+//! viewer in the built-in Assistants group, minus what only makes sense for the share page.
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -119,20 +122,78 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
         return;
     }
 
-    let outcome = match (&control, &command) {
+    let Some(accepted) = execute(app, peer_id, &viewer.display_name, viewer_name, control.as_ref(), command.as_ref(), &message, viewer_pattern) else {
+        return;
+    };
+
+    // Shown to every viewer as the share page's last action.
+    let mut reply = accepted;
+    reply["peerId"] = json!(peer_id);
+    super::send_message(app, "command-accepted", reply);
+}
+
+/// The id an assistant's commands are logged under, like a viewer's session id.
+pub fn assistant_peer_id(name: &str) -> String {
+    format!("assistant:{name}")
+}
+
+/// An AI assistant's command, checked as a viewer's in the built-in Assistants group: Stop
+/// everything, hidden groups, and the control's locks and limits for that group in the active
+/// profile. Bans, "who can use your controls", sign-in and the share page's rate limit are about
+/// share page viewers and don't apply; the MCP server has its own rate limit. Returns what ran, or
+/// why not, as the assistant reads it.
+pub fn assistant(app: &AppHandle, name: &str, message: &Value) -> Result<Value, String> {
+    if crate::automations::is_paused(app) {
+        return Err("Stopped by host: Stop everything is on, and only the host can resume".to_owned());
+    }
+    let (Some(group_id), Some(control_id)) = (text(message, "groupId"), text(message, "controlId")) else {
+        return Err("Needs groupId and controlId".to_owned());
+    };
+    let policy = super::policy(app).ok_or("ToolKitOSC hasn't loaded your controls yet")?;
+    if policy.is_group_hidden(group_id) {
+        return Err("That control's group is hidden".to_owned());
+    }
+    let control = policy.control(group_id, control_id).map(|(control, _)| control.clone()).ok_or("No such control: get the ids from list_controls")?;
+    let groups = [crate::mcp::ASSISTANTS_GROUP.to_owned()];
+    let command = limits::sanitize_command(&limits::resolve_control_for_viewer(&control, &groups), message)
+        .ok_or("Refused: the control is locked for assistants or unavailable, or the value isn't one it takes")?;
+    let kind = text(&command, "type");
+    let pattern_id = text(&command, "value");
+    let viewer_pattern = kind == Some("intiface-pattern") && matches!(pattern_id, Some(VIEWER_PATTERN_ID | VIEWER_LIVE_ID));
+    execute(app, &assistant_peer_id(name), name, Some(name.to_owned()), Some(&control), Some(&command), message, viewer_pattern)
+        .ok_or_else(|| "Played live, nothing to report".to_owned())
+}
+
+/// Runs a checked command and tells the rest of the app: the webview logs and announces it
+/// (`command-executed`), the headset toast names `who`, and automations may start. Returns what
+/// was accepted, or None for a live recording, which only moves the toy.
+#[allow(clippy::too_many_arguments)]
+fn execute(
+    app: &AppHandle,
+    peer_id: &str,
+    who: &str,
+    viewer_name: Option<String>,
+    control: Option<&Value>,
+    command: Option<&Value>,
+    message: &Value,
+    viewer_pattern: bool
+) -> Option<Value> {
+    let group_id = text(message, "groupId").unwrap_or_default();
+    let control_id = text(message, "controlId").unwrap_or_default();
+    let kind = command.and_then(|c| text(c, "type"));
+    let outcome = match (control, command) {
         (Some(control), Some(command)) => crate::controls::run(app, control, command, viewer_name),
         _ => Default::default()
     };
     if outcome.live {
-        return;
+        return None;
     }
 
-    let sent = command.as_ref().unwrap_or(&message);
+    let sent = command.unwrap_or(message);
     let control_name = control
-        .as_ref()
         .and_then(|c| text(c, "name"))
         .filter(|name| !name.is_empty())
-        .or_else(|| text(&message, "controlName").filter(|name| !name.is_empty()))
+        .or_else(|| text(message, "controlName").filter(|name| !name.is_empty()))
         .unwrap_or(control_id);
     let accepted = json!({
         "groupId": group_id,
@@ -142,26 +203,21 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
         "value": outcome.shock.clone().or_else(|| sent.get("value").cloned())
     });
 
-    // Shown to every viewer as the share page's last action.
-    let mut reply = accepted.clone();
-    reply["peerId"] = json!(peer_id);
-    super::send_message(app, "command-accepted", reply);
-
     // The webview logs it, notes who used the control last and posts to the chatbox.
-    let mut executed = accepted;
+    let mut executed = accepted.clone();
     executed["peerId"] = json!(peer_id);
     if viewer_pattern {
-        executed["samples"] = command.as_ref().and_then(|c| c.get("samples")).cloned().unwrap_or(Value::Null);
+        executed["samples"] = command.and_then(|c| c.get("samples")).cloned().unwrap_or(Value::Null);
         executed["patternRun"] = json!(outcome.pattern_run);
     }
     let _ = app.emit("command-executed", executed);
 
     // Toasts are only for you, so they name the viewer whatever the share page shows.
     let value = outcome.shock.as_ref().or_else(|| sent.get("value"));
-    crate::overlay::viewer_command(app, &viewer.display_name, control.as_ref(), kind.unwrap_or_default(), control_name, value);
+    crate::overlay::viewer_command(app, who, control, kind.unwrap_or_default(), control_name, value);
 
     // Automations can start from it. A shock that didn't go out (cooldown) doesn't count.
-    if let Some(control) = &control {
+    if let Some(control) = control {
         let control_type = text(control, "type").map(str::to_owned);
         if control_type.as_deref() != Some("open-shock-shocker") || outcome.shock.is_some() {
             crate::automations::event(
@@ -170,6 +226,7 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
             );
         }
     }
+    Some(accepted)
 }
 
 #[cfg(test)]

@@ -86,7 +86,7 @@ pub struct Session {
 
 impl Session {
     fn new(app: AppHandle) -> Self {
-        Self { app, client: Mutex::new(None), rate: Mutex::new(RateLimit::default()), allowed: Mutex::new(HashMap::new()), tools: Self::read_router() }
+        Self { app, client: Mutex::new(None), rate: Mutex::new(RateLimit::default()), allowed: Mutex::new(HashMap::new()), tools: Self::read_router() + Self::play_router() }
     }
 
     /// The assistant's name, as the host sees it.
@@ -119,7 +119,7 @@ impl Session {
     /// Resources are read by the client on its own, not by the model, so they never wait for the
     /// pop-up: only Read on On serves them.
     fn resources_allowed(&self) -> bool {
-        guard::decide(&super::store::get(&self.app).levels, "get_avatar") == Ok(Permission::On)
+        guard::decide(&super::store::get(&self.app), "get_avatar", guard::Blocks::default()) == Ok(Permission::On)
     }
 }
 
@@ -152,8 +152,8 @@ impl ServerHandler for Session {
     }
 
     async fn list_tools(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListToolsResult, ErrorData> {
-        let levels = super::store::get(&self.app).levels;
-        Ok(ListToolsResult::with_all_items(self.tools.list_all().into_iter().filter(|tool| guard::listed(&levels, &tool.name)).collect()))
+        let settings = super::store::get(&self.app);
+        Ok(ListToolsResult::with_all_items(self.tools.list_all().into_iter().filter(|tool| guard::listed(&settings, &tool.name)).collect()))
     }
 
     async fn call_tool(&self, request: CallToolRequestParams, context: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
@@ -164,7 +164,7 @@ impl ServerHandler for Session {
         if !self.rate.lock().unwrap().allow(Instant::now()) {
             return Ok(refused("Too many calls: at most 10 per second"));
         }
-        match guard::decide(&super::store::get(&self.app).levels, &name) {
+        match guard::decide(&super::store::get(&self.app), &name, super::blocks(&self.app)) {
             Err(reason) => return Ok(refused(reason)),
             Ok(Permission::Ask) => {
                 if let Err(reason) = self.approve(&name, request.arguments.as_ref()).await {

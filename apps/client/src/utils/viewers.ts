@@ -53,6 +53,10 @@ export const viewerCommandIds = (client: Client): Promise<number[]> =>
 export const countViewerCommands = (client: Client): Promise<number> =>
   Promise.all(viewerCollections(client, 0).map((collection) => collection.count())).then((counts) => counts.reduce((a, b) => a + b, 0))
 
+// An AI assistant's commands are logged under `assistant:<name>` (see
+// src-tauri/src/server/viewer_commands.rs): its name, or null for a viewer's.
+export const assistantName = (peerId: string): string | null => (peerId.startsWith('assistant:') ? peerId.slice('assistant:'.length) : null)
+
 // Finds the viewer a logged command belongs to, without scanning every viewer per row.
 export const viewerLookup = (clients: Client[]): ((command: Command) => Client | undefined) => {
   const byDiscordId = new Map<string, Client>()

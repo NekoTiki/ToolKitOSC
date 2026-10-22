@@ -17,6 +17,7 @@ import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
+import { assistantName } from '@renderer/utils/viewers'
 import type { ClientListEntry, ControlTypes, ViewerGroupsMessage } from '@toolkitosc/shared-ui'
 import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
@@ -156,10 +157,12 @@ export function useWebsocketHost(): {
   // chatbox if the host turned that on. Rust already replied to the viewer and started automations.
   api.onCommandExecuted((executed) => {
     const client = clientsMap.value[executed.peerId]
+    // An AI assistant's command (src-tauri/src/mcp) is logged and announced under its name.
+    const assistant = assistantName(executed.peerId)
 
-    if (!client) return
+    if (!client && assistant === null) return
 
-    const viewer = describeViewer(client)
+    const viewer = client ? describeViewer(client) : { key: executed.peerId, discordId: null, ip: '', displayName: assistant!, avatar: '' }
     const control = getControl(executed.groupId, executed.controlId)
     const accepted = {
       groupId: executed.groupId,
@@ -179,7 +182,7 @@ export function useWebsocketHost(): {
     }
 
     // A viewer's own pattern is logged with its samples, and its row gets the time it stopped.
-    const logged = addCommandToDb({ ...accepted, samples: executed.samples, discordId: viewer.discordId ?? undefined, peerId: client.peerId, ip: viewer.ip })
+    const logged = addCommandToDb({ ...accepted, samples: executed.samples, discordId: viewer.discordId ?? undefined, peerId: executed.peerId, ip: viewer.ip })
 
     if (executed.patternRun !== undefined && executed.patternRun !== null) {
       onPatternRunEnd(executed.patternRun, () => {
@@ -189,8 +192,8 @@ export function useWebsocketHost(): {
       })
     }
 
-    // Names follow the share page's own setting.
-    announceAction({ ...accepted, viewerKey: viewer.key, viewerName: showViewers.value ? viewer.displayName : null, control })
+    // Names follow the share page's own setting. An assistant is always named.
+    announceAction({ ...accepted, viewerKey: viewer.key, viewerName: showViewers.value || assistant !== null ? viewer.displayName : null, control })
   })
 
   // What Rust checks viewer commands against: every group with the active profile's locks,

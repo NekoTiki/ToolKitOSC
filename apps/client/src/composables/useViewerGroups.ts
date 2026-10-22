@@ -1,3 +1,4 @@
+import { useAddons } from '@renderer/composables/useAddons'
 import type { Client, GroupMembership } from '@renderer/db/clients.db'
 import { db } from '@renderer/db/clients.db'
 import { getUUID } from '@renderer/utils/uuid'
@@ -34,9 +35,16 @@ const load = (): ViewerGroup[] => {
   }
 }
 
-const viewerGroups = ref<ViewerGroup[]>(load())
+// Built in, while the AI assistants add-on is on (src-tauri/src/mcp): every assistant is in it, so
+// a profile can give assistants less, or more, than everyone. Nobody else can be put in it, and it
+// can't be renamed or deleted, so it's left out of the Viewer groups page.
+export const ASSISTANTS_GROUP: ViewerGroup = { id: 'assistants', name: 'Assistants', color: '#a78bfa' }
 
-const save = (): void => localStorage.setItem(STORAGE_KEY, JSON.stringify(viewerGroups.value))
+// The groups you made.
+const savedGroups = ref<ViewerGroup[]>(load())
+const viewerGroups = computed<ViewerGroup[]>(() => (useAddons().isOn('mcp') ? [...savedGroups.value, ASSISTANTS_GROUP] : savedGroups.value))
+
+const save = (): void => localStorage.setItem(STORAGE_KEY, JSON.stringify(savedGroups.value))
 
 // Ticks when a temporary membership ends, so everything that depends on who's in which group
 // (the share page included) updates on time.
@@ -97,22 +105,22 @@ const membershipsOf = (client: Pick<Client, 'groups'>): (GroupMembership & { gro
 const getGroup = (id: string): ViewerGroup | undefined => viewerGroups.value.find((group) => group.id === id)
 
 const addGroup = (name: string): ViewerGroup => {
-  const group = { id: getUUID(), name, color: GROUP_COLORS[viewerGroups.value.length % GROUP_COLORS.length]! }
+  const group = { id: getUUID(), name, color: GROUP_COLORS[savedGroups.value.length % GROUP_COLORS.length]! }
 
-  viewerGroups.value = [...viewerGroups.value, group]
+  savedGroups.value = [...savedGroups.value, group]
   save()
 
   return group
 }
 
 const updateGroup = (id: string, changes: Partial<Omit<ViewerGroup, 'id'>>): void => {
-  viewerGroups.value = viewerGroups.value.map((group) => (group.id === id ? { ...group, ...changes } : group))
+  savedGroups.value = savedGroups.value.map((group) => (group.id === id ? { ...group, ...changes } : group))
   save()
 }
 
 // Takes everyone out of the group too. Profiles keep their rules for it, but nothing reads them.
 const deleteGroup = async (id: string): Promise<void> => {
-  viewerGroups.value = viewerGroups.value.filter((group) => group.id !== id)
+  savedGroups.value = savedGroups.value.filter((group) => group.id !== id)
   save()
 
   await db.clients
@@ -149,6 +157,8 @@ const memberCount = (groupId: string): number =>
 
 export function useViewerGroups(): {
   viewerGroups: typeof viewerGroups
+  // Only the groups you made, without Assistants.
+  savedGroups: typeof savedGroups
   now: typeof now
   getGroup: typeof getGroup
   addGroup: typeof addGroup
@@ -163,6 +173,7 @@ export function useViewerGroups(): {
 } {
   return {
     viewerGroups,
+    savedGroups,
     now,
     getGroup,
     addGroup,

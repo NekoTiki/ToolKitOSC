@@ -8,6 +8,7 @@ import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { useBanViewerModal } from '@renderer/composables/useBanViewerModal'
 import { useClientsDb } from '@renderer/composables/useClientsDb'
 import { useLiveQuery } from '@renderer/composables/useLiveQuery'
+import { useMcpClients } from '@renderer/composables/useMcpBridge'
 import { MEMBERSHIP_DURATIONS, useViewerGroups } from '@renderer/composables/useViewerGroups'
 import type { Client } from '@renderer/db/clients.db'
 import { db as clientsDb } from '@renderer/db/clients.db'
@@ -35,13 +36,14 @@ const KINDS: { value: Kind | null; label: string }[] = [
 ]
 
 const route = useRoute()
+const assistants = useMcpClients()
 const router = useRouter()
 const toast = useToast()
 const { isOnline, clearViewerActivity, deleteViewer } = useClientsDb()
 const { isBanned, ban, unban } = useBannedClientsDb()
 const { openModal: openBanModal } = useBanViewerModal()
 const { openModal: confirm } = useAreYouSureModal()
-const { viewerGroups, membershipsOf, addToGroup, removeFromGroup } = useViewerGroups()
+const { savedGroups: viewerGroups, membershipsOf, addToGroup, removeFromGroup } = useViewerGroups()
 
 const clients = useLiveQuery(
   () => null,
@@ -303,6 +305,29 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
         aria-label="Viewers"
         class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1.5"
       >
+        <!-- AI assistants connected now (Settings > Assistants). Not viewers of the share page:
+        never counted online, and they can't be put in groups or banned. -->
+        <template v-if="assistants.length">
+          <div class="flex justify-between px-2.5 pt-2 font-mono text-[10.5px] tracking-widest text-muted uppercase">
+            <span>Assistants</span>
+            <span>{{ assistants.length }}</span>
+          </div>
+          <RouterLink
+            v-for="assistant in assistants"
+            :key="assistant.id"
+            to="/settings/assistants"
+            class="grid min-h-14.5 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 rounded-2xl border border-transparent px-2.5 py-2 transition-colors hover:bg-(--aurora-glass)"
+          >
+            <span class="row-span-2 grid size-10 place-items-center rounded-full bg-primary/15 text-primary">
+              <UIcon
+                name="i-lucide-bot"
+                class="size-5"
+              />
+            </span>
+            <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ assistant.name }}</b>
+            <small class="truncate text-xs text-muted">{{ assistant.calls }} {{ assistant.calls === 1 ? 'call' : 'calls' }}</small>
+          </RouterLink>
+        </template>
         <template
           v-for="section in sections"
           :key="section.key"

@@ -8,7 +8,7 @@ import type { Client } from '@renderer/db/clients.db'
 import { db as clientsDb } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
 import { db } from '@renderer/db/commands.db'
-import { ownsCommand, viewerCommands, viewerLookup } from '@renderer/utils/viewers'
+import { assistantName, ownsCommand, viewerCommands, viewerLookup } from '@renderer/utils/viewers'
 import type { ControlTypes } from '@toolkitosc/shared-ui'
 import { formatCommandValue, isOpenShockCommandValue } from '@toolkitosc/shared-ui'
 import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
@@ -271,6 +271,16 @@ const COLUMNS = 'grid-cols-[6.5rem_minmax(0,11rem)_minmax(0,1fr)_7.5rem_minmax(0
               />
               <span class="truncate text-sm">{{ clientFor(command)!.displayName }}</span>
             </RouterLink>
+            <span
+              v-else-if="assistantName(command.peerId) !== null"
+              class="flex min-w-0 items-center gap-2"
+            >
+              <UIcon
+                name="i-lucide-bot"
+                class="size-5 shrink-0 text-primary"
+              />
+              <span class="truncate text-sm">{{ assistantName(command.peerId) }}</span>
+            </span>
             <span
               v-else
               class="text-sm text-muted"

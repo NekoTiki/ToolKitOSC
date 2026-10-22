@@ -4,7 +4,7 @@ import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { db as clientsDb } from '@renderer/db/clients.db'
 import { db as commandsDb } from '@renderer/db/commands.db'
-import type { McpRequest } from '@renderer/lib/tauri-bridge'
+import type { McpClient, McpRequest } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { ownsCommand, viewerLookup } from '@renderer/utils/viewers'
 import type { Ref } from 'vue'
@@ -33,6 +33,16 @@ const answerApproval = (id: number, answer: ApprovalAnswer): void => {
 
 export function useMcpApprovals(): { approvals: Ref<Approval[]>; answerApproval: typeof answerApproval } {
   return { approvals, answerApproval }
+}
+
+// The assistants connected now, for Settings > Assistants and the Viewers page.
+const clients = ref<McpClient[]>([])
+
+api.onMcpClients((value) => (clients.value = value))
+void api.mcpClients().then((value) => (clients.value = value))
+
+export function useMcpClients(): Ref<McpClient[]> {
+  return clients
 }
 
 const MAX_ACTIVITY = 500
@@ -94,6 +104,12 @@ export function useMcpBridge(): void {
     list_profiles: () => ({ active: currentLockedControlsGroup.value, profiles: plain(lockedControlGroups.value) }),
     list_viewer_groups: () => viewerGroups.value.map((group) => ({ id: group.id, name: group.name, members: memberCount(group.id) })),
     list_viewers: () => viewers(),
+    switch_profile: (args) => {
+      if (args.id !== null && !lockedControlGroups.value.some((profile) => profile.id === args.id)) throw new Error('No such profile: get the ids from list_profiles')
+      currentLockedControlsGroup.value = (args.id as string | null) ?? null
+
+      return null
+    },
     get_activity: (args) => activity(args),
     approve: (args, request) => {
       approvals.value = [

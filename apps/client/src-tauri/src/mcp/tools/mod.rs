@@ -1,4 +1,5 @@
 //! The tools, one file per level in Settings › Assistants (see `super::guard::level_of`).
+mod play;
 mod read;
 
 /// A tool's answer as JSON text, the way MCP clients show it to the model.

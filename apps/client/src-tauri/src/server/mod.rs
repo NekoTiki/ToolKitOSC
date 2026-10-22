@@ -6,7 +6,7 @@
 //! server (see `on_parameter`), for the parameters the webview asked for. The token it signs in
 //! with stays here too (see `auth`).
 pub mod auth;
-mod viewer_commands;
+pub mod viewer_commands;
 pub mod limits;
 mod link;
 pub mod policy;
@@ -199,6 +199,11 @@ pub fn with_control_groups<T>(app: &AppHandle, f: impl FnOnce(&[serde_json::Valu
 pub fn find_control(app: &AppHandle, group_id: &str, control_id: &str) -> Option<serde_json::Value> {
     let inner = server(app).inner.lock().unwrap();
     inner.policy.as_ref()?.control(group_id, control_id).map(|(control, _)| control.clone())
+}
+
+/// The rules viewer commands are checked against, once the webview has sent them.
+fn policy(app: &AppHandle) -> Option<policy::Policy> {
+    server(app).inner.lock().unwrap().policy.clone()
 }
 
 /// The rules, and the connected viewer with this session id.
