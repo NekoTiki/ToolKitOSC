@@ -15,6 +15,7 @@ use crate::haptics::Haptics;
 use crate::osc::cache::CacheThrottle;
 use crate::intiface::Intiface;
 use crate::leash::Leash;
+use crate::mcp::Mcp;
 use crate::openshock::OpenShock;
 use crate::overlay::Overlay;
 use crate::owo::Owo;
@@ -86,7 +87,9 @@ pub struct AppState {
     /// The OWO app's connection and what each muscle plays (see `owo`).
     pub owo: Owo,
     /// Toasts in the headset (see `overlay`).
-    pub overlay: Overlay
+    pub overlay: Overlay,
+    /// The MCP server AI assistants connect to (see `mcp`).
+    pub mcp: Mcp
 }
 
 impl Default for AppState {
@@ -116,7 +119,8 @@ impl Default for AppState {
             leash: Leash::default(),
             bhaptics: Bhaptics::default(),
             owo: Owo::default(),
-            overlay: Overlay::default()
+            overlay: Overlay::default(),
+            mcp: Mcp::default()
         }
     }
 }

@@ -162,6 +162,11 @@ pub fn set_policy(app: &AppHandle, policy: policy::Policy) {
     policy::clamp_running(app, previous.as_ref(), &policy);
 }
 
+/// The link's state, None before the first connect.
+pub fn status(app: &AppHandle) -> Option<Status> {
+    server(app).inner.lock().unwrap().status
+}
+
 /// How many viewers are on the share page, and how many of them signed in.
 pub fn viewer_counts(app: &AppHandle) -> (usize, usize) {
     let inner = server(app).inner.lock().unwrap();

@@ -48,6 +48,11 @@ rand = "0.9"
 # Tokens in the system's password store (see src/secrets.rs): Windows Credential Manager, or the
 # Secret Service on Linux over zbus, so there's no libdbus to build against.
 keyring = { version = "3", features = ["apple-native", "windows-native", "async-secret-service", "tokio", "crypto-rust"] }
+# The local MCP server AI assistants connect to (see src/mcp). axum is the one vrchat_osc's
+# OSCQuery server already brings.
+rmcp = { version = "3.6", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
+tokio-util = "0.7"
 # The wrist panel's UI (see src/wrist), drawn on the CPU into a SteamVR overlay.
 egui = "0.29"
 # Its own crate so it can be built optimized in dev too: unoptimized, a frame takes half a second.
