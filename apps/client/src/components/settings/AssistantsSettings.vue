@@ -187,7 +187,7 @@ const savePort = (): void => {
         <div
           v-for="level in LEVELS"
           :key="level.key"
-          class="grid content-start gap-2 rounded-2xl bg-(--aurora-well) p-3"
+          class="grid content-start gap-2 rounded-field bg-(--aurora-well) p-3"
         >
           <div class="grid gap-0.5">
             <b class="font-semibold text-highlighted">{{ level.label }}</b>
