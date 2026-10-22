@@ -3,6 +3,7 @@
 //! levels in Settings › Assistants allow, play with your controls. It listens on 127.0.0.1 only,
 //! behind a key kept in the password store (see `crate::secrets`), and only while the add-on is
 //! on. Every call passes `guard` first. `mcp.json` (see `store`) holds the port and the levels.
+mod bridge;
 pub mod commands;
 mod guard;
 pub mod model;
@@ -46,7 +47,9 @@ pub struct Mcp {
     /// Why the server couldn't start, e.g. the port is taken.
     error: Mutex<Option<String>>,
     clients: Mutex<Vec<Client>>,
-    next_client: AtomicU64
+    next_client: AtomicU64,
+    /// Requests waiting for the webview (see `bridge`).
+    bridge: bridge::Bridge
 }
 
 fn mcp(app: &AppHandle) -> &Mcp {

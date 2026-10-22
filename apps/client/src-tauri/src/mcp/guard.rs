@@ -18,7 +18,7 @@ pub enum Level {
 pub fn level_of(tool: &str) -> Option<Level> {
     Some(match tool {
         "stop_everything" => Level::Always,
-        "get_status" | "get_avatar" | "list_presets" | "list_patterns" | "list_automations" | "list_boards" => Level::Read,
+        "get_status" | "get_avatar" | "list_presets" | "list_patterns" | "list_automations" | "list_boards" | "list_controls" | "get_control" | "list_profiles" | "list_viewer_groups" | "list_viewers" | "get_activity" => Level::Read,
         _ => return None
     })
 }
@@ -35,13 +35,12 @@ pub fn listed(levels: &Levels, tool: &str) -> bool {
     level_of(tool).is_some_and(|level| permission(levels, level) != Permission::Off)
 }
 
-/// Why a call can't run, as the assistant reads it. None when it can.
-pub fn refusal(levels: &Levels, tool: &str) -> Option<&'static str> {
+/// Whether a call runs right away (On) or waits for the host (Ask). Err is why it can't run, as
+/// the assistant reads it.
+pub fn decide(levels: &Levels, tool: &str) -> Result<Permission, &'static str> {
     match level_of(tool).map(|level| permission(levels, level)) {
-        None | Some(Permission::Off) => Some("This tool is turned off in ToolKitOSC"),
-        // shortcut: Ask refuses until the approval pop-up exists; it comes with the webview bridge.
-        Some(Permission::Ask) => Some("This tool needs the host's approval, which this version of ToolKitOSC can't ask for yet"),
-        Some(Permission::On) => None
+        None | Some(Permission::Off) => Err("This tool is turned off in ToolKitOSC"),
+        Some(permission) => Ok(permission)
     }
 }
 
@@ -82,20 +81,20 @@ mod tests {
     fn levels_decide_what_runs_and_what_is_listed() {
         let levels = Levels { read: Permission::Off, ..Levels::default() };
         assert!(!listed(&levels, "get_avatar"));
-        assert!(refusal(&levels, "get_avatar").is_some());
+        assert!(decide(&levels, "get_avatar").is_err());
         assert!(listed(&levels, "stop_everything"), "Stop is there at any level");
-        assert_eq!(refusal(&levels, "stop_everything"), None);
+        assert_eq!(decide(&levels, "stop_everything"), Ok(Permission::On));
 
         let levels = Levels { read: Permission::Ask, ..Levels::default() };
         assert!(listed(&levels, "get_status"));
-        assert!(refusal(&levels, "get_status").is_some());
-        assert_eq!(refusal(&Levels::default(), "get_status"), None);
+        assert_eq!(decide(&levels, "get_status"), Ok(Permission::Ask));
+        assert_eq!(decide(&Levels::default(), "get_status"), Ok(Permission::On));
     }
 
     #[test]
     fn unknown_tools_are_refused() {
         assert!(!listed(&Levels::default(), "resume_everything"));
-        assert!(refusal(&Levels::default(), "resume_everything").is_some());
+        assert!(decide(&Levels::default(), "resume_everything").is_err());
     }
 
     #[test]

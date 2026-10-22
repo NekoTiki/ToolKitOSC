@@ -29,6 +29,16 @@ export interface McpClient {
   lastTool: string | null
 }
 
+// Rust asking the webview (see mcp/bridge.rs): a read of data that lives here, or `approve` for
+// the approval pop-up. Answer with mcpRespond.
+export interface McpRequest {
+  id: number
+  kind: string
+  // The assistant asking.
+  client: string
+  args: Record<string, unknown>
+}
+
 export const mcpApi = {
   mcpSettings: (): Promise<McpSettings> => invoke('mcp_settings'),
   mcpSave: (settings: McpSettings): Promise<void> => invoke('mcp_save', { settings }),
@@ -37,6 +47,10 @@ export const mcpApi = {
   // A new key cuts off every assistant set up with the old one.
   mcpNewKey: (): Promise<string> => invoke('mcp_new_key'),
   mcpClients: (): Promise<McpClient[]> => invoke('mcp_clients'),
+  mcpRespond: (id: number, answer: { result: unknown } | { error: string }): Promise<void> => invoke('mcp_respond', { id, ...answer }),
+  onMcpRequest: (callback: (request: McpRequest) => void): void => {
+    void listen<McpRequest>('mcp-request', (event) => callback(event.payload))
+  },
   onMcpClients: (callback: (clients: McpClient[]) => void): void => {
     void listen<McpClient[]>('mcp-clients', (event) => callback(event.payload))
   }
