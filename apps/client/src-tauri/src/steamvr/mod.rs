@@ -201,7 +201,8 @@ fn write_manifest(manifest_path: &Path) -> Result<(), String> {
     let mut app = serde_json::json!({
         "app_key": APP_KEY,
         "launch_type": "binary",
-        "is_dashboard_overlay": false,
+        // SteamVR only auto-launches overlay apps; with false, SetApplicationAutoLaunch fails with 108.
+        "is_dashboard_overlay": true,
         "strings": {
             "en_us": {
                 "name": "ToolKitOSC",
