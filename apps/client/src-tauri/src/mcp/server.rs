@@ -204,7 +204,7 @@ impl ServerHandler for Session {
             return Err(ErrorData::invalid_request("Read is off or on Ask in ToolKitOSC", None));
         }
         let text = match request.uri.as_str() {
-            AVATAR => self.avatar(),
+            AVATAR => self.avatar_all(),
             ACTIVITY => self.ask_webview("get_activity", serde_json::json!({ "limit": 50 })).await.map(|value| value.to_string()),
             AUTOMATION_DOCS => Ok(super::tools::automation_docs()),
             CONTROL_DOCS => Ok(super::tools::CONTROL_TYPES_DOCS.to_owned()),
