@@ -8,7 +8,7 @@ import { computed, ref } from 'vue'
 
 const parameters = defineModel<PresetParameter[]>('parameters', { required: true })
 
-const { filterableParameters, setExcluded } = usePresets()
+const { filterableParameters, setExcluded, currentValue } = usePresets()
 
 const showAll = ref(false)
 
@@ -25,7 +25,7 @@ const availableParameters = computed<FilterableParameter[]>(() =>
 const add = (param: FilterableParameter): void => {
   parameters.value = [
     ...parameters.value,
-    { address: param.address, name: param.name, kind: param.kind, value: param.value ?? false }
+    { address: param.address, name: param.name, kind: param.kind, value: currentValue(param.address) ?? false }
   ]
 }
 </script>
