@@ -141,7 +141,7 @@ const doBan = async (client: Client): Promise<void> => {
 const doUnban = async (client: Client): Promise<void> => {
   const entry = isBanned(client.ip, client.discordId)
 
-  if (entry?.id === undefined) return
+  if (!entry) return
 
   const ok = await confirm({
     title: `Unban ${client.displayName}?`,
@@ -152,7 +152,7 @@ const doUnban = async (client: Client): Promise<void> => {
 
   if (!ok) return
 
-  await unban(entry.id)
+  await unban(entry)
   toast.add({ title: `${client.displayName} unbanned`, icon: 'i-lucide-shield-check', color: 'success' })
 }
 

@@ -1,7 +1,7 @@
 // Your controls and lock profiles, kept per avatar by Rust - src-tauri/src/setup/.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { ControlGroup, ControlLimits, CreatedBy, ViewerGroupRule } from '@toolkitosc/shared-ui'
+import type { ControlGroup, ControlLimits, CreatedBy, ViewerGroupInfo, ViewerGroupRule } from '@toolkitosc/shared-ui'
 
 export type GroupOverrides = Record<string, ViewerGroupRule>
 
@@ -36,6 +36,29 @@ export interface LegacySetup {
   defaultProfile: string | null
 }
 
+export interface GroupMembership {
+  id: string
+  // When a temporary membership ends, in ms. Unset: until the host removes them.
+  until?: number
+}
+
+export type BanScope = 'ip' | 'discord'
+
+// A ban targets either a stable IP or a Discord ID, never a pair of the two.
+export interface Ban {
+  scope: BanScope
+  value: string
+  reason?: string
+  createdAt: number
+}
+
+// Viewer groups you made, who is in which (by viewer key, expired ones included) and bans.
+export interface ViewersSetup {
+  groups: ViewerGroupInfo[]
+  memberships: Record<string, GroupMembership[]>
+  bans: Ban[]
+}
+
 export const setupApi = {
   setupControls: (): Promise<SetupSnapshot> => invoke('setup_controls'),
   // Saves the worn avatar's groups and their controls, in this order.
@@ -49,5 +72,17 @@ export const setupApi = {
   setupMigrate: (avatars: LegacySetup[]): Promise<void> => invoke('setup_migrate', { avatars }),
   onSetupControls: (callback: (snapshot: SetupSnapshot) => void): void => {
     void listen<SetupSnapshot>('setup-controls', (event) => callback(event.payload))
+  },
+  setupViewers: (): Promise<ViewersSetup> => invoke('setup_viewers'),
+  // The viewer groups you made, in this order. Anyone in a group that's gone is taken out.
+  setupSaveViewerGroups: (groups: ViewerGroupInfo[]): Promise<void> => invoke('setup_save_viewer_groups', { groups }),
+  setupAddToGroup: (key: string, groupId: string, durationMs: number | null): Promise<void> =>
+    invoke('setup_add_to_group', { key, groupId, durationMs }),
+  setupRemoveFromGroup: (key: string, groupId: string): Promise<void> => invoke('setup_remove_from_group', { key, groupId }),
+  setupBan: (scope: BanScope, value: string, reason?: string): Promise<void> => invoke('setup_ban', { scope, value, reason: reason ?? null }),
+  setupUnban: (scope: BanScope, value: string): Promise<void> => invoke('setup_unban', { scope, value }),
+  setupMigrateViewers: (viewers: ViewersSetup): Promise<void> => invoke('setup_migrate_viewers', { viewers }),
+  onSetupViewers: (callback: (viewers: ViewersSetup) => void): void => {
+    void listen<ViewersSetup>('setup-viewers', (event) => callback(event.payload))
   }
 }

@@ -4,9 +4,10 @@ import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { LOG_RETENTION_CHOICES, logRetentionDays, purgeOldCommands } from '@renderer/composables/useCommandsDb'
 import { useLiveQuery } from '@renderer/composables/useLiveQuery'
-import type { BannedClient, Client } from '@renderer/db/clients.db'
+import type { Client } from '@renderer/db/clients.db'
 import { db as clientsDb } from '@renderer/db/clients.db'
 import { db } from '@renderer/db/commands.db'
+import type { Ban } from '@renderer/lib/tauri-bridge'
 
 // Local data this app keeps: the activity log (and how long), known viewers, and bans - which
 // used to be reachable only one viewer at a time from the clients list.
@@ -27,7 +28,7 @@ const clients = useLiveQuery(
 )
 
 // A ban targets an IP or a Discord id; show the viewer it matches when one is known.
-const banLabel = (ban: BannedClient): string =>
+const banLabel = (ban: Ban): string =>
   clients.value.find((client) => (ban.scope === 'ip' ? client.ips.includes(ban.value) : client.discordId === ban.value))?.displayName ??
   (ban.scope === 'ip' ? 'Unknown viewer (IP)' : 'Unknown viewer (Discord)')
 
@@ -50,12 +51,10 @@ const clearLog = async (): Promise<void> => {
   toast.add({ title: 'Activity log cleared', icon: 'i-lucide-trash-2' })
 }
 
-const doUnban = async (ban: BannedClient): Promise<void> => {
-  if (ban.id === undefined) return
-
+const doUnban = async (ban: Ban): Promise<void> => {
   const ok = await confirm({ title: `Unban ${banLabel(ban)}?`, message: 'They can use your controls again.', confirmText: 'Unban', danger: false })
 
-  if (ok) await unban(ban.id)
+  if (ok) await unban(ban)
 }
 
 const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
@@ -114,7 +113,7 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
     <div class="grid divide-y divide-(--ui-border)">
       <div
         v-for="ban in bannedClients"
-        :key="ban.id"
+        :key="`${ban.scope}:${ban.value}`"
         class="flex min-h-14.5 items-center gap-3 py-1.5"
       >
         <span class="grid size-10 shrink-0 place-items-center rounded-md bg-error/12 text-error">

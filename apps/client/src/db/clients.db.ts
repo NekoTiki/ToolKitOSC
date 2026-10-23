@@ -22,7 +22,8 @@ export interface Client {
   // When they were last connected to the share page - see useClientsDb.ts. Not indexed, so no
   // schema bump; viewers recorded before it existed don't have one until they next connect.
   lastSeenAt?: number
-  // The viewer groups the host put them in (see useViewerGroups.ts). Not indexed, so no schema bump.
+  // The viewer groups the host put them in, before Rust kept them (src-tauri/src/setup/viewers.rs).
+  // Read once for the hand-over, then left as a backup.
   groups?: GroupMembership[]
 }
 

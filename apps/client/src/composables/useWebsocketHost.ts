@@ -3,7 +3,6 @@ import { useAiCredits } from '@renderer/composables/useAiCredits'
 import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
 import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { useChatbox } from '@renderer/composables/useChatbox'
 import { describeViewer, useClientsDb } from '@renderer/composables/useClientsDb'
 import { useClientType } from '@renderer/composables/useClientType'
@@ -138,7 +137,6 @@ export function useWebsocketHost(): {
   )
 
   const { onlineClients, upsertViewers } = useClientsDb()
-  const { bannedClients } = useBannedClientsDb()
   const { add: addCommandToDb, update: updateCommandInDb } = useCommandsDb()
   const { lastUpdate } = useOpenShockControl()
   const { lastUpdate: intifaceLastUpdate } = useIntifaceControl()
@@ -149,7 +147,7 @@ export function useWebsocketHost(): {
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
   const { paused } = useStopEverything()
-  const { viewerGroups, activeGroupIds, activeMemberships } = useViewerGroups()
+  const { viewerGroups, activeGroupIds } = useViewerGroups()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
   // A viewer's command Rust checked and ran (src-tauri/src/server/commands.rs), or accepted
@@ -196,11 +194,9 @@ export function useWebsocketHost(): {
     announceAction({ ...accepted, viewerKey: viewer.key, viewerName: showViewers.value || assistant !== null ? viewer.displayName : null, control })
   })
 
-  // What Rust checks viewer commands against besides the controls: who's in which group, the bans
-  // and who may use controls at all.
+  // The share settings Rust checks viewer commands against: who may use controls at all, and
+  // whether viewers see each other's names. Controls, groups and bans are Rust's own.
   const policy = computed<ServerPolicy>(() => ({
-    memberships: activeMemberships.value,
-    bans: bannedClients.value.map(({ scope, value, reason }) => ({ scope, value, reason })),
     clientType: clientType.value,
     showViewers: showViewers.value
   }))

@@ -1,18 +1,16 @@
 import { useAddons } from '@renderer/composables/useAddons'
-import type { Client, GroupMembership } from '@renderer/db/clients.db'
-import { db } from '@renderer/db/clients.db'
+import { viewersSetup } from '@renderer/composables/useSetup'
+import type { GroupMembership } from '@renderer/lib/tauri-bridge'
+import { api } from '@renderer/lib/tauri-bridge'
 import { getUUID } from '@renderer/utils/uuid'
 import type { ViewerGroupInfo } from '@toolkitosc/shared-ui'
-import { liveQuery } from 'dexie'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 // Viewer groups (Friends, Mods...): the host puts viewers in them by hand, and each profile can give a
 // group more than everyone else gets (see groupOverrides in useLockedControls.ts). The groups
-// themselves are global, not per avatar, since they're about people. Who is in which group is saved
-// on each viewer's row in ClientsDB.
+// themselves are global, not per avatar, since they're about people. Rust keeps them, and who is in
+// which by viewer key (src-tauri/src/setup/viewers.rs).
 export type ViewerGroup = ViewerGroupInfo
-
-const STORAGE_KEY = 'viewerGroups'
 
 // Group colors to pick from, picked in turn for new groups.
 export const GROUP_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#22d3ee', '#34d399', '#a3e635', '#fbbf24', '#fb923c', '#f87171']
@@ -25,35 +23,22 @@ export const MEMBERSHIP_DURATIONS: { label: string; ms: number | null }[] = [
   { label: 'For 24 hours', ms: 24 * 60 * 60_000 }
 ]
 
-const load = (): ViewerGroup[] => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
-
-    return Array.isArray(saved) ? saved : []
-  } catch {
-    return []
-  }
-}
-
 // Built in, while the AI assistants add-on is on (src-tauri/src/mcp): every assistant is in it, so
 // a profile can give assistants less, or more, than everyone. Nobody else can be put in it, and it
 // can't be renamed or deleted, so it's left out of the Viewer groups page.
 export const ASSISTANTS_GROUP: ViewerGroup = { id: 'assistants', name: 'Assistants', color: '#a78bfa' }
 
 // The groups you made.
-const savedGroups = ref<ViewerGroup[]>(load())
+const savedGroups = computed<ViewerGroup[]>(() => viewersSetup.value.groups)
 const viewerGroups = computed<ViewerGroup[]>(() => (useAddons().isOn('mcp') ? [...savedGroups.value, ASSISTANTS_GROUP] : savedGroups.value))
 
-const save = (): void => localStorage.setItem(STORAGE_KEY, JSON.stringify(savedGroups.value))
+// Who is in which group, by viewer key, expired memberships included.
+const memberships = computed(() => new Map(Object.entries(viewersSetup.value.memberships)))
 
-// Ticks when a temporary membership ends, so everything that depends on who's in which group
-// (the share page included) updates on time.
+// Ticks when a temporary membership ends, so what's shown updates on time. Rust tells the share
+// page and the headset by itself.
 const now = ref(Date.now())
 let expiryTimer: ReturnType<typeof setTimeout> | undefined
-
-// Every viewer row that's in at least one group, by viewer key. Kept in sync at module scope so the
-// command check in useWebsocketHost.ts can read it synchronously, like bans.
-const memberships = shallowRef<Map<string, GroupMembership[]>>(new Map())
 
 const scheduleExpiry = (): void => {
   clearTimeout(expiryTimer)
@@ -71,14 +56,14 @@ const scheduleExpiry = (): void => {
   }
 }
 
-liveQuery(() => db.clients.filter((client) => !!client.groups?.length).toArray()).subscribe({
-  next: (rows) => {
-    memberships.value = new Map(rows.map((row) => [row.key, row.groups!]))
+watch(
+  memberships,
+  () => {
     now.value = Date.now()
     scheduleExpiry()
   },
-  error: (error) => console.error('Failed to load viewer groups', error)
-})
+  { immediate: true }
+)
 
 const isActive = (membership: GroupMembership): boolean => !membership.until || membership.until > now.value
 
@@ -88,15 +73,9 @@ const groupExists = (id: string): boolean => viewerGroups.value.some((group) => 
 const activeGroupIds = (key: string): string[] =>
   (memberships.value.get(key) ?? []).filter((membership) => isActive(membership) && groupExists(membership.id)).map((membership) => membership.id)
 
-// Everyone in at least one group right now: viewer key -> group ids. Rust checks viewer commands
-// against it (see useWebsocketHost.ts).
-const activeMemberships = computed<Record<string, string[]>>(() =>
-  Object.fromEntries([...memberships.value.keys()].map((key) => [key, activeGroupIds(key)] as const).filter(([, ids]) => ids.length))
-)
-
 // A viewer's current memberships, for showing them: expired ones and deleted groups left out.
-const membershipsOf = (client: Pick<Client, 'groups'>): (GroupMembership & { group: ViewerGroup })[] =>
-  (client.groups ?? []).flatMap((membership) => {
+const membershipsOf = (client: { key: string }): (GroupMembership & { group: ViewerGroup })[] =>
+  (memberships.value.get(client.key) ?? []).flatMap((membership) => {
     const group = viewerGroups.value.find((g) => g.id === membership.id)
 
     return group && isActive(membership) ? [{ ...membership, group }] : []
@@ -104,52 +83,33 @@ const membershipsOf = (client: Pick<Client, 'groups'>): (GroupMembership & { gro
 
 const getGroup = (id: string): ViewerGroup | undefined => viewerGroups.value.find((group) => group.id === id)
 
+// Shown straight away; Rust saves them and sends them back.
+const saveGroups = (groups: ViewerGroup[]): void => {
+  viewersSetup.value = { ...viewersSetup.value, groups }
+  api.setupSaveViewerGroups(JSON.parse(JSON.stringify(groups))).catch((error) => console.error('Could not save the viewer groups:', error))
+}
+
 const addGroup = (name: string): ViewerGroup => {
   const group = { id: getUUID(), name, color: GROUP_COLORS[savedGroups.value.length % GROUP_COLORS.length]! }
 
-  savedGroups.value = [...savedGroups.value, group]
-  save()
+  saveGroups([...savedGroups.value, group])
 
   return group
 }
 
 const updateGroup = (id: string, changes: Partial<Omit<ViewerGroup, 'id'>>): void => {
-  savedGroups.value = savedGroups.value.map((group) => (group.id === id ? { ...group, ...changes } : group))
-  save()
+  saveGroups(savedGroups.value.map((group) => (group.id === id ? { ...group, ...changes } : group)))
 }
 
-// Takes everyone out of the group too. Profiles keep their rules for it, but nothing reads them.
+// Rust takes everyone out of the group too. Profiles keep their rules for it, but nothing reads them.
 const deleteGroup = async (id: string): Promise<void> => {
-  savedGroups.value = savedGroups.value.filter((group) => group.id !== id)
-  save()
-
-  await db.clients
-    .filter((client) => !!client.groups?.some((membership) => membership.id === id))
-    .modify((client) => {
-      client.groups = client.groups!.filter((membership) => membership.id !== id)
-    })
+  saveGroups(savedGroups.value.filter((group) => group.id !== id))
 }
 
-// Expired memberships are dropped whenever a viewer's groups change.
-const setMemberships = async (client: Client, change: (groups: GroupMembership[]) => GroupMembership[]): Promise<void> => {
-  if (client.id === undefined) return
+const addToGroup = (client: { key: string }, groupId: string, durationMs: number | null): Promise<void> =>
+  api.setupAddToGroup(client.key, groupId, durationMs)
 
-  await db.clients
-    .where('id')
-    .equals(client.id)
-    .modify((row) => {
-      row.groups = change((row.groups ?? []).filter((membership) => !membership.until || membership.until > Date.now()))
-    })
-}
-
-const addToGroup = (client: Client, groupId: string, durationMs: number | null): Promise<void> =>
-  setMemberships(client, (groups) => [
-    ...groups.filter((membership) => membership.id !== groupId),
-    durationMs ? { id: groupId, until: Date.now() + durationMs } : { id: groupId }
-  ])
-
-const removeFromGroup = (client: Client, groupId: string): Promise<void> =>
-  setMemberships(client, (groups) => groups.filter((membership) => membership.id !== groupId))
+const removeFromGroup = (client: { key: string }, groupId: string): Promise<void> => api.setupRemoveFromGroup(client.key, groupId)
 
 // How many viewers are in each group right now.
 const memberCount = (groupId: string): number =>
@@ -159,13 +119,13 @@ export function useViewerGroups(): {
   viewerGroups: typeof viewerGroups
   // Only the groups you made, without Assistants.
   savedGroups: typeof savedGroups
+  memberships: typeof memberships
   now: typeof now
   getGroup: typeof getGroup
   addGroup: typeof addGroup
   updateGroup: typeof updateGroup
   deleteGroup: typeof deleteGroup
   activeGroupIds: typeof activeGroupIds
-  activeMemberships: typeof activeMemberships
   membershipsOf: typeof membershipsOf
   addToGroup: typeof addToGroup
   removeFromGroup: typeof removeFromGroup
@@ -174,13 +134,13 @@ export function useViewerGroups(): {
   return {
     viewerGroups,
     savedGroups,
+    memberships,
     now,
     getGroup,
     addGroup,
     updateGroup,
     deleteGroup,
     activeGroupIds,
-    activeMemberships,
     membershipsOf,
     addToGroup,
     removeFromGroup,

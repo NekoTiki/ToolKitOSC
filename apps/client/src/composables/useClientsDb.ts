@@ -1,6 +1,8 @@
+import { viewersSetup } from '@renderer/composables/useSetup'
 import type { Client } from '@renderer/db/clients.db'
 import { db, mergeClients } from '@renderer/db/clients.db'
 import { db as commandsDb } from '@renderer/db/commands.db'
+import { api } from '@renderer/lib/tauri-bridge'
 import { getStableIp } from '@renderer/utils/stableIp'
 import { viewerCommandIds } from '@renderer/utils/viewers'
 import type { ClientListEntry } from '@toolkitosc/shared-ui'
@@ -99,10 +101,12 @@ const clearViewerActivity = async (client: Client): Promise<number> => {
   return ids.length
 }
 
-// Forgets a viewer and their activity. Their bans stay: deleting someone isn't unbanning them.
-// The log goes first, so a failure never leaves actions behind with nobody to show them under.
+// Forgets a viewer, their activity and their groups. Their bans stay: deleting someone isn't
+// unbanning them. The log goes first, so a failure never leaves actions behind with nobody to show
+// them under.
 const deleteViewer = async (client: Client): Promise<void> => {
   await clearViewerActivity(client)
+  await Promise.all((viewersSetup.value.memberships[client.key] ?? []).map((membership) => api.setupRemoveFromGroup(client.key, membership.id)))
   if (client.id !== undefined) await db.clients.delete(client.id)
 }
 

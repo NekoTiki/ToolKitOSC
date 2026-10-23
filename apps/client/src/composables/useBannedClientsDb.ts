@@ -1,38 +1,23 @@
-import type { BannedClient, BanScope } from '@renderer/db/clients.db'
-import { db } from '@renderer/db/clients.db'
-import { liveQuery } from 'dexie'
-import { ref } from 'vue'
+import { viewersSetup } from '@renderer/composables/useSetup'
+import type { Ban, BanScope } from '@renderer/lib/tauri-bridge'
+import { api } from '@renderer/lib/tauri-bridge'
+import { computed } from 'vue'
 
-const bannedClients = ref<BannedClient[]>([])
-
-// Kept in sync with the DB at module scope (same pattern as `onlineClients` in useClientsDb.ts)
-// so `isBanned` can be checked synchronously from the hot command path in useWebsocketHost.ts.
-liveQuery(() => db.bannedClients.toArray()).subscribe({
-  next: (value) => (bannedClients.value = value),
-  error: (error) => console.error('Failed to load banned clients', error)
-})
+// Bans, kept by Rust (src-tauri/src/setup/viewers.rs), which checks every viewer command against
+// them. `isBanned` stays synchronous for the Viewers page.
+const bannedClients = computed<Ban[]>(() => viewersSetup.value.bans)
 
 export function useBannedClientsDb(): {
   bannedClients: typeof bannedClients
   ban: (scope: BanScope, value: string, reason?: string) => Promise<void>
-  unban: (id: number) => Promise<void>
-  isBanned: (ip: string, discordId?: string | null) => BannedClient | undefined
+  unban: (ban: Ban) => Promise<void>
+  isBanned: (ip: string, discordId?: string | null) => Ban | undefined
 } {
-  const ban = async (scope: BanScope, value: string, reason?: string): Promise<void> => {
-    const existing = await db.bannedClients.get({ scope, value })
+  const ban = (scope: BanScope, value: string, reason?: string): Promise<void> => api.setupBan(scope, value, reason)
 
-    if (existing) {
-      await db.bannedClients.put({ ...existing, reason: reason ?? existing.reason })
-    } else {
-      await db.bannedClients.add({ scope, value, reason, createdAt: Date.now() })
-    }
-  }
+  const unban = (ban: Ban): Promise<void> => api.setupUnban(ban.scope, ban.value)
 
-  const unban = async (id: number): Promise<void> => {
-    await db.bannedClients.delete(id)
-  }
-
-  const isBanned = (ip: string, discordId?: string | null): BannedClient | undefined =>
+  const isBanned = (ip: string, discordId?: string | null): Ban | undefined =>
     bannedClients.value.find(
       (banned) =>
         (banned.scope === 'ip' && banned.value === ip) ||
