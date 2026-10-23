@@ -6,6 +6,7 @@ import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import type { AutomationGuard } from '@renderer/lib/tauri-bridge'
 import { MAX_GUARDS } from '@renderer/utils/automations'
+import { VR_MODE, YOU_STATES, youGuard, youState } from '@renderer/utils/builtinParameters'
 import { computed } from 'vue'
 
 // Easy mode, "only when": viewers and profile as plain choices, checks on the avatar as rows.
@@ -43,7 +44,34 @@ const profileItems = computed(() => [
   ...lockedControlGroups.value.map((p) => ({ value: p.id, label: p.name }))
 ])
 
-const parameterGuards = computed(() => guards.value.flatMap((guard, index) => (guard.kind === 'parameter' ? [index] : [])))
+// What you're doing: one check on a VRChat parameter, as "state:yes" or "state:no".
+const isYou = (guard: AutomationGuard): boolean => guard.kind === 'parameter' && (!!youState(guard.parameter) || guard.parameter === VR_MODE)
+const you = computed({
+  get: () => {
+    const guard = guards.value.find(isYou)
+    return guard?.kind === 'parameter' ? `${guard.parameter}:${guard.not ? 'no' : 'yes'}` : ANY
+  },
+  set: (value: string) => {
+    const others = guards.value.filter((g) => !isYou(g))
+    if (value === ANY) {
+      guards.value = others
+      return
+    }
+    const [address, yes] = value.split(':')
+    guards.value = [...others, youGuard(address!, yes === 'yes')]
+  }
+})
+const youItems = [
+  { value: ANY, label: "Doesn't matter" },
+  ...YOU_STATES.flatMap((s) => [
+    { value: `${s.address}:yes`, label: `You're ${s.is}` },
+    { value: `${s.address}:no`, label: `You're not ${s.is}` }
+  ]),
+  { value: `${VR_MODE}:yes`, label: "You're in VR" },
+  { value: `${VR_MODE}:no`, label: "You're on desktop" }
+]
+
+const parameterGuards = computed(() => guards.value.flatMap((guard, index) => (guard.kind === 'parameter' && !isYou(guard) ? [index] : [])))
 
 const addCheck = (): void => {
   guards.value.push({ kind: 'parameter', parameter: '', valueType: 'Bool', condition: { type: 'is-on' }, not: false })
@@ -73,6 +101,16 @@ const addCheck = (): void => {
         v-model="profile"
         :items="profileItems"
         aria-label="Profile"
+      />
+    </UFormField>
+    <UFormField
+      label="You"
+      description="On every avatar, from what VRChat says."
+    >
+      <USelect
+        v-model="you"
+        :items="youItems"
+        class="w-full max-w-80"
       />
     </UFormField>
     <UFormField

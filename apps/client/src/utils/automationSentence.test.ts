@@ -1,6 +1,7 @@
 import type { Automation, AutomationStep } from '@renderer/lib/tauri-bridge'
 import { newAutomation } from '@renderer/utils/automations'
 import { easyExtras, plainSentence, sentence } from '@renderer/utils/automationSentence'
+import { gestureTrigger, VR_MODE, YOU_STATES, youGuard, youTrigger } from '@renderer/utils/builtinParameters'
 import { describe, expect, it } from 'vitest'
 
 const automation = (patch: Partial<Automation>): Automation => ({ ...newAutomation('avtr_1', 'Rusk'), name: 'Test', ...patch })
@@ -49,6 +50,17 @@ describe('sentence', () => {
     expect(plainSentence(s)).toBe(
       'When Boop turns on, buzz all toys at 60% for 2 s, then play Wave on Lush 3 for 10 s, then stop your toys, any time, every time.'
     )
+  })
+
+  it('words gestures and what you do', () => {
+    const fist = gestureTrigger('avtr_1', 'Rusk', 'left', 1)
+    const stop: AutomationStep = { kind: 'stop-toys', delayMs: 0 }
+    expect(plainSentence(sentence(automation({ when: fist, then: [stop] }), context))).toBe(
+      'When your left hand makes Fist, stop your toys, any time, every time.'
+    )
+    const afk = { ...youTrigger('avtr_1', 'Rusk', YOU_STATES[0]!), condition: { type: 'is-on' as const } }
+    const s = sentence(automation({ when: afk, then: [stop], onlyIf: [youGuard(VR_MODE, false)] }), context)
+    expect(plainSentence(s)).toBe("While you're AFK, stop your toys, only when you're on desktop, every time.")
   })
 
   it('uses "While" for a state and words a hold', () => {
