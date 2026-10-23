@@ -65,7 +65,7 @@ fn smooth_noise(t: f64, step_ms: f64, seed_offset: f64) -> f64 {
     from + (seeded_random(step + 1.0 + seed_offset) - from) * eased
 }
 
-fn builtin(id: &str) -> Option<fn(f64) -> f64> {
+pub(crate) fn builtin(id: &str) -> Option<fn(f64) -> f64> {
     Some(match id {
         "pulse" => |t| ((t / 250.0).sin() + 1.0) / 2.0,
         "wave" => |t| ((t / 2000.0).sin() + 1.0) / 2.0,

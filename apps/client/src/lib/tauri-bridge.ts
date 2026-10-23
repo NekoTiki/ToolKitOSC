@@ -16,6 +16,7 @@ import { oscApi } from './tauri/osc'
 import { overlayApi } from './tauri/overlay'
 import { owoApi } from './tauri/owo'
 import { serverApi } from './tauri/server'
+import { setupApi } from './tauri/setup'
 import { toysApi } from './tauri/toys'
 
 export type * from './tauri/addons'
@@ -32,6 +33,7 @@ export type * from './tauri/osc'
 export type * from './tauri/overlay'
 export type * from './tauri/owo'
 export type * from './tauri/server'
+export type * from './tauri/setup'
 export type * from './tauri/toys'
 
 export const api = {
@@ -39,6 +41,7 @@ export const api = {
   ...addonsApi,
   ...oscApi,
   ...controlsApi,
+  ...setupApi,
   ...boardsApi,
   ...automationsApi,
   ...serverApi,

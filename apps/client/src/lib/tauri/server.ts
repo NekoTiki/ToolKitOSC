@@ -2,7 +2,7 @@
 // the HTTP API - src-tauri/src/server/.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { CommandValue, ControlGroup } from '@toolkitosc/shared-ui'
+import type { CommandValue } from '@toolkitosc/shared-ui'
 
 // The share server link - mirrors `Status` in src-tauri/src/server/mod.rs. 'rejected': the server
 // refused the token (auth-error). 'mismatch': it speaks another protocol version. Neither retries.
@@ -34,10 +34,9 @@ export interface AuthUser {
   email: string
 }
 
-// What Rust checks viewer commands against - mirrors src-tauri/src/server/policy.rs.
+// What Rust checks viewer commands against besides the controls (Rust has those) - mirrors
+// src-tauri/src/server/policy.rs.
 export interface ServerPolicy {
-  // The worn avatar's groups, hidden ones included, with the profile's locks, limits and group rules.
-  groups: ControlGroup[]
   // Viewer key -> the groups they're in right now.
   memberships: Record<string, string[]>
   bans: { scope: 'ip' | 'discord'; value: string; reason?: string }[]
@@ -58,7 +57,7 @@ export interface CommandExecuted {
 }
 
 export const serverApi = {
-  // The controls and rules viewer commands are checked against, in Rust.
+  // The rules viewer commands are checked against, in Rust.
   serverSetPolicy: (policy: ServerPolicy): Promise<void> => invoke('server_set_policy', { policy }),
   // A viewer's command Rust checked and ran (or accepted without a control to run), to log.
   onCommandExecuted: (callback: (executed: CommandExecuted) => void): void => {

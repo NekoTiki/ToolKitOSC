@@ -20,6 +20,7 @@ use crate::openshock::OpenShock;
 use crate::overlay::Overlay;
 use crate::owo::Owo;
 use crate::server::Server;
+use crate::setup::Setup;
 use crate::toys::patterns::Patterns;
 use crate::toys::saved::Saved;
 use crate::toys::Toys;
@@ -68,6 +69,8 @@ pub struct AppState {
     pub automations: Automations,
     /// The link to the share server (see `server`).
     pub server: Server,
+    /// Your controls and profiles (see `setup`).
+    pub setup: Setup,
     /// OpenShock's token check, live hub and pending shocks (see `openshock`).
     pub openshock: OpenShock,
     /// The Intiface connection and its devices (see `intiface`).
@@ -110,6 +113,7 @@ impl Default for AppState {
             boards: Boards::default(),
             automations: Automations::default(),
             server: Server::default(),
+            setup: Setup::default(),
             openshock: OpenShock::default(),
             intiface: Intiface::default(),
             toys: Toys::default(),

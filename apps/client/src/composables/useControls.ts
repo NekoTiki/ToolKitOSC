@@ -1,22 +1,17 @@
-import { controlGroups } from '@renderer/assets/controlsExample'
 import { useAddons } from '@renderer/composables/useAddons'
-import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { useBhaptics } from '@renderer/composables/useBhaptics'
-import { isTouched, useIntiface } from '@renderer/composables/useIntiface'
-import { resolvePatternRefs } from '@renderer/composables/useIntifacePatterns'
-import { useLockedControls } from '@renderer/composables/useLockedControls'
-import { useOpenShock } from '@renderer/composables/useOpenShock'
-import { useOwo } from '@renderer/composables/useOwo'
-import { usePresets } from '@renderer/composables/usePresets'
-import { useViewerGroups } from '@renderer/composables/useViewerGroups'
+import { setup } from '@renderer/composables/useSetup'
 import { api } from '@renderer/lib/tauri-bridge'
-import type { CommandWithoutIds, ControlGroup, ControlType, LastUser, ViewerGroupRule } from '@toolkitosc/shared-ui'
+import type { CommandWithoutIds, ControlGroup, ControlType, LastUser } from '@toolkitosc/shared-ui'
 import { useBhapticsControl, useIntifaceControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
-import _ from 'lodash'
 import type { ComputedRef } from 'vue'
 import { computed, ref, toRaw, watch } from 'vue'
 
-const controlsList = ref<ControlGroup[]>([])
+// The worn avatar's groups as Rust resolved them (see useSetup.ts). Edits change them here so they
+// show straight away, then Rust saves them and sends them back resolved.
+const controlsList = computed<ControlGroup[]>({
+  get: () => setup.value.groups,
+  set: (groups) => (setup.value = { ...setup.value, groups })
+})
 
 // Rust reports what it did to toys and shockers, whoever asked: the tiles follow, and the existing
 // watches in useWebsocketHost.ts pass it on to the share page.
@@ -25,25 +20,6 @@ api.onShockValue(({ controlId, value }) => useOpenShockControl().setValue(contro
 api.onBhapticsState(({ playing, touched }) => useBhapticsControl().setState({ playing, touched }))
 api.onOwoState(({ playing, touched }) => useOwoControl().setState({ playing, touched }))
 const controlLastUser = ref<Map<string, Map<string, LastUser>>>(new Map())
-
-// One-off migration: 'intiface-vibrator' (with a `vibrators` field) was renamed to 'intiface-toy'
-// (with `actuators`) - a control saved locally under the old shape doesn't just look different,
-// Control.vue's dispatcher only recognizes the current type string, so it silently renders nothing
-// at all. Straightens any such control back into the current shape instead of leaving it invisible.
-const migrateControlGroups = (groups: ControlGroup[]): ControlGroup[] => {
-  return groups.map((group) => ({
-    ...group,
-    controls: group.controls.map((control) => {
-      const legacy = control as unknown as { type: string; vibrators?: unknown }
-
-      if (legacy.type !== 'intiface-vibrator') return control
-
-      const { vibrators, ...rest } = legacy
-
-      return { ...rest, type: 'intiface-toy', actuators: vibrators } as ControlType
-    })
-  }))
-}
 
 export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) => void): {
   controls: ComputedRef<ControlGroup[]>
@@ -73,83 +49,20 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   // to the end of the target group unless `index` says where. Returns the index it was moved from.
   moveControl: (fromGroupId: string, controlId: string, toGroupId: string, index?: number) => number | undefined
   setControlPinned: (groupId: string, controlId: string, pinned: boolean) => void
-  loadControls: (avatarId: string) => void
 
   // Runs a command as you (see handleCommand below).
   handleCommand: (control: ControlType, command: CommandWithoutIds) => void
 } {
-  const { avatarDetails } = useAvatarDetails(() => loadControls())
-  const { lockedControls, controlLimits, groupOverrides } = useLockedControls()
-  const { viewerGroups } = useViewerGroups()
-  const { isAvailable: openShockAvailable, hubsOffline } = useOpenShock()
-  const { isAvailable: intifaceAvailable, devices: intifaceDevices } = useIntiface()
-  const { getPreset } = usePresets()
   const { offAddonForControlType } = useAddons()
-  const { state: bhapticsState } = useBhaptics()
-  const { state: owoState } = useOwo()
 
-  // The active profile's rules for each viewer group, by control id then group id. Groups that
-  // were deleted are left out.
-  const groupRulesByControl = computed(() => {
-    const byControl = new Map<string, Record<string, ViewerGroupRule>>()
-
-    viewerGroups.value.forEach((group) => {
-      Object.entries(groupOverrides.value[group.id] ?? {}).forEach(([controlId, rule]) => {
-        byControl.set(controlId, { ...byControl.get(controlId), [group.id]: rule })
-      })
-    })
-
-    return byControl
-  })
-
-  const controls = computed((): ControlGroup[] => {
-    return controlsList.value.map((controlGroup) => ({
-      ...controlGroup,
-      controls: controlGroup.controls.map((control) => ({
-        ...control,
-        // Recorded patterns can be renamed or deleted after a control picked them.
-        ...(control.type === 'intiface-pattern' && { allowedPatterns: resolvePatternRefs(control.allowedPatterns) }),
-        locked: lockedControls.value[control.id] ?? false,
-        limits: controlLimits.value[control.id],
-        groupRules: groupRulesByControl.value.get(control.id),
-        // OpenShock/Intiface controls are unavailable to everyone - same as a locked control -
-        // unless the service is actually reachable (see useOpenShock.ts/useIntiface.ts). An
-        // Intiface toy/pattern control is additionally unavailable when every toy it targets has
-        // been unplugged/disconnected - even while Intiface itself is still connected - since
-        // there's nothing left for it to actuate; a control spanning several toys stays available
-        // as long as at least one of them is still present. Other control types never depend on an
-        // external service, so they're always available.
-        // A shocker control whose hubs are all offline is unavailable too, with its own reason.
-        // So is a control whose add-on is off (it's also left out of visibleControls, see below).
-        ...(offAddonForControlType(control.type)
-          ? { unavailableReason: `${offAddonForControlType(control.type)!.name} is off` }
-          : control.type === 'open-shock-shocker' && openShockAvailable.value && hubsOffline(control.shockers)
-            ? { unavailableReason: 'Hub offline' }
-            : {}),
-        // Avatar touch is driving one of its toys: viewers can still use it, the toy waits.
-        ...((control.type === 'intiface-toy' || control.type === 'intiface-pattern') && isTouched(control.actuators) && { paused: true }),
-        unavailable: !!offAddonForControlType(control.type) || (
-          control.type === 'open-shock-shocker'
-            ? !openShockAvailable.value || hubsOffline(control.shockers)
-            : control.type === 'intiface-toy' || control.type === 'intiface-pattern'
-              ? !intifaceAvailable.value ||
-                control.actuators.every(
-                  (actuator) => !intifaceDevices.value.has(actuator.deviceIndex)
-                )
-              : control.type === 'preset'
-                ? !getPreset(control.presetId)
-                : control.type === 'bhaptics'
-                  ? bhapticsState.value.status !== 'connected'
-                  : control.type === 'owo'
-                    ? owoState.value.status !== 'connected'
-                    : false)
-      }))
-    }))
-  })
+  // Each control with the active profile's locks, limits and group rules, whether it's
+  // unavailable (add-on off, service down, toys or preset gone) and whether avatar touch has its
+  // toy: all worked out in Rust (src-tauri/src/setup/resolve.rs).
+  const controls = computed((): ControlGroup[] => controlsList.value)
 
   // What viewers get. A control whose add-on is off is kept, but viewers don't see it until it's
-  // back on. The server policy still gets it, as unavailable, so a command already on its way is
-  // dropped rather than accepted as an unknown control.
+  // back on. Rust still has it, as unavailable, so a command already on its way is dropped rather
+  // than accepted as an unknown control.
   const visibleControls = computed((): ControlGroup[] => {
     return controls.value
       .filter((group) => !group.hidden)
@@ -169,8 +82,6 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
 
     return map
   })
-
-  const avatarId = computed(() => avatarDetails.value?.id)
 
   const getControlLastUser = (groupId: string, controlId: string): LastUser | undefined => {
     return controlLastUser.value.get(groupId)?.get(controlId)
@@ -252,11 +163,8 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
   // a time like the other setters here - the new order is the only thing that changed, so it's
   // taken as-is instead of matched back up by id.
   const setGroups = (groups: ControlGroup[]): void => {
-    // Callers pass groups from `controls`, so drop the derived flags it adds.
-    controlsList.value = groups.map((group) => ({
-      ...group,
-      controls: group.controls.map((control) => _.omit(control, ['locked', 'unavailable', 'paused', 'limits', 'groupRules']) as ControlType)
-    }))
+    // Rust drops the derived flags `controls` carries when it saves.
+    controlsList.value = groups
 
     saveControls()
   }
@@ -306,7 +214,6 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     if (!group) return
 
     group.controls.push(control)
-    console.log('Changed')
 
     saveControls()
   }
@@ -352,8 +259,6 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     return fromIndex
   }
 
-  // Writes the raw stored control, not a copy from `controls` - that computed adds derived
-  // locked/unavailable flags that must never be saved.
   const setControlPinned = (groupId: string, controlId: string, pinned: boolean): void => {
     const control = controlsList.value.find((g) => g.id === groupId)?.controls.find((c) => c.id === controlId)
 
@@ -364,19 +269,13 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     saveControls()
   }
 
-  const loadControls = (): void => {
-    if (avatarId.value === 'avtr_b89f691a-d31d-4a84-83fe-5cff212b3761') {
-      controlsList.value = controlGroups
-    } else {
-      const storedControls = localStorage.getItem(`controls_${avatarId.value}`)
-
-      controlsList.value = storedControls ? migrateControlGroups(JSON.parse(storedControls)) : []
-    }
-  }
-
-  // The raw list, not `controls`: the derived locked/unavailable/limits flags must never be saved.
+  // Rust leaves out the derived flags and sends the groups back resolved.
   const saveControls = (): void => {
-    localStorage.setItem(`controls_${avatarId.value}`, JSON.stringify(controlsList.value))
+    const avatarId = setup.value.avatarId
+
+    if (!avatarId) return
+
+    api.setupSaveGroups(avatarId, JSON.parse(JSON.stringify(controlsList.value))).catch((error) => console.error('Could not save the controls:', error))
   }
 
   // Runs in Rust (src-tauri/src/controls.rs), the same code that runs viewers' commands, without
@@ -420,7 +319,6 @@ export function useControls(onControlsChange?: (controlGroups: ControlGroup[]) =
     moveControl,
     setControlPinned,
 
-    loadControls,
     handleCommand
   }
 }

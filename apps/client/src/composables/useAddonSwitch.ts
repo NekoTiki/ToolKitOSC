@@ -2,7 +2,8 @@ import type { Addon } from '@renderer/composables/useAddons'
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAutomations } from '@renderer/composables/useAutomations'
-import { addonUsage, savedControlTypes, usageMessage } from '@renderer/utils/addonUsage'
+import { api } from '@renderer/lib/tauri-bridge'
+import { addonUsage, usageMessage } from '@renderer/utils/addonUsage'
 
 const names = (addons: Addon[]): string => {
   const list = addons.map((addon) => addon.name)
@@ -73,7 +74,8 @@ export function useAddonSwitch(): {
         (a.needs.includes(addon.id) || (a.needsAny.includes(addon.id) && !a.needsAny.some((id) => id !== addon.id && byId(id)?.enabled)))
     )
     const affected = [...dependents, addon]
-    const controlTypes = savedControlTypes()
+    // Every avatar's controls, not only the worn avatar's: turning an add-on off affects them all.
+    const controlTypes = await api.setupSavedControlTypes()
     const usage = affected
       .map((a) => usageMessage(a.name, addonUsage(a, controlTypes, automations.value)))
       .filter((message): message is string => !!message)

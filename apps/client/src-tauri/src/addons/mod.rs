@@ -270,6 +270,8 @@ pub fn statuses(app: &AppHandle) -> Vec<(&'static str, &'static str, Status)> {
 /// Something about an add-on changed: its switch or its status.
 pub fn changed(app: &AppHandle) {
     let _ = app.emit("addons-update", view(app));
+    // Whether controls are available follows add-ons and their connections.
+    crate::setup::refresh(app);
 }
 
 /// Turns an add-on on or off, saves it, and starts or stops it. Turning one off stops its devices
