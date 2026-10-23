@@ -121,7 +121,7 @@ const groups = computed(() => [
 
     <div
       v-else
-      class="grid max-w-4xl gap-3.5"
+      class="grid gap-3.5"
     >
       <template
         v-for="group in groups"
