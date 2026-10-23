@@ -102,8 +102,8 @@ export interface BaseControl {
   // client-side like `unavailable`.
   paused?: boolean
   // Set by the host's active profile, like `locked`: narrows what viewers may do with a control
-  // that is still usable. Computed client-side (see useControls.ts), never saved, and enforced by
-  // sanitizeCommand (utils/controlLimits.ts) on the host and the relay.
+  // that is still usable. Worked out by the desktop app, never saved, and enforced there
+  // (src-tauri/src/server/limits.rs).
   limits?: ControlLimits
   // Set by the host's active profile next to `limits`: what each viewer group gets instead of the
   // rules above, keyed by group id. Never saved, and never sent on to viewers: the relay resolves it
@@ -522,7 +522,7 @@ export interface PresetControlCommand extends BaseControlCommand {
 // 'hold' is sent every BHAPTICS_HOLD_TICK_MS while a viewer presses, with the motors under their
 // finger: each one keeps those motors on for a moment, so a closed tab stops them by itself. An
 // empty `motors` ends the hold, and `start` marks its first message (the only one logged). 'tap' plays
-// `motors` once, for the control's pulse length. `level` (0-1) is filled in by sanitizeCommand: the
+// `motors` once, for the control's pulse length. `level` (0-1) is filled in by the desktop app: the
 // highest the control and the profile allow. 'effect' plays one of the control's `effects` across
 // all its positions.
 export interface BhapticsControlCommand extends BaseControlCommand {
@@ -537,7 +537,7 @@ export interface BhapticsControlCommand extends BaseControlCommand {
 }
 
 // Plays the sensation `value` (an OWO_SENSATIONS id) on `muscles`. `level` (0-1) is filled in by
-// sanitizeCommand: the highest the control and the profile allow.
+// the desktop app: the highest the control and the profile allow.
 export interface OwoControlCommand extends BaseControlCommand {
   type: 'owo'
   value: string

@@ -26,7 +26,7 @@ import {
   showViewers
 } from '~~/server/routes/ws/[ws]'
 import { getAiAccess } from '~~/server/utils/ai/access'
-import { recordControlInventory } from '~~/server/utils/controlStats'
+import { recordControlInventory, scheduleControlActivation } from '~~/server/utils/controlStats'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -38,6 +38,18 @@ export const hostList = new Map<RoomId, Host>()
 // not a flat ControlType[] — the old untyped `Map<RoomId, ControlType[]>` annotation was wrong
 // and only went unnoticed because this file had no real type checking on the WS payloads before.
 export const hostControls = new Map<RoomId, ControlGroup[]>()
+
+// A command the desktop app accepted (command-accepted), for the daily stats: counted under the
+// control's type as the room's controls say, so a viewer can't pick what gets counted. Live
+// recordings and bHaptics holds after their first message are never accepted, so never counted.
+const countActivation = (roomId: RoomId, groupId: unknown, controlId: unknown): void => {
+  const control = hostControls
+    .get(roomId)
+    ?.find((group) => group.id === groupId)
+    ?.controls.find((c) => c.id === controlId)
+
+  if (control) scheduleControlActivation(roomId, String(groupId), control.id, control.type)
+}
 export const hostArgs = new Map<RoomId, Record<string, OSCArg[]>>()
 export const hostTheme = new Map<RoomId, { primary: string | null; secondary: string | null }>()
 export const hostShareSettings = new Map<RoomId, ShareSettingsMessage>()
@@ -279,6 +291,7 @@ export default defineWebSocketHandler({
       }
 
       hostLastAction.set(roomId, action)
+      countActivation(roomId, data.message.groupId, data.message.controlId)
       sendToEveryoneInRoom(roomId, {
         type: 'viewer-action',
         message: showViewers(roomId) ? action : { ...action, viewer: null }
