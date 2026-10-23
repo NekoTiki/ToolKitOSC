@@ -7,7 +7,7 @@ use rmcp::{schemars, tool, tool_router};
 use serde_json::{json, Value};
 
 use super::json;
-use crate::automations::model::{Automation, Guard, Retrigger, Step, Trigger};
+use crate::automations::model::{Action, Automation, Guard, Retrigger, Step, Trigger};
 use crate::mcp::server::Session;
 use crate::types::CreatedBy;
 
@@ -150,6 +150,11 @@ impl Session {
 impl Session {
     #[tool(description = "Saves an automation as a draft, turned off: the host turns it on after looking at it. Read tkosc://docs/automations for the shapes of when, then and onlyIf.")]
     fn save_automation(&self, Parameters(request): Parameters<AutomationRequest>) -> Result<String, String> {
+        // Raw OSC can do anything and nothing checks it: only the host adds those.
+        let osc = |action: &Action| matches!(action, Action::OscMessage { .. });
+        if request.then.iter().any(|step| osc(&step.action) || matches!(&step.action, Action::OneOf { options } if options.iter().any(osc))) {
+            return Err("OSC message steps can only be added by the host".to_owned());
+        }
         let id = self.draft_id(request.id, |id| crate::automations::list(&self.app).into_iter().find(|a| a.id == id).map(|a| a.created_by))?;
         let automation = Automation {
             id: id.clone(),

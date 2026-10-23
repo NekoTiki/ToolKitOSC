@@ -103,6 +103,8 @@ export type ParameterAction =
   | { type: 'hold'; value: number }
   // A Float follows the trigger, -1 to 1.
   | { type: 'follow'; min: number; max: number }
+  // Adds to an Int or a Float (negative takes away), kept within its range.
+  | { type: 'add'; amount: number }
 
 export type BoardOutputAction = {
   kind: 'board-output'
@@ -162,6 +164,13 @@ export type ToyAction = { kind: 'toy'; toys: IntifaceActuatorRef[]; run: ToyRun 
 // A built-in or saved pattern, for `ms` or while the condition holds.
 export type ToyPatternAction = { kind: 'toy-pattern'; toys: IntifaceActuatorRef[]; patternId: string; ms: number; whileHeld: boolean }
 export type StopToysAction = { kind: 'stop-toys' }
+export type AutomationEnabledAction = { kind: 'automation-enabled'; automationId: string; enabled: boolean }
+// The overlay add-on. Takes the chatbox's placeholders.
+export type VrToastAction = { kind: 'vr-toast'; text: string }
+// Runs one of these moments, picked at random each time.
+export type OneOfAction = { kind: 'one-of'; options: AutomationAction[] }
+// Any OSC message to VRChat, unchecked. Assistants can't add it.
+export type OscMessageAction = { kind: 'osc-message'; address: string; value: boolean | number | string }
 
 export type AutomationAction =
   | BoardOutputAction
@@ -177,6 +186,10 @@ export type AutomationAction =
   | ToyAction
   | ToyPatternAction
   | StopToysAction
+  | AutomationEnabledAction
+  | VrToastAction
+  | OneOfAction
+  | OscMessageAction
 
 // The backend asking the app to carry out a step (see useAutomationRunner.ts). `start` and `stop`
 // bracket a hold; `follow` carries the trigger's value, 0-1.

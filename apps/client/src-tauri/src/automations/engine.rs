@@ -133,7 +133,9 @@ pub enum Effect {
     /// A bHaptics pulse or effect step.
     Bhaptics(Action),
     /// An OWO sensation step.
-    Owo(Action)
+    Owo(Action),
+    /// Any OSC message, as it is.
+    Osc { address: String, value: crate::types::OscArg }
 }
 
 #[derive(Default)]
@@ -377,18 +379,35 @@ impl State {
                     let on = self.value(parameter, env).is_some_and(|v| v >= 0.5);
                     self.set_parameter(parameter, *value_type, if on { 0.0 } else { 1.0 }, effects);
                 }
+                ParameterAction::Add { amount } => {
+                    let current = self.value(parameter, env).unwrap_or(0.0);
+                    self.set_parameter(parameter, *value_type, value_type.clamp(current + amount), effects);
+                }
                 ParameterAction::Hold { .. } | ParameterAction::Follow { .. } => {}
             },
             Action::LeashEnabled { enabled } => effects.push(Effect::Leash(*enabled)),
             Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => effects.push(Effect::Bhaptics(action.clone())),
             Action::OwoSensation { .. } => effects.push(Effect::Owo(action.clone())),
-            Action::Control { .. }
+            Action::OscMessage { address, value } => effects.push(Effect::Osc { address: address.clone(), value: value.clone() }),
+            Action::OneOf { options } if !options.is_empty() => {
+                let pick = ((env.now().roll * options.len() as f64) as usize).min(options.len() - 1);
+                let chosen = &options[pick];
+                if env.live(chosen) {
+                    self.moment(automation, index, chosen, now, env, effects);
+                } else {
+                    effects.push(Effect::Skipped { automation_id: automation.id.clone(), action: chosen.clone() });
+                }
+            }
+            Action::OneOf { .. }
+            | Action::Control { .. }
             | Action::Profile { .. }
             | Action::Chatbox { .. }
             | Action::StopEverything
             | Action::Toy { .. }
             | Action::ToyPattern { .. }
-            | Action::StopToys => {}
+            | Action::StopToys
+            | Action::AutomationEnabled { .. }
+            | Action::VrToast { .. } => {}
         }
     }
 
@@ -1359,6 +1378,41 @@ mod tests {
         state.set_paused(true);
         assert_eq!(app_phases(&state.on_event(&AppEvent::Stopped, &TestEnv)), vec![(0, Phase::Run)]);
         assert!(app_phases(&state.on_event(&AppEvent::Resumed, &TestEnv)).is_empty());
+    }
+
+    #[test]
+    fn add_changes_a_parameter_within_its_range() {
+        let mut state = State::default();
+        state.automations.push(automation_with(
+            "a",
+            Condition::TurnsOn,
+            ValueType::Bool,
+            vec![parameter("/avatar/parameters/Outfit", ValueType::Int, ParameterAction::Add { amount: 200.0 })]
+        ));
+        state.values.insert("/avatar/parameters/Outfit".into(), 100.0);
+        assert_eq!(parameters(&change_effects(&mut state, 0.0, 1.0)), vec![("/avatar/parameters/Outfit".to_string(), 255.0)]);
+    }
+
+    #[test]
+    fn one_of_runs_a_single_option() {
+        let chat = |text: &str| Action::Chatbox { text: text.into() };
+        let mut state = State::default();
+        state.automations.push(automation_with(
+            "a",
+            Condition::TurnsOn,
+            ValueType::Bool,
+            vec![Step { action: Action::OneOf { options: vec![chat("one"), chat("two")] }, delay_ms: 0 }]
+        ));
+        let effects = change_effects(&mut state, 0.0, 1.0);
+        let texts: Vec<_> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::App(AppRun { action: Action::Chatbox { text }, .. }) => Some(text.clone()),
+                _ => None
+            })
+            .collect();
+        // TestEnv rolls 0.5: the second of two.
+        assert_eq!(texts, vec!["two".to_string()]);
     }
 
     #[test]

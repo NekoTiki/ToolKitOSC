@@ -75,6 +75,7 @@ fn addon_off(app: &AppHandle, action: &Action) -> Option<&'static str> {
         Action::Toy { .. } => crate::addons::owner_of_automation_kind("toy"),
         Action::ToyPattern { .. } => crate::addons::owner_of_automation_kind("toy-pattern"),
         Action::StopToys => crate::addons::owner_of_automation_kind("stop-toys"),
+        Action::VrToast { .. } => crate::addons::owner_of_automation_kind("vr-toast"),
         _ => None
     };
     owner.filter(|owner| !crate::addons::is_on(app, owner.id)).map(|owner| owner.name)
@@ -88,6 +89,36 @@ static SKIP_NOTED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 struct Skipped {
     automation_id: String,
     message: String
+}
+
+/// The last viewer command that went through: who, which control, and its value.
+// shortcut: the latest viewer command, not necessarily the one that started this automation; pass
+// it along with the event if two viewers ever race.
+static LAST_VIEWER: Mutex<Option<(String, String, String)>> = Mutex::new(None);
+
+pub fn note_viewer(who: &str, control: &str, value: Option<&serde_json::Value>) {
+    let value = match value {
+        Some(serde_json::Value::Bool(on)) => if *on { "on" } else { "off" }.to_owned(),
+        Some(serde_json::Value::Number(n)) => match n.as_f64() {
+            Some(n) if n.fract() != 0.0 && (0.0..=1.0).contains(&n) => format!("{}%", (n * 100.0).round()),
+            _ => n.to_string()
+        },
+        Some(serde_json::Value::String(text)) => text.clone(),
+        _ => String::new()
+    };
+    *LAST_VIEWER.lock().unwrap() = Some((who.to_owned(), control.to_owned(), value));
+}
+
+/// Chatbox and VR message text with {viewer}, {control}, {value} and {avatar} filled in; the
+/// ones that don't apply stay empty.
+fn fill(app: &AppHandle, text: &str) -> String {
+    if !model::PLACEHOLDERS.iter().any(|p| text.contains(p)) {
+        return text.to_owned();
+    }
+    let (viewer, control, value) = LAST_VIEWER.lock().unwrap().clone().unwrap_or_default();
+    let avatar = app.state::<AppState>().avatar_details.lock().unwrap().as_ref().map(|d| d.name.clone()).unwrap_or_default();
+    let filled = text.replace("{viewer}", &viewer).replace("{control}", &control).replace("{value}", &value).replace("{avatar}", &avatar);
+    filled.chars().take(model::CHATBOX_MAX).collect()
 }
 
 /// Says once per session that an automation skipped a step, and why.
@@ -140,6 +171,16 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
             Effect::Bhaptics(action) => crate::bhaptics::run_step(app, &action),
             Effect::Owo(_) if !crate::addons::is_on(app, "owo") => {}
             Effect::Owo(action) => crate::owo::run_step(app, &action),
+            Effect::Osc { address, value } => {
+                if let Err(err) = crate::osc::send(&app.state::<AppState>(), &OscCommand { address: address.clone(), args: vec![value] }) {
+                    tracing::debug!("Couldn't send {address}: {err}");
+                }
+            }
+            // The chatbox posts from the webview, with what started it filled in.
+            Effect::App(AppRun { action: Action::Chatbox { text }, automation_id, step, phase }) => {
+                let action = Action::Chatbox { text: fill(app, &text) };
+                let _ = app.emit("automation-run", AppRun { automation_id, step, action, phase });
+            }
             Effect::Parameter { address, value_type, value } => {
                 if let Err(err) = crate::osc::send(&app.state::<AppState>(), &parameter_command(&address, value_type, value)) {
                     tracing::debug!("Couldn't set {address}: {err}");
@@ -170,6 +211,7 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                     Action::BhapticsPulse { .. } => "bHaptics pulse",
                     Action::BhapticsEffect { .. } => "bHaptics effect",
                     Action::OwoSensation { .. } => "OWO sensation",
+                    Action::VrToast { .. } => "VR message",
                     Action::Toy { .. } => "Toy",
                     Action::ToyPattern { .. } => "Play pattern",
                     Action::StopToys => "Stop toys",
@@ -294,8 +336,15 @@ fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result
                 ParameterAction::Set { value } => (to(*value), None),
                 ParameterAction::Toggle => (to(if current >= 0.5 { 0.0 } else { 1.0 }), None),
                 ParameterAction::Hold { value } => (to(*value), Some(to(current))),
-                ParameterAction::Follow { max, .. } => (to(*max), Some(to(current)))
+                ParameterAction::Follow { max, .. } => (to(*max), Some(to(current))),
+                ParameterAction::Add { amount } => (to(value_type.clamp(current + amount)), None)
             })
+        }
+        Action::OscMessage { address, value } => Ok((Effect::Osc { address: address.clone(), value: value.clone() }, None)),
+        // A test tries one of them, at random like a real run.
+        Action::OneOf { options } => {
+            let pick = options.get(rand::random_range(0..options.len().max(1))).ok_or("It has nothing to pick from.")?;
+            test_step(app, id, index, pick)
         }
         Action::LeashEnabled { enabled } => Ok((Effect::Leash(*enabled), None)),
         Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => Ok((Effect::Bhaptics(action.clone()), None)),
@@ -307,7 +356,9 @@ fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result
         | Action::StopEverything
         | Action::Toy { .. }
         | Action::ToyPattern { .. }
-        | Action::StopToys => Ok((run(Phase::Run), None))
+        | Action::StopToys
+        | Action::AutomationEnabled { .. }
+        | Action::VrToast { .. } => Ok((run(Phase::Run), None))
     }
 }
 

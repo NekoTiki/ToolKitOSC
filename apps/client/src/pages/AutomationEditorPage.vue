@@ -772,6 +772,7 @@ onBeforeRouteLeave(async () => {
               :trigger="paramWhen?.parameter ?? ''"
               :other-avatar="otherAvatar"
               :can-remove="draft.then.length > 1"
+              :automation-id="draft.id"
               @remove="removeStep(index)"
             />
           </div>

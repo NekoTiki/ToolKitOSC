@@ -73,7 +73,8 @@ export function useAutomations(): {
       profileName: (id) => getLockedControlGroup(id)?.name,
       control,
       controlForParameter: (address) => byAddress.get(address),
-      patternName: (id) => getPattern(id)?.name
+      patternName: (id) => getPattern(id)?.name,
+      automationName: (id) => automations.value.find((a) => a.id === id)?.name
     }
   })
 

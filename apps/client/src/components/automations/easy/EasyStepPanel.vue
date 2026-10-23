@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BhapticsStepFields from '@renderer/components/automations/BhapticsStepFields.vue'
+import MoreStepFields from '@renderer/components/automations/MoreStepFields.vue'
 import OwoStepFields from '@renderer/components/automations/OwoStepFields.vue'
 import ToyStepFields from '@renderer/components/automations/ToyStepFields.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -25,6 +26,7 @@ import {
   OUTPUT_ACTIONS,
   PARAMETER_ACTIONS,
   parameterActionsFor,
+  PLACEHOLDER_HINT,
   STEP_KINDS,
   stepCanWait,
   stepKindsFor
@@ -40,6 +42,8 @@ const props = defineProps<{
   // The trigger's address: a step can't set it, or it would set itself off.
   trigger: string
   canRemove: boolean
+  automationId: string
+  otherAvatar: boolean
 }>()
 const emit = defineEmits<{ remove: [] }>()
 const step = defineModel<AutomationStep>({ required: true })
@@ -64,7 +68,11 @@ const EASY_KINDS: Record<AutomationStep['kind'], string> = {
   'owo-sensation': 'Feel it on your OWO Skin',
   toy: 'Run your toys',
   'toy-pattern': 'Play a pattern on your toys',
-  'stop-toys': 'Stop your toys'
+  'stop-toys': 'Stop your toys',
+  'automation-enabled': 'Turn an automation on or off',
+  'vr-toast': 'Show a message in VR',
+  'one-of': 'Do one of a few things',
+  'osc-message': 'Send an OSC message'
 }
 
 // The kinds that can run on this trigger, plus the current one so it still shows what it is.
@@ -274,7 +282,8 @@ const paramWays = computed(() =>
         set: 'Set it',
         toggle: 'The other way',
         hold: 'For as long as it lasts',
-        follow: 'Following it'
+        follow: 'Following it',
+        add: 'Add to it'
       })
     : []
 )
@@ -399,6 +408,11 @@ const leashOn = computed({
 })
 const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
 const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value : null))
+const moreStep = computed(() =>
+  step.value.kind === 'automation-enabled' || step.value.kind === 'vr-toast' || step.value.kind === 'one-of' || step.value.kind === 'osc-message'
+    ? step.value
+    : null
+)
 const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind === 'toy-pattern' ? step.value : null))
 </script>
 
@@ -547,12 +561,26 @@ const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind ===
             @update:model-value="fromSlider($event, (value) => (paramValue = value))"
           />
         </UFormField>
+        <UFormField
+          v-else-if="param.set.type === 'add'"
+          label="By how much?"
+          description="Negative takes away. It stays within the parameter's range."
+        >
+          <UInput
+            :model-value="param.set.amount"
+            type="number"
+            :step="param.valueType === 'Float' ? 0.05 : 1"
+            class="max-w-40"
+            @update:model-value="param.set.type === 'add' && (param.set.amount = Number($event) || 0)"
+          />
+        </UFormField>
       </template>
     </template>
 
     <UFormField
       v-else-if="step.kind === 'chatbox'"
       label="Message"
+      :description="PLACEHOLDER_HINT"
     >
       <UInput
         v-model="step.text"
@@ -653,6 +681,14 @@ const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind ===
     <OwoStepFields
       v-else-if="owoStep"
       :model-value="owoStep"
+    />
+
+    <MoreStepFields
+      v-else-if="moreStep"
+      :model-value="moreStep"
+      :automation-id="automationId"
+      :trigger="trigger"
+      :other-avatar="otherAvatar"
     />
 
     <ToyStepFields
