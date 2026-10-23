@@ -150,6 +150,10 @@ pub fn run(app: &AppHandle, run: &AppRun) -> bool {
         return true;
     }
     let Some(control) = crate::setup::find_control(app, group_id, control_id) else {
+        // An "any avatar" automation on an avatar without this control.
+        if matches!(run.phase, Phase::Run | Phase::Start) {
+            super::note_skip(app, run.automation_id.clone(), "Skipped Control: the avatar you're wearing doesn't have it".into());
+        }
         return true;
     };
     if control.get("unavailable").and_then(Value::as_bool).unwrap_or(false) {

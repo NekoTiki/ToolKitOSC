@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BhapticsStepFields from '@renderer/components/automations/BhapticsStepFields.vue'
 import OwoStepFields from '@renderer/components/automations/OwoStepFields.vue'
+import ToyStepFields from '@renderer/components/automations/ToyStepFields.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
@@ -416,6 +417,7 @@ const leashValue = computed({
 
 const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
 const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value : null))
+const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind === 'toy-pattern' ? step.value : null))
 
 const toInt = (value: number | string): number =>
   Math.min(255, Math.max(0, Math.round(Number(value) || 0)))
@@ -971,5 +973,19 @@ const toInt = (value: number | string): number =>
       v-else-if="owoStep"
       :model-value="owoStep"
     />
+
+    <ToyStepFields
+      v-else-if="toyStep"
+      :key="step.kind"
+      :model-value="toyStep"
+      :condition="condition"
+    />
+
+    <p
+      v-else-if="step.kind === 'stop-toys'"
+      class="text-sm text-muted"
+    >
+      Stops every toy and pattern. Controls, boards and shockers keep going.
+    </p>
   </div>
 </template>

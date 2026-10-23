@@ -1,5 +1,6 @@
 import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
+import { getPattern } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import type { Automation } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
@@ -71,7 +72,8 @@ export function useAutomations(): {
       controlName: (controlId) => control(controlId)?.name,
       profileName: (id) => getLockedControlGroup(id)?.name,
       control,
-      controlForParameter: (address) => byAddress.get(address)
+      controlForParameter: (address) => byAddress.get(address),
+      patternName: (id) => getPattern(id)?.name
     }
   })
 

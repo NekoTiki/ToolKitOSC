@@ -283,7 +283,57 @@ pub enum Action {
         muscles: Vec<crate::owo::model::Muscle>,
         /// 0–1.
         intensity: f64
-    }
+    },
+    /// Drives toys straight from Intiface, without a control: these motors, or every toy
+    /// connected when `toys` is empty. Acts as you, so profile limits don't apply.
+    Toy {
+        #[serde(default)]
+        toys: Vec<ToyMotor>,
+        run: ToyRun
+    },
+    /// Plays a built-in or saved pattern on toys (all when `toys` is empty), for `ms` or, with
+    /// `while_held`, while the condition holds.
+    #[serde(rename_all = "camelCase")]
+    ToyPattern {
+        #[serde(default)]
+        toys: Vec<ToyMotor>,
+        pattern_id: String,
+        #[serde(default)]
+        ms: u32,
+        #[serde(default)]
+        while_held: bool
+    },
+    /// Stops every toy and pattern, without pausing anything else.
+    StopToys
+}
+
+/// One toy motor, saved the way toy controls save it (see shared-ui `IntifaceActuatorRef`): the
+/// names are only shown while the toy is off.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToyMotor {
+    pub device_index: u32,
+    #[serde(default)]
+    pub device_name: String,
+    pub actuator_index: u32,
+    #[serde(default)]
+    pub actuator_description: String,
+    /// Buttplug's `Vibrate`, `Rotate`, ... sent back as it is.
+    pub actuator_type: String
+}
+
+/// How a Toy step drives its toys. Levels are 0–1.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum ToyRun {
+    /// `level` for `ms`, then off.
+    Pulse { level: f64, ms: u32 },
+    /// `level` while the condition holds, then off.
+    Hold { level: f64 },
+    /// Follows the trigger, mapped onto min..max.
+    Follow { min: f64, max: f64 },
+    /// Fades from `from` to `to` over `ms`, and stays at `to`.
+    Ramp { from: f64, to: f64, ms: u32 }
 }
 
 /// How a step runs a control. Values are what the control's command takes (see shared-ui
@@ -323,6 +373,8 @@ fn run_fits(run: &ControlRun, control_type: &str) -> bool {
 pub const CHATBOX_MAX: usize = 144;
 /// Longest toy pulse.
 pub const MAX_TOY_PULSE_MS: u32 = 60_000;
+/// Longest a pattern step plays, when it isn't held.
+pub const MAX_TOY_PATTERN_MS: u32 = 600_000;
 /// The longest a bHaptics pulse step plays.
 pub const MAX_BHAPTICS_PULSE_MS: u32 = 30_000;
 
@@ -552,10 +604,13 @@ impl Action {
             Action::BoardOutput { output: OutputAction::Hold, .. }
             | Action::AvatarParameter { set: ParameterAction::Hold { .. }, .. }
             | Action::Control { run: ControlRun::Hold { .. }, .. }
-            | Action::Profile { while_held: true, .. } => Runs::State,
+            | Action::Profile { while_held: true, .. }
+            | Action::Toy { run: ToyRun::Hold { .. }, .. }
+            | Action::ToyPattern { while_held: true, .. } => Runs::State,
             Action::BoardOutput { output: OutputAction::Follow { .. }, .. }
             | Action::AvatarParameter { set: ParameterAction::Follow { .. }, .. }
-            | Action::Control { run: ControlRun::Follow { .. }, .. } => Runs::Follow,
+            | Action::Control { run: ControlRun::Follow { .. }, .. }
+            | Action::Toy { run: ToyRun::Follow { .. }, .. } => Runs::Follow,
             _ => Runs::Moment
         }
     }
@@ -566,13 +621,24 @@ impl Action {
             Action::BoardOutput { output, .. } => output.busy_ms().unwrap_or(0),
             Action::Control { run: ControlRun::Pulse { ms, .. }, .. } => *ms,
             Action::BhapticsPulse { ms, .. } => *ms,
+            Action::Toy { run: ToyRun::Pulse { ms, .. } | ToyRun::Ramp { ms, .. }, .. } => *ms,
+            Action::ToyPattern { ms, while_held: false, .. } => *ms,
             _ => 0
         }
     }
 
-    /// Run by the frontend rather than here.
+    /// Run outside the engine, as an `AppRun` (see `mod.rs` `apply`), with a `stop` for holds.
     pub fn in_app(&self) -> bool {
-        matches!(self, Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything)
+        matches!(
+            self,
+            Action::Control { .. }
+                | Action::Profile { .. }
+                | Action::Chatbox { .. }
+                | Action::StopEverything
+                | Action::Toy { .. }
+                | Action::ToyPattern { .. }
+                | Action::StopToys
+        )
     }
 }
 
@@ -698,6 +764,27 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
                 return Err("The intensity must be within 0–100 %.".into());
             }
         }
+        Action::Toy { run, .. } => {
+            let level = |l: &f64| (0.0..=1.0).contains(l);
+            let ok = match run {
+                ToyRun::Pulse { level: l, ms } => level(l) && (1..=MAX_TOY_PULSE_MS).contains(ms),
+                ToyRun::Hold { level: l } => level(l),
+                ToyRun::Follow { min, max } => level(min) && level(max),
+                ToyRun::Ramp { from, to, ms } => level(from) && level(to) && (1..=MAX_TOY_PULSE_MS).contains(ms)
+            };
+            if !ok {
+                return Err(format!("Toy levels go from 0 to 100 %, and a pulse or ramp lasts up to {} s.", MAX_TOY_PULSE_MS / 1000));
+            }
+        }
+        Action::ToyPattern { pattern_id, ms, while_held, .. } => {
+            if pattern_id.is_empty() || pattern_id == crate::toys::patterns::OFF_ID {
+                return Err("Pick a pattern.".into());
+            }
+            if !while_held && !(1..=MAX_TOY_PATTERN_MS).contains(ms) {
+                return Err(format!("A pattern plays for up to {} minutes.", MAX_TOY_PATTERN_MS / 60_000));
+            }
+        }
+        Action::StopToys => {}
         Action::Chatbox { text } => {
             if text.trim().is_empty() {
                 return Err("Write the chatbox message.".into());
@@ -976,6 +1063,38 @@ mod tests {
         assert!(validate_step(&step, Runs::Moment, None).is_err(), "a Tactal has 6 motors");
         let step: Step = serde_json::from_str(r#"{"kind":"bhaptics-effect","effect":"explode","positions":["Head"],"intensity":1}"#).unwrap();
         assert!(validate_step(&step, Runs::Moment, None).is_err());
+    }
+
+    #[test]
+    fn toy_steps_read_as_the_webview_writes_them() {
+        let step: Step = serde_json::from_str(r#"{"kind":"toy","toys":[],"run":{"type":"pulse","level":0.6,"ms":2000}}"#).unwrap();
+        assert_eq!(step.action, Action::Toy { toys: vec![], run: ToyRun::Pulse { level: 0.6, ms: 2000 } });
+        assert_eq!(step.action.runs(), Runs::Moment);
+        assert_eq!(step.action.busy_ms(), 2000);
+        assert!(step.action.in_app());
+        assert!(validate_step(&step, Runs::Moment, None).is_ok());
+
+        let hold: Step = serde_json::from_str(
+            r#"{"kind":"toy","toys":[{"deviceIndex":0,"deviceName":"Lush","actuatorIndex":0,"actuatorDescription":"Vibrate","actuatorType":"Vibrate"}],"run":{"type":"hold","level":1}}"#
+        )
+        .unwrap();
+        assert_eq!(hold.action.runs(), Runs::State);
+        assert!(validate_step(&hold, Runs::Moment, None).is_err(), "hold on a moment");
+
+        let ramp: Step = serde_json::from_str(r#"{"kind":"toy","run":{"type":"ramp","from":0,"to":1.5,"ms":3000}}"#).unwrap();
+        assert!(validate_step(&ramp, Runs::Moment, None).is_err(), "level above 100 %");
+
+        let pattern: Step = serde_json::from_str(r#"{"kind":"toy-pattern","patternId":"wave","ms":5000}"#).unwrap();
+        assert_eq!(pattern.action.runs(), Runs::Moment);
+        assert!(validate_step(&pattern, Runs::Moment, None).is_ok());
+        let held: Step = serde_json::from_str(r#"{"kind":"toy-pattern","patternId":"wave","whileHeld":true}"#).unwrap();
+        assert_eq!(held.action.runs(), Runs::State);
+        assert!(validate_step(&held, Runs::State, None).is_ok());
+        let endless: Step = serde_json::from_str(r#"{"kind":"toy-pattern","patternId":"wave"}"#).unwrap();
+        assert!(validate_step(&endless, Runs::Moment, None).is_err(), "a moment pattern needs a length");
+
+        let stop: Step = serde_json::from_str(r#"{"kind":"stop-toys"}"#).unwrap();
+        assert_eq!(stop.action, Action::StopToys);
     }
 
     #[test]

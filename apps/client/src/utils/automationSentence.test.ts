@@ -33,6 +33,24 @@ describe('sentence', () => {
     expect(plainSentence(s)).toBe('When Boop turns on, buzz Lush 3 at 60% for 2 s, any time, at most every 5 s.')
   })
 
+  it('reads toy steps without a control', () => {
+    const lush = { deviceIndex: 0, deviceName: 'Lush 3', actuatorIndex: 0, actuatorDescription: 'Vibrate', actuatorType: 'Vibrate' }
+    const s = sentence(
+      automation({
+        when: boop,
+        then: [
+          { kind: 'toy', toys: [], run: { type: 'pulse', level: 0.6, ms: 2000 }, delayMs: 0 },
+          { kind: 'toy-pattern', toys: [lush], patternId: 'wave', ms: 10_000, whileHeld: false, delayMs: 0 },
+          { kind: 'stop-toys', delayMs: 0 }
+        ]
+      }),
+      { ...context, patternName: (id) => (id === 'wave' ? 'Wave' : undefined) }
+    )
+    expect(plainSentence(s)).toBe(
+      'When Boop turns on, buzz all toys at 60% for 2 s, then play Wave on Lush 3 for 10 s, then stop your toys, any time, every time.'
+    )
+  })
+
   it('uses "While" for a state and words a hold', () => {
     const s = sentence(
       automation({

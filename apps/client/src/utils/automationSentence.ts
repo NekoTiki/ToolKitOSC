@@ -9,7 +9,7 @@ import type {
   ParameterValueType
 } from '@renderer/lib/tauri-bridge'
 import type { DescribeContext } from '@renderer/utils/automations'
-import { CONDITIONS, parameterName, triggerCondition } from '@renderer/utils/automations'
+import { CONDITIONS, parameterName, toysLabel, triggerCondition } from '@renderer/utils/automations'
 import type { ControlType } from '@toolkitosc/shared-ui'
 import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
 
@@ -214,6 +214,26 @@ export const sentenceStep = (step: AutomationStep, context?: DescribeContext): R
       return rich`play ${strong(BHAPTICS_EFFECTS.find((e) => e.id === step.effect)?.label ?? 'an effect')} on your bHaptics gear`
     case 'owo-sensation':
       return rich`play ${strong(OWO_SENSATIONS.find((s) => s.id === step.sensation)?.label ?? 'a sensation')} on your OWO Skin at ${strong(pct(step.intensity))}`
+    case 'toy': {
+      const toys = strong(toysLabel(step.toys))
+      const { run } = step
+      switch (run.type) {
+        case 'pulse':
+          return rich`buzz ${toys} at ${strong(pct(run.level))} for ${strong(seconds(run.ms))}`
+        case 'hold':
+          return rich`buzz ${toys} at ${strong(pct(run.level))} for as long as it lasts`
+        case 'follow':
+          return [...rich`buzz ${toys} with it`, ...range(run.min, run.max)]
+        case 'ramp':
+          return rich`fade ${toys} from ${strong(pct(run.from))} to ${strong(pct(run.to))} over ${strong(seconds(run.ms))}`
+      }
+    }
+    case 'toy-pattern': {
+      const text = rich`play ${strong(context?.patternName?.(step.patternId) ?? step.patternId)} on ${strong(toysLabel(step.toys))}`
+      return [...text, ...(step.whileHeld ? rich` for as long as it lasts` : rich` for ${strong(seconds(step.ms))}`)]
+    }
+    case 'stop-toys':
+      return [strong('stop your toys')]
   }
 }
 
