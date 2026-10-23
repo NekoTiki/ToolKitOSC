@@ -147,6 +147,12 @@ pub fn groups_of(app: &AppHandle, key: &str) -> Vec<String> {
     read(app, |file| active_ids(file, key, now_ms()))
 }
 
+/// How many viewers are in this group right now.
+pub fn member_count(app: &AppHandle, group_id: &str) -> usize {
+    let now = now_ms();
+    read(app, |file| file.memberships.values().filter(|list| list.iter().any(|m| m.id == group_id && active(m, now))).count())
+}
+
 /// When the next temporary membership ends.
 pub fn next_expiry(app: &AppHandle) -> Option<u64> {
     let now = now_ms();

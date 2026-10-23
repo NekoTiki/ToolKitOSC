@@ -12,6 +12,7 @@ pub mod stop;
 mod sync;
 pub mod viewers;
 
+pub use resolve::strip as strip_derived;
 pub use sync::sync;
 
 use std::cell::OnceCell;
@@ -165,6 +166,23 @@ fn change(app: &AppHandle, avatar_id: &str, f: impl FnOnce(&mut Inner)) -> Resul
     }
     refresh(app);
     Ok(())
+}
+
+/// Changes the worn avatar's stored controls and profiles (not the resolved copy) and saves them,
+/// when `f` says yes. For assistants' drafts (see `mcp`).
+pub fn edit_worn<T>(app: &AppHandle, f: impl FnOnce(&mut ControlsFile) -> Result<T, String>) -> Result<T, String> {
+    let result = {
+        let mut inner = setup(app).inner.lock().unwrap();
+        load_worn(app, &mut inner);
+        let avatar_id = inner.avatar_id.clone().ok_or("No avatar yet: VRChat hasn't said which avatar you're wearing")?;
+        let mut file = inner.file.clone();
+        let result = f(&mut file)?;
+        write_file(app, &avatar_id, &file)?;
+        inner.file = file;
+        result
+    };
+    refresh(app);
+    Ok(result)
 }
 
 pub fn snapshot(app: &AppHandle) -> Snapshot {

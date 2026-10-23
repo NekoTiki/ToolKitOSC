@@ -154,8 +154,8 @@ impl Session {
     }
 
     #[tool(description = "Switches the active profile, which decides what everyone may do with the controls")]
-    async fn switch_profile(&self, Parameters(request): Parameters<ProfileRequest>) -> Result<String, String> {
-        self.ask_webview("switch_profile", serde_json::to_value(request).map_err(|err| err.to_string())?).await?;
+    fn switch_profile(&self, Parameters(request): Parameters<ProfileRequest>) -> Result<String, String> {
+        crate::setup::switch_profile(&self.app, request.id).map_err(|err| if err == "No such profile" { "No such profile: get the ids from list_profiles".to_owned() } else { err })?;
         Ok("Switched".to_owned())
     }
 }
