@@ -296,6 +296,22 @@ pub fn view(app: &AppHandle) -> View {
     }
 }
 
+/// Whether the token checks out, so shockers can be used.
+pub fn token_valid(app: &AppHandle) -> bool {
+    openshock(app).inner.lock().unwrap().status == Status::Valid
+}
+
+/// Whether every hub these shockers are paired to is offline. Only known while the live hub is
+/// connected; until then nothing counts as offline.
+pub fn hubs_offline(app: &AppHandle, shocker_ids: &[String]) -> bool {
+    let inner = openshock(app).inner.lock().unwrap();
+    if !inner.live {
+        return false;
+    }
+    let hubs: Vec<&Hub> = inner.hubs.iter().filter(|hub| hub.shockers.iter().any(|shocker| shocker_ids.contains(&shocker.id))).collect();
+    !hubs.is_empty() && hubs.iter().all(|hub| !inner.online.contains(&hub.id))
+}
+
 fn emit_state(app: &AppHandle) {
     let _ = app.emit("openshock-state", view(app));
     crate::addons::changed(app);

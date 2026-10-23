@@ -324,6 +324,8 @@ fn emit_touched(app: &AppHandle) {
     if sent.as_ref() != Some(&touched) {
         let _ = app.emit("toys-state", serde_json::json!({ "touched": touched }));
         *sent = Some(touched);
+        drop(sent);
+        crate::setup::refresh(app);
     }
 }
 

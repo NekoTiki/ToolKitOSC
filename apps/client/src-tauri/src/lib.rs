@@ -18,6 +18,7 @@ mod osc;
 mod presets;
 mod secrets;
 mod server;
+mod setup;
 mod state;
 mod steam;
 mod steamvr;
@@ -147,6 +148,12 @@ pub fn run() {
             osc::commands::force_pull_parameters,
             // Running a control as you
             controls::control_run,
+            setup::commands::setup_controls,
+            setup::commands::setup_save_groups,
+            setup::commands::setup_save_profiles,
+            setup::commands::setup_switch_profile,
+            setup::commands::setup_saved_control_types,
+            setup::commands::setup_migrate,
             // Add-ons
             addons::commands::addons_list,
             addons::commands::addons_set_enabled,

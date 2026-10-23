@@ -1,6 +1,6 @@
-//! What Rust needs to decide on a viewer's command, as the webview last pushed it
-//! (`server_set_policy`). The webview stays the source of truth for all of it: controls and
-//! profiles in localStorage, groups and bans in its database. This is a read-only copy.
+//! What Rust needs to decide on a viewer's command besides the controls (those are in `setup`), as
+//! the webview last pushed it (`server_set_policy`). The webview stays the source of truth for
+//! these: groups and bans in its database. This is a read-only copy.
 use std::collections::HashMap;
 
 use serde::Deserialize;
@@ -20,11 +20,6 @@ pub struct Ban {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Policy {
-    /// The control groups of the avatar you're wearing, hidden ones included, each control with
-    /// the active profile's `locked`, `limits` and `groupRules` and whether it's `unavailable`, as
-    /// `useControls` computes them.
-    #[serde(default)]
-    pub groups: Vec<Value>,
     /// Viewer key -> the groups they're in right now.
     #[serde(default)]
     pub memberships: HashMap<String, Vec<String>>,
@@ -39,27 +34,6 @@ pub struct Policy {
 }
 
 impl Policy {
-    /// The control, and whether its group is hidden from viewers.
-    pub fn control(&self, group_id: &str, control_id: &str) -> Option<(&Value, bool)> {
-        let group = self.groups.iter().find(|group| group.get("id").and_then(Value::as_str) == Some(group_id))?;
-        let hidden = group.get("hidden").and_then(Value::as_bool).unwrap_or(false);
-        let control = group
-            .get("controls")?
-            .as_array()?
-            .iter()
-            .find(|control| control.get("id").and_then(Value::as_str) == Some(control_id))?;
-        Some((control, hidden))
-    }
-
-    pub fn is_group_hidden(&self, group_id: &str) -> bool {
-        self.groups
-            .iter()
-            .find(|group| group.get("id").and_then(Value::as_str) == Some(group_id))
-            .and_then(|group| group.get("hidden"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    }
-
     pub fn banned(&self, ip: &str, discord_id: Option<&str>) -> Option<&Ban> {
         self.bans.iter().find(|ban| (ban.scope == "ip" && ban.value == ip) || (ban.scope == "discord" && Some(ban.value.as_str()) == discord_id))
     }
@@ -71,8 +45,8 @@ fn widest_limits(control: &Value) -> Option<Value> {
     super::limits::resolve_control_for_viewer(control, &groups).get("limits").cloned().filter(|limits| !limits.is_null())
 }
 
-fn controls(policy: &Policy) -> impl Iterator<Item = &Value> {
-    policy.groups.iter().filter_map(|group| group.get("controls")?.as_array()).flatten()
+fn controls(groups: &[Value]) -> impl Iterator<Item = &Value> {
+    groups.iter().filter_map(|group| group.get("controls")?.as_array()).flatten()
 }
 
 /// A profile turned on, or its limits changed while on: running toys are brought within the new
@@ -80,8 +54,8 @@ fn controls(policy: &Policy) -> impl Iterator<Item = &Value> {
 /// own pattern too: it was clamped to the old limits). Only ever lowers, so it can't start
 /// anything; avatar parameters are left alone. Uses the most any group gets, so a friend's toy
 /// isn't cut to what everyone else may set.
-pub fn clamp_running(app: &AppHandle, previous: Option<&Policy>, policy: &Policy) {
-    for control in controls(policy) {
+pub fn clamp_running(app: &AppHandle, previous: Option<&[Value]>, groups: &[Value]) {
+    for control in controls(groups) {
         let Some(id) = control.get("id").and_then(Value::as_str) else {
             continue;
         };

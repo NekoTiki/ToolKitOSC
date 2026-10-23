@@ -71,7 +71,7 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
         return;
     };
 
-    let control = policy.control(group_id, control_id).map(|(control, _)| control.clone());
+    let control = crate::setup::find_control(app, group_id, control_id);
     let groups = policy.memberships.get(&viewer.key).cloned().unwrap_or_default();
     let command = match &control {
         Some(control) => match limits::sanitize_command(&limits::resolve_control_for_viewer(control, &groups), &message) {
@@ -88,7 +88,7 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
     // The OWO Skin is kept to signed-in viewers unless the control says otherwise.
     let owo_signed_in_only = kind == Some("owo") && control.as_ref().and_then(|c| c.get("signedInOnly")).and_then(Value::as_bool).unwrap_or(true);
     let needs_sign_in = (viewer_pattern && signed_in_only) || owo_signed_in_only;
-    if (needs_sign_in && viewer.discord_id.is_none()) || policy.is_group_hidden(group_id) {
+    if (needs_sign_in && viewer.discord_id.is_none()) || crate::setup::is_group_hidden(app, group_id) {
         return;
     }
 
@@ -149,11 +149,10 @@ pub fn assistant(app: &AppHandle, name: &str, message: &Value) -> Result<Value, 
     let (Some(group_id), Some(control_id)) = (text(message, "groupId"), text(message, "controlId")) else {
         return Err("Needs groupId and controlId".to_owned());
     };
-    let policy = super::policy(app).ok_or("ToolKitOSC hasn't loaded your controls yet")?;
-    if policy.is_group_hidden(group_id) {
+    if crate::setup::is_group_hidden(app, group_id) {
         return Err("That control's group is hidden".to_owned());
     }
-    let control = policy.control(group_id, control_id).map(|(control, _)| control.clone()).ok_or("No such control: get the ids from list_controls")?;
+    let control = crate::setup::find_control(app, group_id, control_id).ok_or("No such control: get the ids from list_controls")?;
     let groups = [crate::mcp::ASSISTANTS_GROUP.to_owned()];
     let command = limits::sanitize_command(&limits::resolve_control_for_viewer(&control, &groups), message)
         .ok_or("Refused: the control is locked for assistants or unavailable, or the value isn't one it takes")?;

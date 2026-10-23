@@ -162,6 +162,10 @@ fn avatar_check(app: &AppHandle) -> Option<AvatarCheck> {
     Some(AvatarCheck { id, name, detected })
 }
 
+pub fn connected(app: &AppHandle) -> bool {
+    bhaptics(app).inner.lock().unwrap().status == Some(Status::Connected)
+}
+
 pub fn view(app: &AppHandle) -> View {
     let (status, installed, simulated, devices, other_keys) = {
         let inner = bhaptics(app).inner.lock().unwrap();

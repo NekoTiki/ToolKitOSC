@@ -149,7 +149,7 @@ pub fn run(app: &AppHandle, run: &AppRun) -> bool {
     if paused(app) && run.phase != Phase::Stop {
         return true;
     }
-    let Some(control) = crate::server::find_control(app, group_id, control_id) else {
+    let Some(control) = crate::setup::find_control(app, group_id, control_id) else {
         return true;
     };
     if control.get("unavailable").and_then(Value::as_bool).unwrap_or(false) {

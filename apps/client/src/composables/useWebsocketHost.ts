@@ -77,7 +77,7 @@ export function useWebsocketHost(): {
   open: () => void
   close: () => void
 } {
-  const { controls, visibleControls, setControlLastUser, getControl } = useControls(() => sendControls())
+  const { visibleControls, setControlLastUser, getControl } = useControls(() => sendControls())
 
 
   const { user } = useAuth()
@@ -196,10 +196,9 @@ export function useWebsocketHost(): {
     announceAction({ ...accepted, viewerKey: viewer.key, viewerName: showViewers.value || assistant !== null ? viewer.displayName : null, control })
   })
 
-  // What Rust checks viewer commands against: every group with the active profile's locks,
-  // limits and group rules, who's in which group, the bans and who may use controls at all.
+  // What Rust checks viewer commands against besides the controls: who's in which group, the bans
+  // and who may use controls at all.
   const policy = computed<ServerPolicy>(() => ({
-    groups: controls.value,
     memberships: activeMemberships.value,
     bans: bannedClients.value.map(({ scope, value, reason }) => ({ scope, value, reason })),
     clientType: clientType.value,

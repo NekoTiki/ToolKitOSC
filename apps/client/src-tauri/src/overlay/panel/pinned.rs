@@ -1,5 +1,5 @@
 //! The panel's Pinned page: the controls pinned on the avatar you're wearing, as tiles. Their state
-//! comes from the controls the webview last pushed (with the active profile's locks) and the live
+//! comes from the controls in `setup` (with the active profile's locks) and the live
 //! OSC values; a press runs through `controls::run` as you, like a click in the app.
 //!
 //! A pressed tile shows its new state right away and keeps it until VRChat reports a value for
@@ -175,7 +175,7 @@ fn pick(groups: &[Value], ids: &[String]) -> (Vec<(String, Value)>, bool) {
 /// is pinned.
 pub fn tiles(app: &AppHandle, ids: &[String]) -> (Vec<Tile>, bool) {
     // Building a tile reads the live parameters, so it happens after the server's lock is let go.
-    let (shown, nothing_pinned) = crate::server::with_control_groups(app, |groups| pick(groups, ids));
+    let (shown, nothing_pinned) = crate::setup::with_groups(app, |groups| pick(groups, ids));
     let tiles: Vec<Tile> = shown.iter().filter_map(|(group_id, control)| tile(app, group_id, control)).collect();
     // What a press showed only matters while its tile is on the page.
     overlay(app).panel.lock().unwrap().expected.retain(|id, _| tiles.iter().any(|tile| &tile.control_id == id));
@@ -185,7 +185,7 @@ pub fn tiles(app: &AppHandle, ids: &[String]) -> (Vec<Tile>, bool) {
 /// A tile pressed on the panel: what a click on it in the app would do. `pick` is what was picked
 /// from a `TileKind::Menu`.
 pub fn press(app: &AppHandle, group_id: &str, control_id: &str, level: Option<f64>, pick: Option<usize>) {
-    let Some(control) = crate::server::find_control(app, group_id, control_id) else {
+    let Some(control) = crate::setup::find_control(app, group_id, control_id) else {
         return;
     };
     let Some(tile) = tile(app, group_id, &control) else {

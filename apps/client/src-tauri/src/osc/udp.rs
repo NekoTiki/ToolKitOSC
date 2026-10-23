@@ -145,6 +145,7 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
     *state.unresolved_avatar.lock().unwrap() = None;
 
     *state.avatar_details.lock().unwrap() = Some(details.clone());
+    crate::setup::refresh(app);
     let _ = app.emit("vrc-avatar-details", &details);
 
     let loaded_cache = cache::load(app, &details.id);

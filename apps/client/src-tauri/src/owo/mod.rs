@@ -153,6 +153,10 @@ fn avatar_check(app: &AppHandle) -> Option<AvatarCheck> {
     Some(AvatarCheck { id: details.id, name: details.name, detected: cached.as_ref().unwrap().1.clone() })
 }
 
+pub fn connected(app: &AppHandle) -> bool {
+    owo(app).inner.lock().unwrap().status == Some(Status::Connected)
+}
+
 pub fn view(app: &AppHandle) -> View {
     let (status, address, simulated) = {
         let inner = owo(app).inner.lock().unwrap();

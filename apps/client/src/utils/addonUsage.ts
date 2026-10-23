@@ -5,29 +5,6 @@ export interface AddonUsage {
   automations: number
 }
 
-// Every avatar's saved controls, from localStorage (`controls_<avatarId>`, see useControls.ts),
-// not only the worn avatar's: turning an add-on off affects them all.
-export const savedControlTypes = (): string[] => {
-  const types: string[] = []
-
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-
-    if (!key?.startsWith('controls_avtr_')) continue
-
-    try {
-      const groups: unknown = JSON.parse(localStorage.getItem(key) ?? '[]')
-
-      if (!Array.isArray(groups)) continue
-      groups.forEach((group: { controls?: { type?: string }[] }) => group.controls?.forEach((control) => control.type && types.push(control.type)))
-    } catch {
-      // Not ours, or damaged: nothing to count.
-    }
-  }
-
-  return types
-}
-
 // How many controls and automations use this add-on, for the turn-off confirmation.
 export const addonUsage = (addon: AddonManifest, controlTypes: string[], automations: Automation[]): AddonUsage => ({
   controls: controlTypes.filter((type) => addon.controlTypes.includes(type)).length,

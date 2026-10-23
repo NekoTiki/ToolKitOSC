@@ -85,6 +85,7 @@ fn with<T>(app: &AppHandle, change: impl FnOnce(&mut Vec<SavedPattern>) -> (T, b
     if let Some(list) = list {
         write_file(app, &list);
         let _ = app.emit("saved-patterns", &list);
+        crate::setup::refresh(app);
     }
     result
 }

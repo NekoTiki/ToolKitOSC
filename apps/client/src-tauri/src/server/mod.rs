@@ -1,6 +1,6 @@
 //! The host's link to the share server (`/host`). Rust owns the socket so it stays up while the
 //! webview reloads, sits hidden in the tray or is busy. Viewer commands are checked and run here
-//! (see `commands`), against a copy of the controls and rules the webview pushes (`policy`).
+//! (see `commands`), against the controls in `setup` and the rules the webview pushes (`policy`).
 //! Other incoming messages go to the webview as `server-message` events, and it sends its own
 //! through `server_send`. Avatar parameter values go straight from the OSC receive path to the
 //! server (see `on_parameter`), for the parameters the webview asked for. The token it signs in
@@ -64,7 +64,7 @@ struct Inner {
     client_list: Option<String>,
     /// The viewers connected now, from the last `client-list`, with names kept up to date.
     clients: Vec<serde_json::Value>,
-    /// The controls and rules viewer commands are checked against (see `policy`). Kept across
+    /// The rules viewer commands are checked against (see `policy`). Kept across
     /// reconnects and webview reloads.
     policy: Option<policy::Policy>
 }
@@ -155,11 +155,9 @@ pub fn send(app: &AppHandle, text: String) {
     }
 }
 
-/// The webview's controls and rules, for checking viewer commands. When a profile's limits on a
-/// toy change, running toys are brought within them (see `policy::clamp_running`).
+/// The webview's rules, for checking viewer commands.
 pub fn set_policy(app: &AppHandle, policy: policy::Policy) {
-    let previous = server(app).inner.lock().unwrap().policy.replace(policy.clone());
-    policy::clamp_running(app, previous.as_ref(), &policy);
+    server(app).inner.lock().unwrap().policy = Some(policy);
 }
 
 /// The link's state, None before the first connect.
@@ -186,24 +184,6 @@ pub fn viewers(app: &AppHandle) -> Vec<(viewer::Viewer, Vec<String>)> {
             (viewer, groups)
         })
         .collect()
-}
-
-/// Runs `f` on the control groups of the avatar you're wearing, as the webview last pushed them,
-/// without copying them. It holds the server's lock: copy out what you need and work on it after.
-pub fn with_control_groups<T>(app: &AppHandle, f: impl FnOnce(&[serde_json::Value]) -> T) -> T {
-    let inner = server(app).inner.lock().unwrap();
-    f(inner.policy.as_ref().map_or(&[], |policy| &policy.groups))
-}
-
-/// A control of the avatar you're wearing, as the webview last pushed it.
-pub fn find_control(app: &AppHandle, group_id: &str, control_id: &str) -> Option<serde_json::Value> {
-    let inner = server(app).inner.lock().unwrap();
-    inner.policy.as_ref()?.control(group_id, control_id).map(|(control, _)| control.clone())
-}
-
-/// The rules viewer commands are checked against, once the webview has sent them.
-fn policy(app: &AppHandle) -> Option<policy::Policy> {
-    server(app).inner.lock().unwrap().policy.clone()
 }
 
 /// The rules, and the connected viewer with this session id.

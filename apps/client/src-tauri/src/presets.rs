@@ -47,6 +47,9 @@ pub struct PresetStore {
 }
 
 fn store_path(app: &AppHandle, avatar_id: &str) -> Result<PathBuf, String> {
+    if !crate::setup::valid_avatar_id(avatar_id) {
+        return Err(format!("Not an avatar id: {avatar_id}"));
+    }
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join(format!("presets-{avatar_id}.json")))
@@ -85,5 +88,8 @@ pub fn load_presets(app: AppHandle, avatar_id: String) -> Result<PresetStore, St
 
 #[tauri::command]
 pub fn save_presets(app: AppHandle, avatar_id: String, store: PresetStore) -> Result<(), String> {
-    save(&app, &avatar_id, &store)
+    save(&app, &avatar_id, &store)?;
+    // A preset control is unavailable without its preset.
+    crate::setup::refresh(&app);
+    Ok(())
 }

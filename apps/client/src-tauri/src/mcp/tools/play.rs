@@ -91,7 +91,7 @@ fn locked_for_assistants(controls: &[Value], address: &str) -> bool {
 impl Session {
     #[tool(description = "Uses one of the host's controls, the way a viewer would from the share page, within what the active profile allows assistants. Not for shocker controls.")]
     fn run_control(&self, Parameters(request): Parameters<RunRequest>) -> Result<String, String> {
-        let control = crate::server::find_control(&self.app, &request.group_id, &request.control_id).ok_or("No such control: get the ids from list_controls")?;
+        let control = crate::setup::find_control(&self.app, &request.group_id, &request.control_id).ok_or("No such control: get the ids from list_controls")?;
         let kind = control.get("type").cloned().unwrap_or(Value::Null);
         if kind == "open-shock-shocker" {
             return Err("Shocker controls aren't something this tool fires".to_owned());
@@ -108,7 +108,7 @@ impl Session {
 
     #[tool(description = "Fires one of the host's OpenShock shocker controls, with the intensity and duration the control rolls, its cooldown, and what the active profile allows assistants")]
     fn fire_shocker(&self, Parameters(ShockRequest { group_id, control_id }): Parameters<ShockRequest>) -> Result<String, String> {
-        let control = crate::server::find_control(&self.app, &group_id, &control_id).ok_or("No such control: get the ids from list_controls")?;
+        let control = crate::setup::find_control(&self.app, &group_id, &control_id).ok_or("No such control: get the ids from list_controls")?;
         if control.get("type").and_then(Value::as_str) != Some("open-shock-shocker") {
             return Err("That isn't a shocker control: use run_control".to_owned());
         }
@@ -141,7 +141,7 @@ impl Session {
             return Err("That's one of ToolKitOSC's own parameters".to_owned());
         }
         let address = format!("/avatar/parameters/{name}");
-        if crate::server::with_control_groups(&self.app, |controls| locked_for_assistants(controls, &address)) {
+        if crate::setup::with_groups(&self.app, |controls| locked_for_assistants(controls, &address)) {
             return Err("A control the active profile locks for assistants drives that parameter".to_owned());
         }
         let arg = match value {

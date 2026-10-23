@@ -92,7 +92,7 @@ fn addons(app: &AppHandle) -> Vec<AddonRow> {
 /// A row per toy control, with its level.
 fn toys(app: &AppHandle) -> Vec<ToyRow> {
     // Only the toys are copied out of the controls.
-    let toys: Vec<(String, String, bool)> = crate::server::with_control_groups(app, |groups| {
+    let toys: Vec<(String, String, bool)> = crate::setup::with_groups(app, |groups| {
         groups
             .iter()
             .filter_map(|group| group.get("controls")?.as_array())
