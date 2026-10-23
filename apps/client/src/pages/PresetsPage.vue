@@ -265,15 +265,18 @@ onBeforeRouteLeave(async () => {
           <RouterLink
             :to="`/presets/${item.id}`"
             class="group grid min-h-14.5 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 rounded-2xl border px-2.5 py-2 transition-colors"
-            :class="item.id === presetId ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
+            :class="[
+              item.id === presetId ? 'border-primary/50 bg-primary/14' : 'hover:bg-(--aurora-glass)',
+              item.id === ORIGINAL_STATE_ID ? 'border-dashed border-secondary/60' : item.id !== presetId && 'border-transparent'
+            ]"
           >
             <span
               class="relative row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
-              :class="item.id === presetId ? 'text-primary' : 'text-muted'"
+              :class="item.id === ORIGINAL_STATE_ID ? 'text-secondary' : item.id === presetId ? 'text-primary' : 'text-muted'"
             >
               <UIcon
                 :name="item.icon || 'i-lucide-layers'"
-                class="size-4.5"
+                class="size-4.5 group-hover:invisible group-has-focus-visible:invisible"
               />
               <!-- Shown on hover (or keyboard focus): applies the preset without opening it. -->
               <UButton

@@ -15,7 +15,7 @@ import type { TileDensity } from '@renderer/composables/useControlsView'
 import { useControlsView } from '@renderer/composables/useControlsView'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import { useOscConnection } from '@renderer/composables/useOscConnection'
-import { usePresets } from '@renderer/composables/usePresets'
+import { ORIGINAL_STATE_ID, usePresets } from '@renderer/composables/usePresets'
 import { useWristPins } from '@renderer/composables/useVrOverlay'
 import type { CommandWithoutIds, ControlGroup, ControlType, PresetControl } from '@toolkitosc/shared-ui'
 import { Control, controlTileSpan } from '@toolkitosc/shared-ui'
@@ -59,7 +59,7 @@ const { avatarDetails } = useAvatarDetails()
 const { lockedControlGroups, currentLockedControlsGroup, defaultLockedControlsGroup } = useLockedControls()
 const { density, editMode } = useControlsView()
 const { openModal: confirm } = useAreYouSureModal()
-const { presets, applyPreset } = usePresets()
+const { presets, originalState, applyPreset } = usePresets()
 const { offAddonForControlType, isOn } = useAddons()
 const { wristPins, setWristPin } = useWristPins()
 const { setAddon } = useAddonSwitch()
@@ -123,9 +123,10 @@ const shownInGroup = computed<ShownControl[]>(() => {
 })
 
 // The Presets view's tiles: stand-in Preset controls, not stored anywhere. Applying one goes
-// straight to usePresets, and right-clicking one offers the preset's own actions.
+// straight to usePresets, and right-clicking one offers the preset's own actions. The session's
+// unsaved Original state comes first.
 const presetTiles = computed<PresetControl[]>(() =>
-  presets.value.map((preset) => ({ id: `preset:${preset.id}`, type: 'preset', name: preset.name, icon: preset.icon || undefined, presetId: preset.id }))
+  [...(originalState.value ? [originalState.value] : []), ...presets.value].map((preset) => ({ id: `preset:${preset.id}`, type: 'preset', name: preset.name, icon: preset.icon || undefined, presetId: preset.id }))
 )
 
 const runPresetTile = (tile: PresetControl): void => applyPreset(tile.presetId)
@@ -156,7 +157,7 @@ const wristCount = computed(() => {
 const builtInViews = computed(() => [
   { id: PINNED, label: 'Pinned', icon: 'i-lucide-star', count: pinnedCount.value, hint: `${pinnedCount.value} pinned from any group` },
   ...(isOn('overlay') ? [{ id: WRIST, label: 'On your wrist', icon: 'i-lucide-watch', count: wristCount.value, hint: `${wristCount.value} on the VR overlay panel` }] : []),
-  { id: PRESETS, label: 'Presets', icon: 'i-lucide-layers', count: presets.value.length, hint: `${presets.value.length} presets for this avatar` }
+  { id: PRESETS, label: 'Presets', icon: 'i-lucide-layers', count: presetTiles.value.length, hint: `${presetTiles.value.length} presets for this avatar` }
 ])
 
 const sidebarGroups = computed(() =>
@@ -439,7 +440,7 @@ const title = computed(() => {
 const meta = computed(() => {
   if (search.value) return `${shown.value.length} controls match "${query.value.trim()}"`
 
-  if (selectedId.value === PRESETS) return `${presets.value.length} ${presets.value.length === 1 ? 'preset' : 'presets'} for this avatar`
+  if (selectedId.value === PRESETS) return `${presetTiles.value.length} ${presetTiles.value.length === 1 ? 'preset' : 'presets'} for this avatar`
   if (selectedId.value === WRIST) return `${shown.value.length} ${shown.value.length === 1 ? 'control' : 'controls'} · in the order the VR overlay panel shows them, 6 a page`
 
   const count = `${shown.value.length} ${shown.value.length === 1 ? 'control' : 'controls'}`
@@ -784,6 +785,7 @@ const mode = computed<'use' | 'edit'>({
               :key="tile.id"
               data-span="s"
               :data-control-id="tile.id"
+              :class="{ 'rounded-panel ring-2 ring-secondary/60': tile.presetId === ORIGINAL_STATE_ID }"
             >
               <Control
                 :control="tile"
