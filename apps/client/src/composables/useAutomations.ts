@@ -8,7 +8,7 @@ import { api } from '@renderer/lib/tauri-bridge'
 import type { DescribeContext } from '@renderer/utils/automations'
 import { controlsByAddress } from '@renderer/utils/controlAddresses'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 
 // Automations run in the backend, which sends the whole list on every change; this mirrors it.
 const automations = ref<Automation[]>([])
@@ -20,6 +20,8 @@ const running = ref<Set<string>>(new Set())
 export interface AutomationRuns {
   at: number
   count: number
+  // The last step it skipped, and why ("Skipped Toy: Intiface toys is off").
+  skipped?: string
 }
 const RUNS_KEY = 'automations_runs'
 const loadRuns = (): Record<string, AutomationRuns> => {
@@ -48,6 +50,34 @@ api.onAutomationActivity(({ id, running: isRunning }) => {
   running.value = next
 })
 void api.automationsList().then((value) => (automations.value = value))
+// Rust says it once per automation and session.
+api.onAutomationSkipped(({ automationId, message }) => {
+  const run = runs.value[automationId] ?? { at: 0, count: 0 }
+  runs.value = { ...runs.value, [automationId]: { ...run, skipped: message } }
+})
+
+// A copy to start from: a new id, "copy" in its name, and off until you turn it on.
+const copyOf = (automation: Automation, name = `${automation.name} copy`): Automation => ({
+  ...structuredClone(toRaw(automation)),
+  id: crypto.randomUUID(),
+  name,
+  enabled: false,
+  createdBy: undefined
+})
+
+// Pasted JSON: one automation or a list. Each is saved as a new one, turned off; Rust checks it.
+// Returns how many were saved, or throws with what went wrong.
+const importJson = async (text: string): Promise<number> => {
+  const parsed: unknown = JSON.parse(text)
+  const list = (Array.isArray(parsed) ? parsed : [parsed]) as Automation[]
+  for (const automation of list) {
+    if (!automation || typeof automation !== 'object' || !automation.when || !Array.isArray(automation.then)) {
+      throw new Error("That doesn't look like an automation.")
+    }
+    await api.automationSave(copyOf({ ...automation, onlyIf: automation.onlyIf ?? [] }, automation.name))
+  }
+  return list.length
+}
 
 export function useAutomations(): {
   automations: Ref<Automation[]>
@@ -60,6 +90,8 @@ export function useAutomations(): {
   remove: (id: string) => Promise<void>
   setEnabled: (id: string, enabled: boolean) => Promise<void>
   test: (id: string) => Promise<void>
+  duplicate: (automation: Automation) => Promise<void>
+  importJson: (text: string) => Promise<number>
 } {
   const { boards } = useBoards()
   const { controls } = useControls()
@@ -89,6 +121,8 @@ export function useAutomations(): {
     save: (automation) => api.automationSave(automation),
     remove: (id) => api.automationDelete(id),
     setEnabled: (id, enabled) => api.automationSetEnabled(id, enabled),
-    test: (id) => api.automationTest(id)
+    test: (id) => api.automationTest(id),
+    duplicate: (automation) => api.automationSave(copyOf(automation)),
+    importJson
   }
 }
