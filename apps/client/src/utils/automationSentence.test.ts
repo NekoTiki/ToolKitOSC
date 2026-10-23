@@ -92,6 +92,20 @@ describe('sentence', () => {
     expect(plainSentence(s)).toBe('When Boop or Pat is tapped 2 times within 1 s, stop your toys, any time, every time.')
   })
 
+  it('words chains and steps that wait for the one before', () => {
+    const s = sentence(
+      automation({
+        when: { kind: 'after-automation', automationId: 'warmup', whenStops: true },
+        then: [toyPulse(2000), { ...toyPulse(1000), afterPrevious: true, delayMs: 500 }],
+        onlyIf: [{ kind: 'automation-running', automationId: 'warmup', running: false }]
+      }),
+      { ...context, automationName: (id) => (id === 'warmup' ? 'Warm up' : undefined) }
+    )
+    expect(plainSentence(s)).toBe(
+      "When Warm up stops, buzz Lush 3 at 60% for 2 s, then once that's done and 0.5 s more buzz Lush 3 at 60% for 1 s, only when Warm up is not running, every time."
+    )
+  })
+
   it('uses "While" for a state and words a hold', () => {
     const s = sentence(
       automation({

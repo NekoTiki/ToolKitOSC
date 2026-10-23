@@ -2,6 +2,7 @@
 import ConditionExtraFields from '@renderer/components/automations/ConditionExtraFields.vue'
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
@@ -22,6 +23,7 @@ const { avatarDetails } = useAvatarDetails()
 const { lockedControlGroups } = useLockedControls()
 const { viewerGroups, savedGroups } = useViewerGroups()
 const { boards } = useBoards()
+const { automations } = useAutomations()
 
 const kind = computed({
   get: () => guard.value.kind,
@@ -54,6 +56,9 @@ const kind = computed({
         break
       case 'board-online':
         guard.value = { kind: value, boardId: boards.value[0]?.id ?? '', online: true }
+        break
+      case 'automation-running':
+        guard.value = { kind: value, automationId: '', running: true }
     }
   }
 })
@@ -67,8 +72,12 @@ const KIND_ITEMS: { value: AutomationGuard['kind']; label: string }[] = [
   { value: 'chance', label: 'Chance' },
   { value: 'viewer-group', label: 'Viewer group' },
   { value: 'toys-connected', label: 'Toys' },
-  { value: 'board-online', label: 'Board' }
+  { value: 'board-online', label: 'Board' },
+  { value: 'automation-running', label: 'Automation' }
 ]
+
+const runningGuard = computed(() => (guard.value.kind === 'automation-running' ? guard.value : null))
+const automationItems = computed(() => automations.value.map((a) => ({ label: a.name, value: a.id })))
 
 const groupGuard = computed(() => (guard.value.kind === 'viewer-group' ? guard.value : null))
 const groupItems = computed(() => viewerGroups.value.map((g) => ({ label: g.name, value: g.id })))
@@ -375,6 +384,29 @@ const viewers = computed({
       <p class="w-full text-[13px] text-muted">
         Whoever sent the last command on your share page.
       </p>
+    </div>
+
+    <div
+      v-else-if="runningGuard"
+      class="flex flex-wrap items-center gap-3"
+    >
+      <USelectMenu
+        v-model="runningGuard.automationId"
+        :items="automationItems"
+        value-key="value"
+        placeholder="Pick an automation"
+        class="w-full max-w-72"
+      />
+      <SegmentedControl
+        :model-value="runningGuard.running ? 'yes' : 'no'"
+        :items="[
+          { value: 'yes', label: 'Is running' },
+          { value: 'no', label: 'Is not running' }
+        ]"
+        aria-label="Running or not"
+        class="w-fit"
+        @update:model-value="runningGuard.running = $event === 'yes'"
+      />
     </div>
 
     <SegmentedControl

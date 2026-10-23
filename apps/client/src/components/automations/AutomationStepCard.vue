@@ -444,8 +444,14 @@ const toInt = (value: number | string): number =>
       <label
         v-if="stepCanWait(step) && !nested"
         class="ml-auto flex items-center gap-2 text-sm text-muted"
-        :title="`How long after it's triggered this step starts. Up to ${formatMs(MAX_DELAY_MS)}.`"
+        :title="`How long after it's triggered (or after the step before is done) this step starts. Up to ${formatMs(MAX_DELAY_MS)}.`"
       >
+        <UCheckbox
+          v-if="index > 0"
+          :model-value="!!step.afterPrevious"
+          label="Once the step before is done, then"
+          @update:model-value="step.afterPrevious = $event === true || undefined"
+        />
         After
         <UInput
           :model-value="step.delayMs"

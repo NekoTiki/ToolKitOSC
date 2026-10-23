@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use super::model::{
-    Action, AppEvent, Automation, BoardNote, Condition, Context, ControlRun, Edge, LeashEvent, Now, OutputAction, ParameterAction, Retrigger, Runs,
-    ToyRun, Trigger, ValueType
+    step_starts, Action, AppEvent, Automation, BoardNote, Condition, Context, ControlRun, Edge, LeashEvent, Now, OutputAction, ParameterAction,
+    Retrigger, Runs, ToyRun, Trigger, ValueType
 };
 use crate::boards::protocol::OutputMessage;
 
@@ -284,6 +284,7 @@ impl State {
         let holds = |guard: &super::model::Guard| match guard {
             super::model::Guard::ToysConnected { connected } => (env.toys_connected() > 0) == *connected,
             super::model::Guard::BoardOnline { board_id, online } => env.board_online(board_id) == *online,
+            super::model::Guard::AutomationRunning { automation_id, running } => self.is_running(automation_id, Instant::now()) == *running,
             guard => guard.holds(&self.context, now, &|address| self.value(address, env))
         };
         if automation.only_if_any && !automation.only_if.is_empty() {
@@ -311,7 +312,8 @@ impl State {
         let busy = automation
             .then
             .iter()
-            .map(|step| step.delay_ms.saturating_add(step.action.busy_ms()))
+            .zip(step_starts(&automation.then))
+            .map(|(step, start)| start.saturating_add(step.action.busy_ms()))
             .max()
             .unwrap_or(0);
         let runtime = self.runtime.entry(automation.id.clone()).or_default();
@@ -324,14 +326,14 @@ impl State {
 
     /// Runs (or schedules) the steps that run on this kind of edge.
     fn start(&mut self, automation: &Automation, runs: Runs, now: Instant, env: &dyn Env, effects: &mut Vec<Effect>) {
-        for (index, step) in automation.then.iter().enumerate() {
+        for (index, (step, start)) in automation.then.iter().zip(step_starts(&automation.then)).enumerate() {
             if step.action.runs() != runs {
                 continue;
             }
-            if step.delay_ms == 0 {
+            if start == 0 {
                 self.run_step(automation, index, now, env, effects);
             } else {
-                self.pending.push(Pending { due: after(now, step.delay_ms), automation_id: automation.id.clone(), step: Some(index) });
+                self.pending.push(Pending { due: after(now, start), automation_id: automation.id.clone(), step: Some(index) });
             }
         }
     }
@@ -810,11 +812,11 @@ mod tests {
     }
 
     fn board(output: OutputAction) -> Step {
-        Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output, chatbox: false }, delay_ms: 0 }
+        Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output, chatbox: false }, delay_ms: 0, after_previous: false }
     }
 
     fn parameter(address: &str, value_type: ValueType, set: ParameterAction) -> Step {
-        Step { action: Action::AvatarParameter { parameter: address.into(), value_type, set }, delay_ms: 0 }
+        Step { action: Action::AvatarParameter { parameter: address.into(), value_type, set }, delay_ms: 0, after_previous: false }
     }
 
     fn automation_with(id: &str, condition: Condition, value_type: ValueType, then: Vec<Step>) -> Automation {
@@ -888,7 +890,8 @@ mod tests {
         let mut state = State::default();
         let off = Step {
             action: Action::BoardOutput { board_id: "off".into(), pin: 4, output: OutputAction::Pulse { on_ms: 500, off_ms: 0, count: 1 }, chatbox: false },
-            delay_ms: 0
+            delay_ms: 0,
+            after_previous: false
         };
         let set = parameter("/avatar/parameters/Ears", ValueType::Bool, ParameterAction::Set { value: 1.0 });
         state.automations.push(automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![off, set]));
@@ -1179,7 +1182,8 @@ mod tests {
     fn control(run: ControlRun, control_type: &str) -> Step {
         Step {
             action: Action::Control { group_id: "g".into(), control_id: "c".into(), control_type: control_type.into(), run },
-            delay_ms: 0
+            delay_ms: 0,
+            after_previous: false
         }
     }
 
@@ -1190,7 +1194,7 @@ mod tests {
             "a",
             Condition::TurnsOn,
             ValueType::Bool,
-            vec![control(ControlRun::Press, "preset"), Step { action: Action::Chatbox { text: "Boop!".into() }, delay_ms: 0 }]
+            vec![control(ControlRun::Press, "preset"), Step { action: Action::Chatbox { text: "Boop!".into() }, delay_ms: 0, after_previous: false }]
         ));
 
         assert_eq!(app_phases(&change_effects(&mut state, 0.0, 1.0)), vec![(0, Phase::Run), (1, Phase::Run)]);
@@ -1221,7 +1225,7 @@ mod tests {
             "a",
             Condition::IsOn,
             ValueType::Bool,
-            vec![Step { action: Action::Profile { profile_id: Some("p".into()), while_held: true }, delay_ms: 0 }]
+            vec![Step { action: Action::Profile { profile_id: Some("p".into()), while_held: true }, delay_ms: 0, after_previous: false }]
         ));
         change(&mut state, 0.0, 1.0);
         assert!(app_phases(&state.release_all()).is_empty());
@@ -1241,7 +1245,7 @@ mod tests {
 
     #[test]
     fn toy_steps_hold_follow_and_stop_with_stop_everything() {
-        let toy = |run: ToyRun| Step { action: Action::Toy { toys: vec![], run }, delay_ms: 0 };
+        let toy = |run: ToyRun| Step { action: Action::Toy { toys: vec![], run }, delay_ms: 0, after_previous: false };
         let mut state = State::default();
         state.automations.push(automation_with("a", Condition::IsOn, ValueType::Bool, vec![toy(ToyRun::Hold { level: 0.7 })]));
         assert_eq!(app_phases(&change_effects(&mut state, 0.0, 1.0)), vec![(0, Phase::Start)]);
@@ -1319,7 +1323,7 @@ mod tests {
             "a",
             Condition::TurnsOn,
             ValueType::Bool,
-            vec![Step { action: Action::Profile { profile_id: Some("p".into()), while_held: false }, delay_ms: 0 }]
+            vec![Step { action: Action::Profile { profile_id: Some("p".into()), while_held: false }, delay_ms: 0, after_previous: false }]
         );
         a.when = Trigger::AvatarChanged { avatar_id: Some("avtr_1".into()), avatar_name: None };
         state.automations.push(a.clone());
@@ -1425,7 +1429,7 @@ mod tests {
     #[test]
     fn stopped_runs_chatbox_steps_while_paused() {
         let mut state = State::default();
-        let mut a = automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![Step { action: Action::Chatbox { text: "Paused".into() }, delay_ms: 0 }]);
+        let mut a = automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![Step { action: Action::Chatbox { text: "Paused".into() }, delay_ms: 0, after_previous: false }]);
         a.when = Trigger::AppEvent { event: AppEvent::Stopped };
         state.automations.push(a);
         state.set_paused(true);
@@ -1454,7 +1458,7 @@ mod tests {
             "a",
             Condition::TurnsOn,
             ValueType::Bool,
-            vec![Step { action: Action::OneOf { options: vec![chat("one"), chat("two")] }, delay_ms: 0 }]
+            vec![Step { action: Action::OneOf { options: vec![chat("one"), chat("two")] }, delay_ms: 0, after_previous: false }]
         ));
         let effects = change_effects(&mut state, 0.0, 1.0);
         let texts: Vec<_> = effects
@@ -1521,9 +1525,34 @@ mod tests {
     }
 
     #[test]
+    fn after_previous_waits_for_the_step_before() {
+        let toy = |ms: u32, delay_ms: u32, after_previous: bool| Step {
+            action: Action::Toy { toys: vec![], run: ToyRun::Pulse { level: 0.5, ms } },
+            delay_ms,
+            after_previous
+        };
+        assert_eq!(step_starts(&[toy(2000, 500, false), toy(1000, 300, true), toy(1000, 0, true)]), vec![500, 2800, 3800]);
+        assert_eq!(step_starts(&[toy(2000, 0, false), toy(1000, 300, false)]), vec![0, 300], "from the trigger");
+    }
+
+    #[test]
+    fn automation_running_guard() {
+        let mut state = State::default();
+        state.automations.push(automation("long", Condition::TurnsOn, ValueType::Bool, OutputAction::Pulse { on_ms: 5000, off_ms: 0, count: 1 }));
+        let mut b = automation("b", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        b.when = Trigger::AfterAutomation { automation_id: "long".into(), when_stops: false };
+        b.only_if = vec![Guard::AutomationRunning { automation_id: "long".into(), running: true }];
+        state.automations.push(b);
+        let after_long = |when: &Trigger| matches!(when, Trigger::AfterAutomation { automation_id, when_stops: false } if automation_id == "long");
+        assert_eq!(ran(&state.on_trigger(after_long, &TestEnv)), 0, "long isn't running");
+        change(&mut state, 0.0, 1.0);
+        assert_eq!(ran(&state.on_trigger(after_long, &TestEnv)), 1);
+    }
+
+    #[test]
     fn every_waits_its_gap_first() {
         let mut state = State::default();
-        let mut a = automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![Step { action: Action::Chatbox { text: "Hydrate".into() }, delay_ms: 0 }]);
+        let mut a = automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![Step { action: Action::Chatbox { text: "Hydrate".into() }, delay_ms: 0, after_previous: false }]);
         a.when = Trigger::Every { minutes: 30 };
         state.automations.push(a);
         assert_eq!(ran(&state.tick(&TestEnv)), 0, "not at once");

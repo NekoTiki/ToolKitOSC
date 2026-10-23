@@ -24,7 +24,8 @@ export interface Sentence {
   // "While" for a state ("while Boop is on"), "When" for a moment or a follow.
   lead: 'When' | 'While'
   when: Rich
-  steps: { delayMs: number; text: Rich; missing: boolean }[]
+  // `after`: when it starts, e.g. " after 2 s", " once that's done", or empty.
+  steps: { delayMs: number; after: string; text: Rich; missing: boolean }[]
   only: Rich | null
   often: Rich
 }
@@ -110,6 +111,8 @@ export const sentenceWhen = (when: AutomationTrigger, context?: DescribeContext)
       return rich`a ${strong('shock')} goes out`
     case 'touch':
       return rich`avatar touch ${strong(when.event === 'starts' ? 'starts' : 'stops')}`
+    case 'after-automation':
+      return rich`${strong(context?.automationName?.(when.automationId) ?? 'another automation')} ${when.whenStops ? 'stops' : 'runs'}`
     case 'avatar-parameter': {
       if (!when.parameter) return rich`something on your avatar changes`
       // A gesture or what you're doing: the same on every avatar.
@@ -337,6 +340,8 @@ const sentenceGuard = (guard: AutomationGuard, context?: DescribeContext): Rich 
       return rich`the viewer ${guard.not ? 'is not' : 'is'} in ${strong(context?.groupName?.(guard.groupId) ?? 'a group')}`
     case 'toys-connected':
       return guard.connected ? rich`a toy is ${strong('connected')}` : rich`${strong('no toy')} is connected`
+    case 'automation-running':
+      return rich`${strong(context?.automationName?.(guard.automationId) ?? 'another automation')} is ${guard.running ? '' : 'not '}running`
     case 'board-online':
       return rich`${strong(context?.boards.find((b) => b.id === guard.boardId)?.name ?? 'a board')} is ${strong(guard.online ? 'online' : 'offline')}`
     case 'profile':
@@ -362,12 +367,18 @@ export const sentenceOnly = (guards: AutomationGuard[], context?: DescribeContex
 
 export const sentenceOften = (cooldownMs: number): Rich => (cooldownMs ? rich`at most every ${strong(seconds(cooldownMs))}` : [strong('every time')])
 
+// When a step starts, after "then".
+const stepAfter = (step: AutomationStep): string => {
+  const wait = step.delayMs ? ` ${seconds(step.delayMs)}` : ''
+  return step.afterPrevious ? ` once that's done${wait ? ` and${wait} more` : ''}` : wait ? ` after${wait}` : ''
+}
+
 export const sentence = (automation: Automation, context?: DescribeContext): Sentence => {
   const condition = triggerCondition(automation.when)
   return {
     lead: !CONDITIONS[condition].moment && condition !== 'any' ? 'While' : 'When',
     when: sentenceWhen(automation.when, context),
-    steps: automation.then.map((step) => ({ delayMs: step.delayMs, text: sentenceStep(step, context), missing: stepMissing(step) })),
+    steps: automation.then.map((step) => ({ delayMs: step.delayMs, after: stepAfter(step), text: sentenceStep(step, context), missing: stepMissing(step) })),
     only: sentenceOnly(automation.onlyIf, context, automation.onlyIfAny),
     often: sentenceOften(automation.cooldownMs)
   }
@@ -377,7 +388,7 @@ export const sentence = (automation: Automation, context?: DescribeContext): Sen
 export const plainSentence = (s: Sentence): string =>
   [
     `${s.lead} ${s.when.map((p) => p.text).join('')}`,
-    ...s.steps.map((step, i) => `${i && step.delayMs ? `then after ${seconds(step.delayMs)} ` : i ? 'then ' : ''}${step.text.map((p) => p.text).join('')}`),
+    ...s.steps.map((step, i) => `${i ? `then${step.after} ` : ''}${step.text.map((p) => p.text).join('')}`),
     s.only?.map((p) => p.text).join('') ?? 'any time',
     s.often.map((p) => p.text).join('')
   ].join(', ') + '.'
@@ -394,6 +405,7 @@ export const easyExtras = (automation: Automation): string[] => {
   automation.then.forEach((step, i) => {
     const n = i + 1
     if (!EASY_DELAYS.includes(step.delayMs)) extras.push(`Step ${n} waits ${seconds(step.delayMs)}`)
+    if (step.afterPrevious) extras.push(`Step ${n} waits for the step before to be done`)
     if (step.kind === 'control') {
       if (step.run.type === 'pulse' && !EASY_PULSES.includes(step.run.ms)) extras.push(`Step ${n} lasts ${seconds(step.run.ms)}`)
       if (step.run.type === 'follow' && (step.run.min !== 0 || step.run.max !== 1)) extras.push(`Step ${n} follows within a range`)
