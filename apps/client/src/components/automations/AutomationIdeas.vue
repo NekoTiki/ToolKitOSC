@@ -18,7 +18,7 @@ const scroll = (direction: 1 | -1): void => {
 <template>
   <section
     v-if="ideas.length"
-    class="grid max-w-4xl gap-2.5"
+    class="grid gap-2.5"
     aria-label="Start from an idea"
   >
     <div class="flex items-center gap-2">
