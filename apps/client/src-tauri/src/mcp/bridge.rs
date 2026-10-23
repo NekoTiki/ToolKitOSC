@@ -1,5 +1,5 @@
-//! Asking the webview: controls, profiles, viewer groups, viewers and Activity live there
-//! (localStorage and IndexedDB), and so does the approval pop-up. Rust emits `mcp-request` with an
+//! Asking the webview: viewers and Activity live there (IndexedDB), and so does the approval
+//! pop-up. Rust emits `mcp-request` with an
 //! id, `useMcpBridge.ts` answers through `mcp_respond`, and a request nobody answers in time fails
 //! instead of hanging the assistant.
 use std::collections::HashMap;

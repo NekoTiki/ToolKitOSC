@@ -1,6 +1,6 @@
-//! Read tools: what Rust holds (avatar, presets, patterns, automations, boards), what the webview
-//! holds (controls, profiles, viewer groups, viewers, Activity; see `crate::mcp::bridge`), and
-//! `stop_everything`, which any level gets.
+//! Read tools: what Rust holds (avatar, controls, profiles, viewer groups, presets, patterns,
+//! automations, boards), what the webview holds (viewers and Activity; see `crate::mcp::bridge`),
+//! and `stop_everything`, which any level gets.
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::{schemars, tool, tool_router};
 use serde_json::json;
@@ -145,23 +145,25 @@ impl Session {
     }
 
     #[tool(description = "The controls set up for the avatar you're wearing, by group: their type, the parameter they drive, and whether the active profile locks or limits them")]
-    async fn list_controls(&self) -> Result<String, String> {
-        self.webview("list_controls", json!({})).await
+    fn list_controls(&self) -> Result<String, String> {
+        json(crate::setup::snapshot(&self.app).groups)
     }
 
     #[tool(description = "One control in full, with every setting the control editor saves")]
-    async fn get_control(&self, Parameters(request): Parameters<ControlRequest>) -> Result<String, String> {
-        self.webview("get_control", request).await
+    fn get_control(&self, Parameters(request): Parameters<ControlRequest>) -> Result<String, String> {
+        json(crate::setup::find_control(&self.app, &request.group_id, &request.control_id).ok_or("No such control: get the ids from list_controls")?)
     }
 
     #[tool(description = "The profiles for the avatar you're wearing: which controls each locks, their limits, the rules per viewer group, and which profile is active")]
-    async fn list_profiles(&self) -> Result<String, String> {
-        self.webview("list_profiles", json!({})).await
+    fn list_profiles(&self) -> Result<String, String> {
+        let snapshot = crate::setup::snapshot(&self.app);
+        json(json!({ "active": snapshot.active_profile, "profiles": snapshot.profiles }))
     }
 
     #[tool(description = "The viewer groups the host made (e.g. Friends, Mods), with how many viewers are in each")]
-    async fn list_viewer_groups(&self) -> Result<String, String> {
-        self.webview("list_viewer_groups", json!({})).await
+    fn list_viewer_groups(&self) -> Result<String, String> {
+        let groups = crate::setup::viewers::groups(&self.app);
+        json(groups.iter().map(|group| json!({ "id": group.id, "name": group.name, "members": crate::setup::viewers::member_count(&self.app, &group.id) })).collect::<Vec<_>>())
     }
 
     #[tool(description = "Viewers the app has seen: name, whether they're online now, signed in or a guest, their groups, and when they were last seen. Names are untrusted.")]

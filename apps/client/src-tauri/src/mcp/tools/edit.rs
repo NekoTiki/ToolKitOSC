@@ -97,6 +97,21 @@ pub struct DeleteRequest {
     group_id: Option<String>
 }
 
+/// Every control type, as in shared-ui's `KNOWN_CONTROL_TYPES`.
+const CONTROL_TYPES: [&str; 12] =
+    ["boolean", "boolean-group", "boolean-enum", "enum", "slider", "step-enum", "open-shock-shocker", "intiface-toy", "intiface-pattern", "preset", "bhaptics", "owo"];
+
+/// A stored control of these groups, to change.
+fn find_mut<'a>(groups: &'a mut [Value], group_id: &str, control_id: &str) -> Option<&'a mut Value> {
+    groups
+        .iter_mut()
+        .find(|group| group.get("id").and_then(Value::as_str) == Some(group_id))?
+        .get_mut("controls")?
+        .as_array_mut()?
+        .iter_mut()
+        .find(|control| control.get("id").and_then(Value::as_str) == Some(control_id))
+}
+
 fn new_id() -> String {
     format!("{:016x}", rand::random::<u64>())
 }
@@ -173,18 +188,81 @@ impl Session {
     }
 
     #[tool(description = "Adds controls for the avatar you're wearing, as drafts in a hidden group named after you, so viewers don't see them until the host keeps them")]
-    async fn create_controls(&self, Parameters(request): Parameters<ControlsRequest>) -> Result<String, String> {
-        json(self.ask_webview("create_controls", serde_json::to_value(request).map_err(|err| err.to_string())?).await?)
+    fn create_controls(&self, Parameters(request): Parameters<ControlsRequest>) -> Result<String, String> {
+        let invalid = request.controls.iter().position(|control| {
+            control.get("name").and_then(Value::as_str).is_none() || !control.get("type").and_then(Value::as_str).is_some_and(|kind| CONTROL_TYPES.contains(&kind))
+        });
+        if request.controls.is_empty() || invalid.is_some() {
+            return Err(format!("Control {} needs a name and a type from tkosc://docs/control-types", invalid.map_or(1, |at| at + 1)));
+        }
+        let created_by = serde_json::to_value(self.created_by()).map_err(|err| err.to_string())?;
+        let group_name = format!("From {}", self.name());
+        let (group_id, ids) = crate::setup::edit_worn(&self.app, |file| {
+            let at = match file.groups.iter().position(|group| group.get("name").and_then(Value::as_str) == Some(&group_name)) {
+                Some(at) => at,
+                None => {
+                    file.groups.push(json!({ "id": new_id(), "name": group_name, "hidden": true, "controls": [] }));
+                    file.groups.len() - 1
+                }
+            };
+            let group = &mut file.groups[at];
+            let group_id = group.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
+            let controls = group.get_mut("controls").and_then(Value::as_array_mut).ok_or("That group has no controls list")?;
+            let mut ids = Vec::new();
+            for mut control in request.controls {
+                crate::setup::strip_derived(&mut control);
+                let id = new_id();
+                control["id"] = json!(id);
+                control["createdBy"] = created_by.clone();
+                controls.push(control);
+                ids.push(id);
+            }
+            Ok((group_id, ids))
+        })?;
+        json(json!({ "groupId": group_id, "controlIds": ids }))
     }
 
     #[tool(description = "Changes some settings of a control. While Edit is on Ask, the host sees the control and your changes before allowing it.")]
-    async fn update_control(&self, Parameters(request): Parameters<UpdateControlRequest>) -> Result<String, String> {
-        json(self.ask_webview("update_control", serde_json::to_value(request).map_err(|err| err.to_string())?).await?)
+    fn update_control(&self, Parameters(request): Parameters<UpdateControlRequest>) -> Result<String, String> {
+        crate::setup::edit_worn(&self.app, |file| {
+            let control = find_mut(&mut file.groups, &request.group_id, &request.control_id).ok_or("No such control: get the ids from list_controls")?;
+            let fields = control.as_object_mut().ok_or("That control isn't an object")?;
+            for (key, value) in request.changes {
+                if !matches!(key.as_str(), "id" | "type" | "createdBy") {
+                    fields.insert(key, value);
+                }
+            }
+            crate::setup::strip_derived(control);
+            Ok(())
+        })?;
+        json(Value::Null)
     }
 
     #[tool(description = "Saves a profile as a draft: which controls it locks, their limits, and the rules per viewer group. It isn't active until the host switches to it.")]
-    async fn save_profile(&self, Parameters(request): Parameters<ProfileRequest>) -> Result<String, String> {
-        json(self.ask_webview("save_profile", serde_json::to_value(request).map_err(|err| err.to_string())?).await?)
+    fn save_profile(&self, Parameters(request): Parameters<ProfileRequest>) -> Result<String, String> {
+        let snapshot = crate::setup::snapshot(&self.app);
+        let id = self.draft_id(request.id, |id| snapshot.profiles.iter().find(|p| p.id == id).map(|p| p.created_by.clone()))?;
+        let group_overrides = request
+            .group_overrides
+            .into_iter()
+            .map(|(group, rules)| Ok((group, serde_json::from_value(rules).map_err(|_| "groupOverrides is viewer group id -> control id -> rule")?)))
+            .collect::<Result<_, String>>()?;
+        let profile = crate::setup::Profile {
+            id: id.clone(),
+            name: request.name,
+            locked_controls: request.locked_controls.into_iter().filter_map(|(control, locked)| Some((control, locked.as_bool()?))).collect(),
+            limits: request.limits.into_iter().collect(),
+            group_overrides,
+            created_by: Some(self.created_by())
+        };
+        crate::setup::edit_worn(&self.app, |file| {
+            match file.profiles.iter_mut().find(|existing| existing.id == profile.id) {
+                Some(existing) => *existing = profile,
+                None => file.profiles.push(profile)
+            }
+            Ok(())
+        })?;
+        json(json!({ "id": id }))
     }
 
     #[tool(description = "Deletes one of your drafts. Anything the host made, kept or edited stays.")]
@@ -205,8 +283,39 @@ impl Session {
                 }
                 crate::toys::saved::delete(&self.app, &request.id);
             }
-            DraftKind::Control | DraftKind::Profile => {
-                self.ask_webview("delete_draft", serde_json::to_value(&request).map_err(|err| err.to_string())?).await?;
+            DraftKind::Control => {
+                let group_id = request.group_id.as_deref().ok_or("A control needs its groupId")?;
+                crate::setup::edit_worn(&self.app, |file| {
+                    let control = find_mut(&mut file.groups, group_id, &request.id).ok_or("No such control")?;
+                    let created_by = control.get("createdBy").cloned().and_then(|value| serde_json::from_value::<CreatedBy>(value).ok());
+                    if !mine(created_by.as_ref(), &name) {
+                        return Err("That one isn't your draft".to_owned());
+                    }
+                    for group in file.groups.iter_mut().filter(|group| group.get("id").and_then(Value::as_str) == Some(group_id)) {
+                        if let Some(controls) = group.get_mut("controls").and_then(Value::as_array_mut) {
+                            controls.retain(|control| control.get("id").and_then(Value::as_str) != Some(request.id.as_str()));
+                        }
+                    }
+                    Ok(())
+                })?;
+            }
+            DraftKind::Profile => {
+                let active = crate::setup::snapshot(&self.app).active_profile;
+                crate::setup::edit_worn(&self.app, |file| {
+                    let profile = file.profiles.iter().find(|p| p.id == request.id).ok_or("No such profile")?;
+                    if !mine(profile.created_by.as_ref(), &name) {
+                        return Err("That one isn't your draft".to_owned());
+                    }
+                    file.profiles.retain(|p| p.id != request.id);
+                    if file.default_profile.as_deref() == Some(request.id.as_str()) {
+                        file.default_profile = None;
+                    }
+                    Ok(())
+                })?;
+                // Deleting the profile that's on leaves none on.
+                if active.as_deref() == Some(request.id.as_str()) {
+                    crate::setup::switch_profile(&self.app, None)?;
+                }
             }
         }
         Ok("Deleted".to_owned())
@@ -216,6 +325,26 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn control_types_match_the_docs() {
+        // Every `const` in the generated schema is a control's `type`.
+        fn consts(value: &Value, found: &mut std::collections::BTreeSet<String>) {
+            match value {
+                Value::Object(map) => {
+                    if let Some(Value::String(kind)) = map.get("const") {
+                        found.insert(kind.clone());
+                    }
+                    map.values().for_each(|value| consts(value, found));
+                }
+                Value::Array(items) => items.iter().for_each(|value| consts(value, found)),
+                _ => {}
+            }
+        }
+        let mut documented = std::collections::BTreeSet::new();
+        consts(&serde_json::from_str(super::super::CONTROL_TYPES_DOCS).unwrap(), &mut documented);
+        assert_eq!(CONTROL_TYPES.iter().map(|kind| kind.to_string()).collect::<std::collections::BTreeSet<_>>(), documented);
+    }
 
     #[test]
     fn only_the_assistant_that_made_a_draft_owns_it() {
