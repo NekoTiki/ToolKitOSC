@@ -453,7 +453,7 @@ onBeforeRouteLeave(async () => {
 
     <div
       v-if="!draft"
-      class="grid max-w-3xl gap-3.5"
+      class="grid gap-3.5"
     >
       <FormSection
         :title="isNew ? 'Wear an avatar first' : 'This automation doesn\'t exist any more'"
@@ -475,7 +475,7 @@ onBeforeRouteLeave(async () => {
          Advanced: when, only if, what it does, then its limits. -->
     <div
       v-else
-      class="grid max-w-4xl gap-3.5"
+      class="grid gap-3.5"
     >
       <FormSection>
         <div class="flex flex-wrap items-end gap-3.5">
