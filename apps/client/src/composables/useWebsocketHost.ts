@@ -9,7 +9,6 @@ import { useCommandsDb } from '@renderer/composables/useCommandsDb'
 import { useControls } from '@renderer/composables/useControls'
 import { onPatternRunEnd } from '@renderer/composables/useIntifacePatterns'
 import { useShareSettings } from '@renderer/composables/useShareSettings'
-import { useStopEverything } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
@@ -111,7 +110,6 @@ export function useWebsocketHost(): {
   const { clientType } = useClientType()
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
-  const { paused } = useStopEverything()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
   // A viewer's command Rust checked and ran (src-tauri/src/server/commands.rs), or accepted
@@ -206,7 +204,6 @@ export function useWebsocketHost(): {
       useAiAccess().applyUpdate(data.message.aiAccess)
       sendTheme()
       sendMessage('share-settings', shareSettings.value)
-      sendMessage('pause-state', { paused: paused.value })
     } else if (data.type === 'auth-error') {
       // Rust forgets this token and connects again, signed out.
       console.error('Authentication failed:', data.message)
@@ -328,10 +325,6 @@ export function useWebsocketHost(): {
 
   watch(shareSettings, (settings) => {
     if (status.value === 'OPEN') sendMessage('share-settings', settings)
-  })
-
-  watch(paused, (value) => {
-    if (status.value === 'OPEN') sendMessage('pause-state', { paused: value })
   })
 
   return { clients, status, sendMessage, open, close }

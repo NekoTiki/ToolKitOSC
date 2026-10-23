@@ -20,8 +20,9 @@ pub fn addons_finish_setup(app: AppHandle, dismiss_kept: bool) {
     super::finish_setup(&app, dismiss_kept);
 }
 
-/// Stop everything for every add-on that's on. Returns the ones that couldn't be reached.
+/// Stop everything: every add-on that's on stops, and nothing can act until you resume. Returns the
+/// add-ons that couldn't be reached.
 #[tauri::command]
 pub async fn addons_stop_everything(app: AppHandle) -> Vec<super::StopFailure> {
-    super::stop_everything(&app).await
+    crate::setup::stop::stop(&app).await
 }

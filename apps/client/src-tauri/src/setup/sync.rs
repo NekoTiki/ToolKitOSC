@@ -1,7 +1,8 @@
 //! What the share server needs from the setup: the controls viewers may see (`controls-update`),
 //! the avatar parameters those controls use (see `server::set_forwarded`), and who on the share page
 //! is in which viewer group (`viewer-groups`), so it sends each viewer their own copy. Sent when
-//! the server signs us in and whenever one of them changes.
+//! the server signs us in and whenever one of them changes. Stop everything's `pause-state` goes
+//! with them on sign-in (see `stop`).
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
@@ -96,6 +97,9 @@ pub fn sync(app: &AppHandle, again: bool) {
     }
     if send_groups {
         crate::server::send_message(app, "viewer-groups", viewer_groups);
+    }
+    if again {
+        super::stop::send_to_server(app);
     }
 }
 

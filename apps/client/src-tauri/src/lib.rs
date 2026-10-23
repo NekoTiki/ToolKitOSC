@@ -161,6 +161,9 @@ pub fn run() {
             setup::commands::setup_ban,
             setup::commands::setup_unban,
             setup::commands::setup_migrate_viewers,
+            setup::commands::stop_paused,
+            setup::commands::stop_resume,
+            setup::commands::stop_migrate,
             // Add-ons
             addons::commands::addons_list,
             addons::commands::addons_set_enabled,
@@ -181,7 +184,6 @@ pub fn run() {
             automations::commands::automation_delete,
             automations::commands::automation_set_enabled,
             automations::commands::automation_test,
-            automations::commands::automations_set_paused,
             automations::commands::automation_event,
             automations::commands::automations_set_context,
             // The share server: link, viewer commands, sign-in
@@ -248,7 +250,7 @@ pub fn run() {
             overlay::commands::overlay_settings,
             overlay::commands::overlay_save,
             overlay::commands::overlay_test_toast,
-            overlay::commands::overlay_set_context,
+            overlay::commands::overlay_set_theme,
             overlay::commands::overlay_pinned,
             overlay::commands::overlay_set_pinned,
             overlay::commands::overlay_status,
@@ -308,6 +310,7 @@ pub fn run() {
             // The added ESP32 boards are known even while their add-on is off, for automations.
             boards::load(app.handle());
             automations::start(app.handle().clone());
+            setup::stop::load(app.handle());
             tauri::async_runtime::spawn(setup::viewers::watch_expiry(app.handle().clone()));
             // Tokens a launch with no password store had to put in a file go to the store first,
             // if there's one now, before anything reads them. Then the add-ons that are on start

@@ -24,8 +24,23 @@ export const formatHotkey = (value: string): string =>
     .map((part) => (part === 'CommandOrControl' ? 'Ctrl' : part.replace(/^(Key|Digit)/, '')))
     .join('+')
 
-// Stays paused across restarts: a crash or a relaunch must never quietly hand control back.
-const paused = ref(localStorage.getItem(PAUSED_STORAGE_KEY) === 'true')
+// Kept by Rust (src-tauri/src/setup/stop.rs), across restarts: a crash or a relaunch must never
+// quietly hand control back. The last value seen is kept here too, so the first frame shows it
+// and starting the app doesn't look like a change.
+const cached = localStorage.getItem(PAUSED_STORAGE_KEY)
+const paused = ref(cached === 'true')
+
+const follow = (value: boolean): void => {
+  paused.value = value
+  localStorage.setItem(PAUSED_STORAGE_KEY, String(value))
+}
+
+api.onPausedChanged(follow)
+
+// Before Rust kept it, this was the only copy: Rust takes it over the first time (a no-op after).
+void (cached === null ? Promise.resolve() : api.stopMigrate(cached === 'true'))
+  .catch((error) => console.error('Could not move Stop everything to the app:', error))
+  .finally(() => void api.stopPaused().then(follow))
 // Empty when the hotkey is turned off.
 const hotkey = ref(localStorage.getItem(HOTKEY_STORAGE_KEY) ?? DEFAULT_STOP_HOTKEY)
 // Why the hotkey couldn't be registered (usually another app already uses it).
@@ -46,18 +61,13 @@ export function useStopEverything(): {
   // Registers the saved hotkey. Called once at startup (see useStopEverythingTriggers).
   registerHotkey: () => Promise<void>
 } {
-  const { controlValue: toyValues, setValue: setToyValue } = useIntifaceControl()
   const toast = useToast()
-
-  const setPaused = (value: boolean): void => {
-    paused.value = value
-    localStorage.setItem(PAUSED_STORAGE_KEY, String(value))
-  }
 
   const stop = (): void => {
     // Every add-on that's on stops: OpenShock drops shocks still waiting for their animation and
     // sends a Stop to every shocker on the account, Intiface stops every pattern and toy (not only
-    // the ones a control drives), and every output of every ESP32 board goes off.
+    // the ones a control drives), and every output of every ESP32 board goes off. Then Rust pauses.
+    paused.value = true
     void api.addonsStopEverything().then((failures) =>
       failures.forEach((failure) =>
         toast.add({
@@ -67,27 +77,11 @@ export function useStopEverything(): {
         })
       )
     )
-    // Every toy slider back to 0, so the app and viewers don't show toys running after a resume.
-    toyValues.value.forEach((value, controlId) => {
-      if (value > 0) setToyValue(controlId, 0)
-    })
-
-    if (paused.value) return
-
-    setPaused(true)
-    toast.add({
-      title: 'Everything stopped',
-      description: "Viewers can't use your controls until you resume.",
-      icon: 'i-lucide-octagon-x',
-      color: 'error'
-    })
   }
 
   const resume = (): void => {
-    if (!paused.value) return
-
-    setPaused(false)
-    toast.add({ title: 'Controls resumed', description: 'Viewers can use your controls again.', icon: 'i-lucide-play', color: 'success' })
+    paused.value = false
+    void api.stopResume()
   }
 
   const toggle = (): void => {
@@ -131,28 +125,28 @@ export function useStopEverything(): {
   return { paused, hotkey, hotkeyError, stop, resume, toggle, setHotkey, registerHotkey }
 }
 
-// The triggers that work while the app isn't in front (the hotkey and the avatar parameter), and the
-// chatbox notice. Called once, from App.vue.
+// The hotkey, and what follows Stop everything turning on or off from anywhere (the app, the panel,
+// an automation, an assistant, TKOSC/Panic, which Rust handles). Called once, from App.vue.
 export function useStopEverythingTriggers(): void {
-  const { paused, stop, registerHotkey } = useStopEverything()
+  const { paused, registerHotkey } = useStopEverything()
   const { announceNotice } = useChatbox()
+  const { controlValue: toyValues, setValue: setToyValue } = useIntifaceControl()
+  const toast = useToast()
 
   void registerHotkey()
 
-  // Automations run in the backend, so it needs to know too. Immediate: paused survives restarts.
-  watch(paused, (value) => void api.automationsSetPaused(value), { immediate: true })
+  watch(paused, (value) => {
+    // So people in the instance know why nothing reacts.
+    announceNotice(value ? 'Viewer controls paused' : 'Viewer controls are back on')
 
-  // So people in the instance know why nothing reacts.
-  watch(paused, (value) => announceNotice(value ? 'Viewer controls paused' : 'Viewer controls are back on'))
-
-  // Live changes only, not the values read when an avatar loads: a parameter saved as on must not
-  // pause you every time you switch into that avatar. Works while already paused too: it stops
-  // anything you turned on yourself since.
-  api.onOscMessage((msg) => {
-    if (msg.address !== PANIC_ADDRESS) return
-
-    const [value] = msg.args
-
-    if (value === true || value === 1) stop()
+    if (value) {
+      // Every toy slider back to 0, so the app and viewers don't show toys running after a resume.
+      toyValues.value.forEach((level, controlId) => {
+        if (level > 0) setToyValue(controlId, 0)
+      })
+      toast.add({ title: 'Everything stopped', description: "Viewers can't use your controls until you resume.", icon: 'i-lucide-octagon-x', color: 'error' })
+    } else {
+      toast.add({ title: 'Controls resumed', description: 'Viewers can use your controls again.', icon: 'i-lucide-play', color: 'success' })
+    }
   })
 }

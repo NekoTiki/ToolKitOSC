@@ -1,7 +1,6 @@
 // VR overlay - src-tauri/src/overlay/. Mirrors overlay/model.rs (what overlay.json holds) and the
 // panel's presses (wrist/protocol.rs `ToApp`).
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 
 export type OverlayTarget = 'auto' | 'xsoverlay' | 'ovrtoolkit' | 'off'
 
@@ -70,24 +69,14 @@ export interface OverlayTheme {
   secondary: Rgb
 }
 
-export type OverlayAction = { type: 'stop' } | { type: 'resume' } | { type: 'profile'; id: string | null }
-
 export const overlayApi = {
   overlaySettings: (): Promise<OverlaySettings> => invoke('overlay_settings'),
   overlaySave: (settings: OverlaySettings): Promise<void> => invoke('overlay_save', { settings }),
   overlayTestToast: (): Promise<void> => invoke('overlay_test_toast'),
   overlayStatus: (): Promise<OverlayStatus> => invoke('overlay_status'),
-  overlaySetContext: (
-    profiles: { id: string; name: string }[],
-    profileId: string | null,
-    viewerGroups: { id: string; name: string }[],
-    theme: OverlayTheme | null
-  ): Promise<void> => invoke('overlay_set_context', { profiles, profileId, viewerGroups, theme }),
+  // Your theme colors, for the panel. Rust knows the profiles and viewer groups itself.
+  overlaySetTheme: (theme: OverlayTheme | null): Promise<void> => invoke('overlay_set_theme', { theme }),
   // The controls pinned to your wrist on the avatar you're wearing.
   overlayPinned: (): Promise<string[]> => invoke('overlay_pinned'),
-  overlaySetPinned: (controlId: string, pinned: boolean): Promise<void> => invoke('overlay_set_pinned', { controlId, pinned }),
-  // Something pressed on the wrist panel.
-  onOverlayAction: (callback: (action: OverlayAction) => void): void => {
-    void listen<OverlayAction>('overlay-action', (event) => callback(event.payload))
-  }
+  overlaySetPinned: (controlId: string, pinned: boolean): Promise<void> => invoke('overlay_set_pinned', { controlId, pinned })
 }

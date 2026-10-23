@@ -4,7 +4,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 use super::model::{OverlaySettings, Target};
-use crate::wrist::protocol::{Profile, Theme};
+use crate::wrist::protocol::Theme;
 
 #[tauri::command]
 pub fn overlay_settings(app: AppHandle) -> Result<OverlaySettings, String> {
@@ -53,11 +53,10 @@ pub async fn overlay_test_toast(app: AppHandle) -> Result<(), String> {
     super::notify::send(&app, "ToolKitOSC", "Viewer actions will show up here").await
 }
 
-/// The profiles and the active one, the viewer groups' names and the theme's colors (None when the
-/// webview couldn't read them), for the panel.
+/// The theme's colors (None when the webview couldn't read them), for the panel.
 #[tauri::command]
-pub fn overlay_set_context(app: AppHandle, profiles: Vec<Profile>, profile_id: Option<String>, viewer_groups: Vec<Profile>, theme: Option<Theme>) {
-    super::set_context(&app, profiles, profile_id, viewer_groups, theme.unwrap_or_default());
+pub fn overlay_set_theme(app: AppHandle, theme: Option<Theme>) {
+    super::set_theme(&app, theme.unwrap_or_default());
 }
 
 /// The controls pinned to your wrist on the avatar you're wearing.

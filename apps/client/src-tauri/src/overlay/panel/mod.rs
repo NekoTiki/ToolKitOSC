@@ -17,7 +17,7 @@ use tokio::sync::watch;
 
 use super::{overlay, store};
 use crate::types::OscMessage;
-use crate::wrist::protocol::{Entry, Profile, Theme, TileKind};
+use crate::wrist::protocol::{Entry, Theme, TileKind};
 pub use link::listen;
 
 /// The panel crashing this many times within `CRASH_WINDOW` stops it until you change a setting.
@@ -35,12 +35,7 @@ pub struct Panel {
     crashes: Vec<Instant>,
     /// Stopped after crashing too often.
     pub gave_up: bool,
-    /// Profiles and the active one, the viewer groups and the theme, from the webview (see
-    /// `set_context`).
-    profiles: Vec<Profile>,
-    profile: Option<String>,
-    /// Viewer groups by id, for their names.
-    groups: Vec<Profile>,
+    /// The theme's colors, from the webview (see `set_theme`).
     theme: Theme,
     /// Newest first.
     activity: VecDeque<Entry>,
@@ -78,14 +73,8 @@ pub fn note_action(app: &AppHandle, who: &str, what: &str) {
     refresh(app);
 }
 
-pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>, theme: Theme) {
-    {
-        let mut panel = overlay(app).panel.lock().unwrap();
-        panel.profiles = profiles;
-        panel.profile = profile;
-        panel.groups = groups;
-        panel.theme = theme;
-    }
+pub fn set_theme(app: &AppHandle, theme: Theme) {
+    overlay(app).panel.lock().unwrap().theme = theme;
     refresh(app);
 }
 

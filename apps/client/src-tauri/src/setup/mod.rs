@@ -8,6 +8,7 @@
 //! whenever something it depends on changes.
 pub mod commands;
 mod resolve;
+pub mod stop;
 mod sync;
 pub mod viewers;
 
@@ -359,6 +360,8 @@ pub fn refresh(app: &AppHandle) {
 
     let _ = app.emit("setup-controls", &snapshot);
     sync(app, false);
+    crate::automations::set_profile(app, snapshot.active_profile.clone());
+    crate::overlay::setup_changed(app);
     let same_avatar = previous.avatar_id == snapshot.avatar_id;
     crate::server::policy::clamp_running(app, same_avatar.then_some(previous.groups.as_slice()), &snapshot.groups);
 }

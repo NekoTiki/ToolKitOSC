@@ -1,9 +1,6 @@
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { useLockedControls } from '@renderer/composables/useLockedControls'
-import { useStopEverything } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
-import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import type { OverlayTheme, Rgb } from '@renderer/lib/tauri/overlay'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { Ref } from 'vue'
@@ -43,46 +40,17 @@ const panelTheme = (): OverlayTheme | null => {
   return primary && secondary ? { primary, secondary } : null
 }
 
-// The wrist panel (src-tauri/src/wrist) runs in Rust, but Stop everything's pause and the profiles
-// live here: this tells Rust the profiles, the viewer groups' names and your theme colors, and
-// carries out Stop, Resume and profile changes pressed on the panel. Called once, from App.vue.
+// The wrist panel (src-tauri/src/wrist) runs in Rust, which also carries out what's pressed on it.
+// Only your theme colors live here: this tells Rust. Called once, from App.vue.
 export function useVrOverlay(): void {
-  const { lockedControlGroups, currentLockedControlsGroup } = useLockedControls()
-  const { stop, resume } = useStopEverything()
-  const { viewerGroups } = useViewerGroups()
   const { isOn } = useAddons()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
-  watch(
-    [
-      () => lockedControlGroups.value.map(({ id, name }) => ({ id, name })),
-      currentLockedControlsGroup,
-      () => viewerGroups.value.map(({ id, name }) => ({ id, name })),
-      selectedPrimary,
-      selectedSecondary
-    ],
-    ([profiles, profileId, groups]) => void api.overlaySetContext(profiles, profileId, groups, panelTheme()),
-    { immediate: true, deep: true }
-  )
+  watch([selectedPrimary, selectedSecondary], () => void api.overlaySetTheme(panelTheme()), { immediate: true })
 
   // Pins are per avatar.
   watch(() => isOn('overlay'), (on) => on && loadWristPins(), { immediate: true })
   useAvatarDetails(() => loadWristPins())
-
-  api.onOverlayAction((action) => {
-    switch (action.type) {
-      case 'stop':
-        stop()
-        break
-      case 'resume':
-        resume()
-        break
-      case 'profile':
-        // A profile deleted since is ignored.
-        if (action.id === null || lockedControlGroups.value.some((p) => p.id === action.id)) currentLockedControlsGroup.value = action.id
-        break
-    }
-  })
 }
 
 export function useWristPins(): {

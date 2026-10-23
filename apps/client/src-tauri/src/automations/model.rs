@@ -151,7 +151,7 @@ impl Guard {
     }
 }
 
-/// What the frontend knows that guards need.
+/// What guards need: the active profile (see `setup`) and how many viewers are on (from the webview).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Context {
