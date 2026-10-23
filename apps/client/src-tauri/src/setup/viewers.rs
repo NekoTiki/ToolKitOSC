@@ -105,6 +105,7 @@ fn with<T>(app: &AppHandle, f: impl FnOnce(&mut ViewersFile) -> (T, bool)) -> Re
     if let Some(file) = changed {
         let _ = app.emit("setup-viewers", &file);
         super::refresh(app);
+        super::sync(app, false);
         crate::overlay::viewers_changed(app);
     }
     Ok(result)
@@ -125,6 +126,15 @@ pub fn group_ids(app: &AppHandle) -> Vec<String> {
         ids.push(ASSISTANTS.to_owned());
     }
     ids
+}
+
+/// The groups you made with their names, plus Assistants while that add-on is on.
+pub fn groups(app: &AppHandle) -> Vec<ViewerGroup> {
+    let mut groups = read(app, |file| file.groups.clone());
+    if crate::addons::is_on(app, "mcp") {
+        groups.push(ViewerGroup { id: ASSISTANTS.to_owned(), name: "Assistants".to_owned(), color: "#a78bfa".to_owned() });
+    }
+    groups
 }
 
 fn active_ids(file: &ViewersFile, key: &str, now: u64) -> Vec<String> {
@@ -264,6 +274,7 @@ pub async fn watch_expiry(app: AppHandle) {
         }
         let _ = app.emit("setup-viewers", snapshot(&app));
         super::refresh(&app);
+        super::sync(&app, false);
         crate::overlay::viewers_changed(&app);
     }
 }

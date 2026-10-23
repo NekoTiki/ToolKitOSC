@@ -72,6 +72,8 @@ pub fn stable_ip(ip: &str) -> String {
 pub struct Viewer {
     /// `discord:<id>` when signed in, otherwise `guest:<peerId>`.
     pub key: String,
+    /// This connection's session id.
+    pub peer_id: String,
     pub discord_id: Option<String>,
     pub ip: String,
     pub display_name: String,
@@ -97,6 +99,7 @@ pub fn describe(client: &Value) -> Option<Viewer> {
             None => format!("guest:{peer_id}")
         },
         has_name: user_name.is_some() || discord_id.is_some(),
+        peer_id: peer_id.clone(),
         discord_id,
         ip: stable_ip(client.get("ip").and_then(Value::as_str).unwrap_or("unknown")),
         display_name

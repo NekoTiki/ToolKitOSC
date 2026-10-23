@@ -1,14 +1,17 @@
 //! Your controls, their groups and the lock profiles of each avatar, in `controls-<avatarId>.json`.
 //! Rust owns them, so viewer commands, automations, assistants and the wrist panel see the same
 //! controls whether or not the window is open. The webview shows and edits them through
-//! `commands`, and follows `setup-controls`.
+//! `commands`, and follows `setup-controls`. The share server gets what viewers may see (`sync`).
 //!
 //! Controls stay JSON as the webview writes them (see `types/controls.ts`), like in `controls.rs`.
 //! What everything reads is the resolved copy (see `resolve`), worked out again by `refresh`
 //! whenever something it depends on changes.
 pub mod commands;
 mod resolve;
+mod sync;
 pub mod viewers;
+
+pub use sync::sync;
 
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
@@ -80,6 +83,8 @@ pub struct Setup {
     inner: Mutex<Inner>,
     /// Viewer groups, memberships and bans (see `viewers`). `None` until read from disk.
     viewers: Mutex<Option<viewers::ViewersFile>>,
+    /// What the share server was last sent (see `sync`).
+    sent: Mutex<sync::Sent>,
     /// One `refresh` at a time, so an older one can't land after a newer one.
     refreshing: Mutex<()>
 }
@@ -353,6 +358,7 @@ pub fn refresh(app: &AppHandle) {
     };
 
     let _ = app.emit("setup-controls", &snapshot);
+    sync(app, false);
     let same_avatar = previous.avatar_id == snapshot.avatar_id;
     crate::server::policy::clamp_running(app, same_avatar.then_some(previous.groups.as_slice()), &snapshot.groups);
 }

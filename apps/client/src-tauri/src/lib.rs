@@ -188,7 +188,6 @@ pub fn run() {
             server::commands::server_connect,
             server::commands::server_disconnect,
             server::commands::server_send,
-            server::commands::server_set_forwarded_addresses,
             server::commands::server_request,
             server::commands::server_set_policy,
             server::commands::auth_state,

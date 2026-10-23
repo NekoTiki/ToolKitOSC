@@ -64,12 +64,6 @@ pub fn server_send(app: AppHandle, text: String) {
     super::send(&app, text);
 }
 
-/// The avatar parameters the share page shows (see `super::set_forwarded`).
-#[tauri::command]
-pub fn server_set_forwarded_addresses(app: AppHandle, addresses: Vec<String>) {
-    super::set_forwarded(&app, addresses);
-}
-
 /// The controls and rules viewer commands are checked against (see `super::policy`).
 #[tauri::command]
 pub fn server_set_policy(app: AppHandle, policy: super::policy::Policy) {
