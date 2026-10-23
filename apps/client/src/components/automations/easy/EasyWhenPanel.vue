@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ConditionExtraFields from '@renderer/components/automations/ConditionExtraFields.vue'
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -135,7 +136,8 @@ const HOW: Record<ParameterValueType, { value: ConditionType; title: string; des
   Bool: [
     { value: 'turns-on', title: 'The moment it turns on', description: 'A boop lands, a grab starts, you flip it on.' },
     { value: 'turns-off', title: 'When it turns off', description: 'They let go, you flip it off.' },
-    { value: 'is-on', title: "For as long as it's on", description: 'What happens can last until it turns off.' }
+    { value: 'is-on', title: "For as long as it's on", description: 'What happens can last until it turns off.' },
+    { value: 'taps', title: 'A few quick taps', description: 'A double boop, three pats in a row.' }
   ],
   Int: [
     { value: 'becomes', title: 'The moment it switches', description: 'Runs once each time it changes to this.' },
@@ -144,7 +146,10 @@ const HOW: Record<ParameterValueType, { value: ConditionType; title: string; des
   Float: [
     { value: 'any', title: 'Follow how strong it is', description: 'A closer headpat buzzes harder.' },
     { value: 'rises-above', title: 'When it goes past a point', description: 'Runs once each time it crosses it.' },
-    { value: 'is-above', title: "For as long as it's past a point", description: 'What happens lasts while it stays there.' }
+    { value: 'is-above', title: "For as long as it's past a point", description: 'What happens lasts while it stays there.' },
+    { value: 'falls-below', title: 'When it drops under a point', description: 'Runs once each time it goes back down.' },
+    { value: 'is-between', title: 'While it stays in a range', description: 'Not too little, not too much.' },
+    { value: 'stops-changing', title: 'When it settles', description: "Runs once it hasn't moved for a moment." }
   ]
 }
 
@@ -155,6 +160,8 @@ const setHow = (type: ConditionType): void => {
   // The point or the option stays when switching between a moment and a state.
   if (value !== undefined && 'value' in paramWhen.value.condition) paramWhen.value.condition.value = value
   if (CONDITIONS[type].moment || type === 'any') paramWhen.value.heldMs = 0
+  // More parameters only start moments.
+  if (!CONDITIONS[type].moment) paramWhen.value.also = undefined
   fitStepsToTrigger(automation.value)
 }
 
@@ -425,6 +432,8 @@ const LEASH_ITEMS: { value: LeashEvent; label: string }[] = [
             @update:model-value="fromSlider"
           />
         </UFormField>
+
+        <ConditionExtraFields v-model="paramWhen.condition" />
 
         <UFormField
           v-if="isState"

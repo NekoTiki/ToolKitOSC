@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ConditionExtraFields from '@renderer/components/automations/ConditionExtraFields.vue'
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
@@ -111,7 +112,7 @@ const conditionValue = computed({
 
 const verb = computed(() => {
   const type: ConditionType = param.value?.condition.type ?? 'is-on'
-  const label = type === 'is-on' ? 'on' : type === 'is' ? 'equal to' : 'above'
+  const label = type === 'is-on' ? 'on' : type === 'is' ? 'equal to' : type === 'is-between' ? 'between' : 'above'
   return [
     { value: 'is', label: `Is ${label}` },
     { value: 'not', label: `Isn't ${label}` }
@@ -215,6 +216,23 @@ const viewers = computed({
           step="1"
           class="w-28"
         />
+        <SegmentedControl
+          v-if="param.valueType === 'Float'"
+          :model-value="param.condition.type"
+          :items="[
+            { value: 'is-above', label: 'Above' },
+            { value: 'is-between', label: 'Between' }
+          ]"
+          aria-label="Above or between"
+          class="w-fit"
+          @update:model-value="param && (param.condition = defaultCondition($event as ConditionType))"
+        />
+        <div
+          v-if="param.valueType === 'Float' && param.condition.type === 'is-between'"
+          class="min-w-48 flex-1"
+        >
+          <ConditionExtraFields v-model="param.condition" />
+        </div>
         <div
           v-else-if="param.valueType === 'Float'"
           class="grid min-w-48 flex-1 gap-1"
