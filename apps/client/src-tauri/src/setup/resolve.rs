@@ -24,6 +24,8 @@ pub trait Live {
     /// A recorded pattern's current name and icon.
     fn saved_pattern(&self, id: &str) -> Option<(String, Option<String>)>;
     fn builtin_pattern(&self, id: &str) -> bool;
+    /// Profiles keep their rules for a deleted viewer group; those don't count.
+    fn viewer_group_exists(&self, id: &str) -> bool;
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -107,7 +109,12 @@ fn resolve_control(control: &Value, profile: Option<&Profile>, live: &impl Live)
     let paused = matches!(kind.as_str(), "intiface-toy" | "intiface-pattern") && actuators(&control).any(|(device, actuator)| live.touched(device, actuator));
     let group_rules: Map<String, Value> = profile
         .map(|profile| {
-            profile.group_overrides.iter().filter_map(|(group, rules)| Some((group.clone(), rules.get(&id)?.clone()))).collect()
+            profile
+                .group_overrides
+                .iter()
+                .filter(|(group, _)| live.viewer_group_exists(group))
+                .filter_map(|(group, rules)| Some((group.clone(), rules.get(&id)?.clone())))
+                .collect()
         })
         .unwrap_or_default();
 
@@ -201,6 +208,9 @@ mod tests {
         fn builtin_pattern(&self, id: &str) -> bool {
             id == "pulse"
         }
+        fn viewer_group_exists(&self, id: &str) -> bool {
+            id != "deleted"
+        }
     }
 
     fn one(control: Value, profile: Option<&Profile>, live: &Fake) -> Value {
@@ -213,7 +223,7 @@ mod tests {
             "name": "Strict",
             "lockedControls": { "a": true },
             "limits": { "toy": { "max": 0.5 } },
-            "groupOverrides": { "friends": { "toy": { "limits": { "max": 1 } } } }
+            "groupOverrides": { "friends": { "toy": { "limits": { "max": 1 } } }, "deleted": { "toy": { "locked": true } } }
         }))
         .unwrap()
     }

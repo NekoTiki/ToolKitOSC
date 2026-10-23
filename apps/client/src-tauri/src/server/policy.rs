@@ -1,42 +1,18 @@
-//! What Rust needs to decide on a viewer's command besides the controls (those are in `setup`), as
-//! the webview last pushed it (`server_set_policy`). The webview stays the source of truth for
-//! these: groups and bans in its database. This is a read-only copy.
-use std::collections::HashMap;
-
+//! The share page settings viewer commands are checked against, as the webview last pushed them
+//! (`server_set_policy`). Controls are in `setup`, and so are viewer groups and bans.
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Ban {
-    /// `ip` (a stable IP, see `viewer::stable_ip`) or `discord`.
-    pub scope: String,
-    pub value: String,
-    #[serde(default)]
-    pub reason: Option<String>
-}
-
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Policy {
-    /// Viewer key -> the groups they're in right now.
-    #[serde(default)]
-    pub memberships: HashMap<String, Vec<String>>,
-    #[serde(default)]
-    pub bans: Vec<Ban>,
     /// Who may use controls: `everyone`, `username` or `discord`.
     #[serde(default)]
     pub client_type: String,
     /// Whether viewers see each other's names (a viewer's pattern says whose it is).
     #[serde(default)]
     pub show_viewers: bool
-}
-
-impl Policy {
-    pub fn banned(&self, ip: &str, discord_id: Option<&str>) -> Option<&Ban> {
-        self.bans.iter().find(|ban| (ban.scope == "ip" && ban.value == ip) || (ban.scope == "discord" && Some(ban.value.as_str()) == discord_id))
-    }
 }
 
 /// The widest limits any viewer gets on a control: the profile's, opened up by every group rule.

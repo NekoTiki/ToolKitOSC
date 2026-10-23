@@ -8,6 +8,7 @@
 //! whenever something it depends on changes.
 pub mod commands;
 mod resolve;
+pub mod viewers;
 
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
@@ -77,6 +78,8 @@ struct Inner {
 #[derive(Default)]
 pub struct Setup {
     inner: Mutex<Inner>,
+    /// Viewer groups, memberships and bans (see `viewers`). `None` until read from disk.
+    viewers: Mutex<Option<viewers::ViewersFile>>,
     /// One `refresh` at a time, so an older one can't land after a newer one.
     refreshing: Mutex<()>
 }
@@ -261,6 +264,7 @@ struct AppLive<'a> {
     app: &'a AppHandle,
     avatar_id: Option<String>,
     touched: Vec<crate::toys::Touched>,
+    viewer_groups: Vec<String>,
     presets: OnceCell<Vec<String>>,
     patterns: OnceCell<Vec<crate::toys::saved::SavedPattern>>
 }
@@ -306,6 +310,9 @@ impl resolve::Live for AppLive<'_> {
     fn builtin_pattern(&self, id: &str) -> bool {
         crate::toys::patterns::builtin(id).is_some()
     }
+    fn viewer_group_exists(&self, id: &str) -> bool {
+        self.viewer_groups.iter().any(|group| group == id)
+    }
 }
 
 /// Works the controls out again (the avatar, a profile, a device or an add-on changed) and tells
@@ -321,7 +328,14 @@ pub fn refresh(app: &AppHandle) {
         };
 
         // Without the lock: this asks the device modules.
-        let live = AppLive { app, avatar_id: avatar_id.clone(), touched: crate::toys::touched(app), presets: OnceCell::new(), patterns: OnceCell::new() };
+        let live = AppLive {
+            app,
+            avatar_id: avatar_id.clone(),
+            touched: crate::toys::touched(app),
+            viewer_groups: viewers::group_ids(app),
+            presets: OnceCell::new(),
+            patterns: OnceCell::new()
+        };
         let profile = file.profiles.iter().find(|profile| Some(&profile.id) == active.as_ref());
         let snapshot = Snapshot {
             groups: resolve::resolve(&file.groups, profile, &live),

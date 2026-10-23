@@ -154,6 +154,13 @@ pub fn run() {
             setup::commands::setup_switch_profile,
             setup::commands::setup_saved_control_types,
             setup::commands::setup_migrate,
+            setup::commands::setup_viewers,
+            setup::commands::setup_save_viewer_groups,
+            setup::commands::setup_add_to_group,
+            setup::commands::setup_remove_from_group,
+            setup::commands::setup_ban,
+            setup::commands::setup_unban,
+            setup::commands::setup_migrate_viewers,
             // Add-ons
             addons::commands::addons_list,
             addons::commands::addons_set_enabled,
@@ -302,6 +309,7 @@ pub fn run() {
             // The added ESP32 boards are known even while their add-on is off, for automations.
             boards::load(app.handle());
             automations::start(app.handle().clone());
+            tauri::async_runtime::spawn(setup::viewers::watch_expiry(app.handle().clone()));
             // Tokens a launch with no password store had to put in a file go to the store first,
             // if there's one now, before anything reads them. Then the add-ons that are on start
             // (deciding which are, the first time, can read OpenShock's token).

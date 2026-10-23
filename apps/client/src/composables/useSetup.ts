@@ -1,5 +1,6 @@
 import { controlGroups as exampleGroups } from '@renderer/assets/controlsExample'
-import type { LegacySetup, SetupSnapshot } from '@renderer/lib/tauri-bridge'
+import { db as clientsDb } from '@renderer/db/clients.db'
+import type { LegacySetup, SetupSnapshot, ViewersSetup } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { ref } from 'vue'
 
@@ -56,4 +57,46 @@ if (localStorage.getItem(MIGRATED_KEY) === null) {
     .finally(fetchSetup)
 } else {
   fetchSetup()
+}
+
+// Viewer groups, who is in which and bans, as Rust keeps them (src-tauri/src/setup/viewers.rs).
+export const viewersSetup = ref<ViewersSetup>({ groups: [], memberships: {}, bans: [] })
+
+api.onSetupViewers((viewers) => (viewersSetup.value = viewers))
+
+// Before Rust: groups in localStorage `viewerGroups`, memberships on each viewer's row and bans in
+// ClientsDB. Handed over once; the old copies stay for now.
+const VIEWERS_MIGRATED_KEY = 'viewersMigrated'
+
+const legacyViewers = async (): Promise<ViewersSetup> => {
+  let groups: ViewersSetup['groups'] = []
+
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem('viewerGroups') ?? '[]')
+
+    groups = Array.isArray(saved) ? saved : []
+  } catch {
+    // Unreadable: nothing to keep.
+  }
+
+  const members = await clientsDb.clients.filter((client) => !!client.groups?.length).toArray()
+  const bans = await clientsDb.bannedClients.toArray()
+
+  return {
+    groups,
+    memberships: Object.fromEntries(members.map((client) => [client.key, client.groups!])),
+    bans: bans.map(({ scope, value, reason, createdAt }) => ({ scope, value, reason, createdAt }))
+  }
+}
+
+const fetchViewers = (): void => void api.setupViewers().then((viewers) => (viewersSetup.value = viewers))
+
+if (localStorage.getItem(VIEWERS_MIGRATED_KEY) === null) {
+  void legacyViewers()
+    .then((legacy) => api.setupMigrateViewers(legacy))
+    .then(() => localStorage.setItem(VIEWERS_MIGRATED_KEY, '1'))
+    .catch((error) => console.error('Could not move the viewer groups and bans to the app:', error))
+    .finally(fetchViewers)
+} else {
+  fetchViewers()
 }

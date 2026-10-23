@@ -34,12 +34,8 @@ export interface AuthUser {
   email: string
 }
 
-// What Rust checks viewer commands against besides the controls (Rust has those) - mirrors
-// src-tauri/src/server/policy.rs.
+// The share settings Rust checks viewer commands against - mirrors src-tauri/src/server/policy.rs.
 export interface ServerPolicy {
-  // Viewer key -> the groups they're in right now.
-  memberships: Record<string, string[]>
-  bans: { scope: 'ip' | 'discord'; value: string; reason?: string }[]
   clientType: string
   showViewers: boolean
 }

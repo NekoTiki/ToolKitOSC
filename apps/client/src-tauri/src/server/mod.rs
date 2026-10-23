@@ -1,6 +1,7 @@
 //! The host's link to the share server (`/host`). Rust owns the socket so it stays up while the
 //! webview reloads, sits hidden in the tray or is busy. Viewer commands are checked and run here
-//! (see `commands`), against the controls in `setup` and the rules the webview pushes (`policy`).
+//! (see `commands`), against the controls, groups and bans in `setup` and the share settings the
+//! webview pushes (`policy`).
 //! Other incoming messages go to the webview as `server-message` events, and it sends its own
 //! through `server_send`. Avatar parameter values go straight from the OSC receive path to the
 //! server (see `on_parameter`), for the parameters the webview asked for. The token it signs in
@@ -180,7 +181,7 @@ pub fn viewers(app: &AppHandle) -> Vec<(viewer::Viewer, Vec<String>)> {
         .iter()
         .filter_map(viewer::describe)
         .map(|viewer| {
-            let groups = inner.policy.as_ref().and_then(|policy| policy.memberships.get(&viewer.key).cloned()).unwrap_or_default();
+            let groups = crate::setup::viewers::groups_of(app, &viewer.key);
             (viewer, groups)
         })
         .collect()
@@ -332,6 +333,16 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
         crate::overlay::viewers_joined(app, joined, watching);
     }
     if kind.as_deref() == Some("client-list") {
+        // A guest who signed in with Discord keeps the groups they were in as a guest.
+        let clients = value.get("message").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
+        for client in &clients {
+            let guest = client.get("guestId").and_then(serde_json::Value::as_str);
+            if let (Some(viewer), Some(guest)) = (viewer::describe(client), guest) {
+                if viewer.discord_id.is_some() {
+                    crate::setup::viewers::fold_guest(app, &format!("guest:{guest}"), &viewer.key);
+                }
+            }
+        }
         crate::overlay::viewers_changed(app);
     }
 

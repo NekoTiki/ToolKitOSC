@@ -72,7 +72,7 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
     };
 
     let control = crate::setup::find_control(app, group_id, control_id);
-    let groups = policy.memberships.get(&viewer.key).cloned().unwrap_or_default();
+    let groups = crate::setup::viewers::groups_of(app, &viewer.key);
     let command = match &control {
         Some(control) => match limits::sanitize_command(&limits::resolve_control_for_viewer(control, &groups), &message) {
             Some(command) => Some(command),
@@ -92,7 +92,7 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
         return;
     }
 
-    if let Some(ban) = policy.banned(&viewer.ip, viewer.discord_id.as_deref()) {
+    if let Some(ban) = crate::setup::viewers::banned(app, &viewer.ip, viewer.discord_id.as_deref()) {
         super::send_message(app, "client-banned", json!({ "peerId": peer_id, "scope": ban.scope, "reason": ban.reason }));
         return;
     }
