@@ -359,21 +359,43 @@ fn set_status(app: &AppHandle, id: u64, status: Status) {
 
 fn set_devices(app: &AppHandle, id: u64, change: impl FnOnce(&mut BTreeMap<u32, Device>)) {
     ensure_loaded(app);
-    let learned = {
+    let (learned, events) = {
         let mut inner = intiface(app).inner.lock().unwrap();
         if !is_current(&inner, id) {
             return;
         }
+        let before = inner.devices.clone();
         change(&mut inner.devices);
+        let events = toy_events(&before, &inner.devices);
         let Inner { settings, devices, .. } = &mut *inner;
-        remember(&mut settings.known_devices, devices.values()).then(|| settings.clone())
+        (remember(&mut settings.known_devices, devices.values()).then(|| settings.clone()), events)
     };
     if let Some(settings) = learned {
         save_settings(app, &settings);
     }
+    for event in events {
+        crate::automations::toy_event(app, event);
+    }
     crate::toys::devices_changed(app);
     crate::haptics::devices_changed(app);
     emit_state(app);
+}
+
+/// What automations hear about a change of the device list: toys that came, went or ran low.
+fn toy_events(before: &BTreeMap<u32, Device>, after: &BTreeMap<u32, Device>) -> Vec<crate::automations::model::ToyEvent> {
+    use crate::automations::model::{ToyEvent, LOW_BATTERY};
+    let low = |device: &Device| device.battery.is_some_and(|level| level < LOW_BATTERY);
+    let mut events = Vec::new();
+    if after.keys().any(|index| !before.contains_key(index)) {
+        events.push(ToyEvent::Connected);
+    }
+    if before.keys().any(|index| !after.contains_key(index)) {
+        events.push(ToyEvent::Disconnected);
+    }
+    if after.iter().any(|(index, device)| low(device) && !before.get(index).is_some_and(low)) {
+        events.push(ToyEvent::BatteryLow);
+    }
+    events
 }
 
 /// Adds or refreshes `devices` in `known`, kept by index. Whether anything changed.
@@ -484,7 +506,7 @@ impl crate::addons::Addon for Addon {
             needs: &[],
             needs_any: &[],
             control_types: &["intiface-toy", "intiface-pattern"],
-            automation_kinds: &["toy", "toy-pattern", "stop-toys"],
+            automation_kinds: &["toy", "toy-pattern", "stop-toys", "toy-event"],
             pages: &["patterns"]
         }
     }
@@ -530,6 +552,21 @@ mod tests {
 
     fn toy(index: u32, name: &str) -> Device {
         Device { index, name: name.into(), actuators: Vec::new(), battery_sensor_index: None, battery: Some(0.5) }
+    }
+
+    #[test]
+    fn toy_events_for_automations() {
+        use crate::automations::model::ToyEvent;
+        let before = BTreeMap::from([(0, toy(0, "Lush"))]);
+        let mut after = before.clone();
+        after.insert(1, toy(1, "Edge"));
+        assert_eq!(toy_events(&before, &after), vec![ToyEvent::Connected]);
+        after.remove(&0);
+        assert_eq!(toy_events(&before, &after), vec![ToyEvent::Connected, ToyEvent::Disconnected]);
+        let mut low = before.clone();
+        low.get_mut(&0).unwrap().battery = Some(0.1);
+        assert_eq!(toy_events(&before, &low), vec![ToyEvent::BatteryLow]);
+        assert!(toy_events(&low, &low).is_empty(), "only once");
     }
 
     #[test]

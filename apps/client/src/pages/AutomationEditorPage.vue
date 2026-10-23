@@ -18,7 +18,7 @@ import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
-import type { Automation, AutomationStep, AutomationTrigger, LeashEvent, ParameterValueType } from '@renderer/lib/tauri-bridge'
+import type { Automation, AutomationStep, AutomationTrigger, LeashEvent, ParameterValueType, ToyEvent } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { AppEventType, ConditionType } from '@renderer/utils/automations'
 import {
@@ -45,6 +45,7 @@ import {
   stepFits,
   stepKindsFor,
   STOPPED_STEP,
+  TOY_EVENTS,
   triggerCondition} from '@renderer/utils/automations'
 import { useLocalStorage } from '@vueuse/core'
 import { computed, ref, toRaw, watch } from 'vue'
@@ -121,6 +122,11 @@ const eventType = computed({
 })
 
 const everyWhen = computed(() => (draft.value?.when.kind === 'every' ? draft.value.when : null))
+const toyWhen = computed(() => (draft.value?.when.kind === 'toy-event' ? draft.value.when : null))
+const toyEventItems = (Object.keys(TOY_EVENTS) as ToyEvent[]).map((event) => ({ value: event, label: TOY_EVENTS[event] }))
+const boardWhen = computed(() => (draft.value?.when.kind === 'board-event' ? draft.value.when : null))
+const boardTargetItems = computed(() => [{ value: 'any', label: 'Any board' }, ...boards.value.map((b) => ({ value: b.id, label: b.name }))])
+const touchWhen = computed(() => (draft.value?.when.kind === 'touch' ? draft.value.when : null))
 
 const eventItems = (Object.keys(APP_EVENTS) as AppEventType[]).map((type) => ({ value: type, label: APP_EVENTS[type].label }))
 
@@ -183,7 +189,15 @@ const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
           ? { kind, event: 'grabbed' }
           : kind === 'every'
             ? { kind, minutes: 30 }
-            : newAutomation(id, name).when
+            : kind === 'toy-event'
+              ? { kind, event: 'battery-low' }
+              : kind === 'board-event'
+                ? { kind, event: 'offline', boardId: null }
+                : kind === 'shock-sent'
+                  ? { kind }
+                  : kind === 'touch'
+                    ? { kind, event: 'starts' }
+                    : newAutomation(id, name).when
   fitSteps()
 }
 
@@ -200,7 +214,11 @@ const TRIGGER_KINDS: Record<AutomationTrigger['kind'], { label: string; descript
     description: 'Someone grabs your avatar leash, pulls you to running or lets go.',
     icon: 'i-tkosc-collar'
   },
-  every: { label: 'Every so often', description: 'Every few minutes while the app is open.', icon: 'i-lucide-timer' }
+  every: { label: 'Every so often', description: 'Every few minutes while the app is open.', icon: 'i-lucide-timer' },
+  'toy-event': { label: 'Toys', description: 'A toy connects, disconnects or runs low.', icon: 'i-lucide-vibrate' },
+  'board-event': { label: 'ESP32 board', description: 'A board goes offline or comes back.', icon: 'i-lucide-cpu' },
+  'shock-sent': { label: 'Shock sent', description: "When OpenShock actually sends a shock, not when it's held back.", icon: 'i-lucide-zap' },
+  touch: { label: 'Avatar touch', description: 'Touch starts or stops driving your toys or gear.', icon: 'i-lucide-hand' }
 }
 
 // An add-on's kinds show while it's on, or while this automation already uses one.
@@ -578,6 +596,55 @@ onBeforeRouteLeave(async () => {
               min-width="12rem"
               :items="leashEventItems"
               aria-label="Leash event"
+            />
+          </UFormField>
+
+          <UFormField
+            v-if="toyWhen"
+            label="Event"
+          >
+            <OptionGrid
+              v-model="toyWhen.event"
+              :items="toyEventItems"
+              aria-label="Toy event"
+            />
+          </UFormField>
+
+          <template v-if="boardWhen">
+            <UFormField label="Board">
+              <OptionGrid
+                :model-value="boardWhen.boardId ?? 'any'"
+                :items="boardTargetItems"
+                aria-label="Board"
+                @update:model-value="boardWhen.boardId = $event === 'any' ? null : $event"
+              />
+            </UFormField>
+            <UFormField label="Event">
+              <SegmentedControl
+                v-model="boardWhen.event"
+                :items="[
+                  { value: 'offline', label: 'Goes offline' },
+                  { value: 'online', label: 'Comes back online' }
+                ]"
+                aria-label="Board event"
+                class="w-fit"
+              />
+            </UFormField>
+          </template>
+
+          <UFormField
+            v-if="touchWhen"
+            label="Event"
+            description="Any touch zone or socket that drives your toys, bHaptics or OWO gear."
+          >
+            <SegmentedControl
+              v-model="touchWhen.event"
+              :items="[
+                { value: 'starts', label: 'Touch starts' },
+                { value: 'stops', label: 'Touch stops' }
+              ]"
+              aria-label="Touch event"
+              class="w-fit"
             />
           </UFormField>
 

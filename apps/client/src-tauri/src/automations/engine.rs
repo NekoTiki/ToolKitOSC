@@ -37,6 +37,9 @@ pub trait Env {
     fn live(&self, action: &Action) -> bool;
     /// The local clock and a fresh dice roll, for time and chance guards.
     fn now(&self) -> Now;
+    /// How many toys Intiface has now.
+    fn toys_connected(&self) -> usize;
+    fn board_online(&self, board_id: &str) -> bool;
 }
 
 #[derive(Default)]
@@ -251,6 +254,11 @@ impl State {
         self.on_moment(|when| matches!(when, Trigger::AppEvent { event } if event.matches(happened)), while_paused, env)
     }
 
+    /// Something an add-on reports: a toy, a board, a shock, avatar touch.
+    pub fn on_trigger(&mut self, matches: impl Fn(&Trigger) -> bool, env: &dyn Env) -> Vec<Effect> {
+        self.on_moment(matches, false, env)
+    }
+
     /// The avatar leash was grabbed, pulled to running or let go.
     pub fn on_leash(&mut self, happened: LeashEvent, env: &dyn Env) -> Vec<Effect> {
         self.on_moment(|when| matches!(when, Trigger::Leash { event } if *event == happened), false, env)
@@ -273,7 +281,11 @@ impl State {
 
     fn guards_hold(&self, automation: &Automation, env: &dyn Env) -> bool {
         let now = env.now();
-        let holds = |guard: &super::model::Guard| guard.holds(&self.context, now, &|address| self.value(address, env));
+        let holds = |guard: &super::model::Guard| match guard {
+            super::model::Guard::ToysConnected { connected } => (env.toys_connected() > 0) == *connected,
+            super::model::Guard::BoardOnline { board_id, online } => env.board_online(board_id) == *online,
+            guard => guard.holds(&self.context, now, &|address| self.value(address, env))
+        };
         if automation.only_if_any && !automation.only_if.is_empty() {
             automation.only_if.iter().any(holds)
         } else {
@@ -788,6 +800,12 @@ mod tests {
         /// Monday noon, and a roll of 0.5.
         fn now(&self) -> Now {
             Now { weekday: 0, minute: 12 * 60, roll: 0.5 }
+        }
+        fn toys_connected(&self) -> usize {
+            1
+        }
+        fn board_online(&self, board_id: &str) -> bool {
+            board_id == "b"
         }
     }
 
@@ -1350,7 +1368,7 @@ mod tests {
         state.automations.push(a);
 
         assert!(change(&mut state, 0.0, 1.0).is_empty(), "no viewers");
-        state.context = Context { profile_id: None, viewers: 2, avatar_id: None };
+        state.context = Context { viewers: 2, ..Default::default() };
         assert!(change(&mut state, 0.0, 1.0).is_empty(), "not armed");
         state.on_parameter("avtr_1", "/avatar/parameters/Armed", Some(0.0), 1.0, &TestEnv);
         assert_eq!(change(&mut state, 0.0, 1.0).len(), 1);
@@ -1375,7 +1393,7 @@ mod tests {
     #[test]
     fn time_wearing_chance_and_viewer_count_guards() {
         let noon = Now { weekday: 0, minute: 12 * 60, roll: 0.5 };
-        let context = Context { profile_id: None, viewers: 2, avatar_id: Some("avtr_1".into()) };
+        let context = Context { viewers: 2, avatar_id: Some("avtr_1".into()), ..Default::default() };
         let holds = |guard: Guard| guard.holds(&context, noon, &|_| None);
 
         assert!(holds(Guard::Time { from: 11 * 60, to: 13 * 60, days: vec![] }));
@@ -1479,6 +1497,27 @@ mod tests {
         state.quiet.insert("b".into(), Instant::now());
         assert_eq!(ran(&state.tick(&TestEnv)), 1);
         assert_eq!(ran(&state.tick(&TestEnv)), 0, "once");
+    }
+
+    #[test]
+    fn device_triggers_and_guards() {
+        use crate::automations::model::BoardEvent;
+        let mut state = State::default();
+        let mut a = automation("a", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.when = Trigger::BoardEvent { event: BoardEvent::Offline, board_id: Some("b".into()) };
+        a.only_if = vec![Guard::ToysConnected { connected: true }, Guard::BoardOnline { board_id: "c".into(), online: false }];
+        state.automations.push(a);
+        let offline = |board: &'static str| move |when: &Trigger| matches!(when, Trigger::BoardEvent { event: BoardEvent::Offline, board_id } if board_id.as_deref().map_or(true, |id| id == board));
+        assert_eq!(ran(&state.on_trigger(offline("b"), &TestEnv)), 1);
+        assert_eq!(ran(&state.on_trigger(offline("x"), &TestEnv)), 0, "another board");
+
+        let mut state = State::default();
+        let mut b = automation("b", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        b.only_if = vec![Guard::ViewerGroup { group_id: "vip".into(), not: false }];
+        state.automations.push(b);
+        assert!(change(&mut state, 0.0, 1.0).is_empty());
+        state.context.viewer_groups = vec!["vip".into()];
+        assert_eq!(change(&mut state, 0.0, 1.0).len(), 1);
     }
 
     #[test]

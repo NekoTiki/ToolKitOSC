@@ -76,7 +76,13 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
     let command = match &control {
         Some(control) => match limits::sanitize_command(&limits::resolve_control_for_viewer(control, &groups), &message) {
             Some(command) => Some(command),
-            None => return
+            // A lock, a limit or a cooldown held it back: automations can say so.
+            None => {
+                let name = text(control, "name").unwrap_or_default();
+                crate::automations::note_viewer(app, &viewer.display_name, name, None, &groups);
+                crate::automations::event(app, &crate::automations::model::AppEvent::ViewerHeldBack);
+                return;
+            }
         },
         None => None
     };
@@ -122,7 +128,7 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
         return;
     }
 
-    let Some(accepted) = execute(app, peer_id, &viewer.display_name, viewer_name, control.as_ref(), command.as_ref(), &message, viewer_pattern) else {
+    let Some(accepted) = execute(app, peer_id, &viewer.display_name, viewer_name, control.as_ref(), command.as_ref(), &message, viewer_pattern, &groups) else {
         return;
     };
 
@@ -159,7 +165,7 @@ pub fn assistant(app: &AppHandle, name: &str, message: &Value) -> Result<Value, 
     let kind = text(&command, "type");
     let pattern_id = text(&command, "value");
     let viewer_pattern = kind == Some("intiface-pattern") && matches!(pattern_id, Some(VIEWER_PATTERN_ID | VIEWER_LIVE_ID));
-    execute(app, &assistant_peer_id(name), name, Some(name.to_owned()), Some(&control), Some(&command), message, viewer_pattern)
+    execute(app, &assistant_peer_id(name), name, Some(name.to_owned()), Some(&control), Some(&command), message, viewer_pattern, &groups)
         .ok_or_else(|| "Played live, nothing to report".to_owned())
 }
 
@@ -175,7 +181,8 @@ fn execute(
     control: Option<&Value>,
     command: Option<&Value>,
     message: &Value,
-    viewer_pattern: bool
+    viewer_pattern: bool,
+    groups: &[String]
 ) -> Option<Value> {
     let group_id = text(message, "groupId").unwrap_or_default();
     let control_id = text(message, "controlId").unwrap_or_default();
@@ -214,7 +221,7 @@ fn execute(
     // Toasts are only for you, so they name the viewer whatever the share page shows.
     let value = outcome.shock.as_ref().or_else(|| sent.get("value"));
     crate::overlay::viewer_command(app, who, control, kind.unwrap_or_default(), control_name, value);
-    crate::automations::note_viewer(who, control_name, value);
+    crate::automations::note_viewer(app, who, control_name, value, groups);
 
     // Automations can start from it. A shock that didn't go out (cooldown) doesn't count.
     if let Some(control) = control {

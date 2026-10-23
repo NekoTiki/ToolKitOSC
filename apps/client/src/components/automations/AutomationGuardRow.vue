@@ -3,7 +3,9 @@ import ConditionExtraFields from '@renderer/components/automations/ConditionExtr
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { useBoards } from '@renderer/composables/useBoards'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
+import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import type { AutomationGuard, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { ConditionType } from '@renderer/utils/automations'
@@ -18,6 +20,8 @@ const guard = defineModel<AutomationGuard>({ required: true })
 
 const { avatarDetails } = useAvatarDetails()
 const { lockedControlGroups } = useLockedControls()
+const { viewerGroups, savedGroups } = useViewerGroups()
+const { boards } = useBoards()
 
 const kind = computed({
   get: () => guard.value.kind,
@@ -41,6 +45,15 @@ const kind = computed({
         break
       case 'chance':
         guard.value = { kind: value, percent: 50 }
+        break
+      case 'viewer-group':
+        guard.value = { kind: value, groupId: savedGroups.value[0]?.id ?? '', not: false }
+        break
+      case 'toys-connected':
+        guard.value = { kind: value, connected: true }
+        break
+      case 'board-online':
+        guard.value = { kind: value, boardId: boards.value[0]?.id ?? '', online: true }
     }
   }
 })
@@ -51,8 +64,17 @@ const KIND_ITEMS: { value: AutomationGuard['kind']; label: string }[] = [
   { value: 'viewers', label: 'Viewers' },
   { value: 'time', label: 'Time' },
   { value: 'wearing', label: 'Avatar' },
-  { value: 'chance', label: 'Chance' }
+  { value: 'chance', label: 'Chance' },
+  { value: 'viewer-group', label: 'Viewer group' },
+  { value: 'toys-connected', label: 'Toys' },
+  { value: 'board-online', label: 'Board' }
 ]
+
+const groupGuard = computed(() => (guard.value.kind === 'viewer-group' ? guard.value : null))
+const groupItems = computed(() => viewerGroups.value.map((g) => ({ label: g.name, value: g.id })))
+const toysGuard = computed(() => (guard.value.kind === 'toys-connected' ? guard.value : null))
+const boardGuard = computed(() => (guard.value.kind === 'board-online' ? guard.value : null))
+const boardItems = computed(() => boards.value.map((b) => ({ label: b.name, value: b.id })))
 
 // ---- Time, avatar, chance
 
@@ -328,6 +350,65 @@ const viewers = computed({
       >
         Use {{ avatarDetails.name }}
       </UButton>
+    </div>
+
+    <div
+      v-else-if="groupGuard"
+      class="flex flex-wrap items-center gap-3"
+    >
+      <SegmentedControl
+        :model-value="groupGuard.not ? 'not' : 'is'"
+        :items="[
+          { value: 'is', label: 'The viewer is in' },
+          { value: 'not', label: 'The viewer is not in' }
+        ]"
+        aria-label="In or not"
+        class="w-fit"
+        @update:model-value="groupGuard.not = $event === 'not'"
+      />
+      <USelect
+        v-model="groupGuard.groupId"
+        :items="groupItems"
+        placeholder="Pick a group"
+        class="w-full max-w-60"
+      />
+      <p class="w-full text-[13px] text-muted">
+        Whoever sent the last command on your share page.
+      </p>
+    </div>
+
+    <SegmentedControl
+      v-else-if="toysGuard"
+      :model-value="toysGuard.connected ? 'yes' : 'no'"
+      :items="[
+        { value: 'yes', label: 'A toy is connected' },
+        { value: 'no', label: 'No toy is connected' }
+      ]"
+      aria-label="Toys"
+      class="w-fit"
+      @update:model-value="toysGuard.connected = $event === 'yes'"
+    />
+
+    <div
+      v-else-if="boardGuard"
+      class="flex flex-wrap items-center gap-3"
+    >
+      <USelect
+        v-model="boardGuard.boardId"
+        :items="boardItems"
+        placeholder="Pick a board"
+        class="w-full max-w-60"
+      />
+      <SegmentedControl
+        :model-value="boardGuard.online ? 'on' : 'off'"
+        :items="[
+          { value: 'on', label: 'Is online' },
+          { value: 'off', label: 'Is offline' }
+        ]"
+        aria-label="Online or not"
+        class="w-fit"
+        @update:model-value="boardGuard.online = $event === 'on'"
+      />
     </div>
 
     <UFormField

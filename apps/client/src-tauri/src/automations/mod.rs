@@ -61,6 +61,18 @@ impl Env for AppEnv<'_> {
             roll: rand::random::<f64>()
         }
     }
+
+    fn toys_connected(&self) -> usize {
+        if crate::intiface::connected(self.0) {
+            crate::intiface::devices(self.0).len()
+        } else {
+            0
+        }
+    }
+
+    fn board_online(&self, board_id: &str) -> bool {
+        boards::is_online(self.0, board_id)
+    }
 }
 
 /// The name of the add-on this step needs, when it's off.
@@ -96,7 +108,9 @@ struct Skipped {
 // it along with the event if two viewers ever race.
 static LAST_VIEWER: Mutex<Option<(String, String, String)>> = Mutex::new(None);
 
-pub fn note_viewer(who: &str, control: &str, value: Option<&serde_json::Value>) {
+/// A viewer's command came in: who sent it, and the viewer groups they're in for "only if".
+pub fn note_viewer(app: &AppHandle, who: &str, control: &str, value: Option<&serde_json::Value>, groups: &[String]) {
+    automations(app).state.lock().unwrap().context.viewer_groups = groups.to_vec();
     let value = match value {
         Some(serde_json::Value::Bool(on)) => if *on { "on" } else { "off" }.to_owned(),
         Some(serde_json::Value::Number(n)) => match n.as_f64() {
@@ -412,6 +426,31 @@ pub fn set_paused(app: &AppHandle, paused: bool) {
     crate::overlay::paused(app, paused);
 }
 
+fn trigger(app: &AppHandle, matches: impl Fn(&model::Trigger) -> bool) {
+    let effects = automations(app).state.lock().unwrap().on_trigger(matches, &AppEnv(app));
+    apply(app, effects);
+}
+
+/// Called without the Intiface lock held: guards ask it about toys.
+pub fn toy_event(app: &AppHandle, event: model::ToyEvent) {
+    trigger(app, |when| matches!(when, model::Trigger::ToyEvent { event: e } if *e == event));
+}
+
+/// Called without the boards lock held: guards ask it about boards.
+pub fn board_event(app: &AppHandle, event: model::BoardEvent, board_id: &str) {
+    trigger(app, |when| {
+        matches!(when, model::Trigger::BoardEvent { event: e, board_id: id } if *e == event && id.as_deref().map_or(true, |id| id == board_id))
+    });
+}
+
+pub fn shock_sent(app: &AppHandle) {
+    trigger(app, |when| matches!(when, model::Trigger::ShockSent));
+}
+
+pub fn touch_event(app: &AppHandle, event: model::TouchEvent) {
+    trigger(app, |when| matches!(when, model::Trigger::Touch { event: e } if *e == event));
+}
+
 pub fn leash_event(app: &AppHandle, event: model::LeashEvent) {
     let effects = automations(app).state.lock().unwrap().on_leash(event, &AppEnv(app));
     apply(app, effects);
@@ -425,7 +464,12 @@ pub fn event(app: &AppHandle, event: &model::AppEvent) {
 /// How many viewers are on, from the webview. The profile comes from `set_profile`.
 pub fn set_context(app: &AppHandle, context: model::Context) {
     let mut state = automations(app).state.lock().unwrap();
-    state.context = model::Context { profile_id: state.context.profile_id.take(), avatar_id: state.context.avatar_id.take(), ..context };
+    state.context = model::Context {
+        profile_id: state.context.profile_id.take(),
+        avatar_id: state.context.avatar_id.take(),
+        viewer_groups: std::mem::take(&mut state.context.viewer_groups),
+        ..context
+    };
 }
 
 /// The worn avatar's active profile, for "only if".

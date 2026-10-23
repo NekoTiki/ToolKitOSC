@@ -73,7 +73,47 @@ pub enum Trigger {
     /// Something happens to the avatar leash. Its add-on reports these.
     Leash { event: LeashEvent },
     /// Every `minutes` while the app is open, counted from when it starts or is saved.
-    Every { minutes: u32 }
+    Every { minutes: u32 },
+    /// A toy connects, disconnects or runs low (the Intiface add-on).
+    ToyEvent { event: ToyEvent },
+    /// A board comes online or goes offline: this one, or any (the ESP32 boards add-on).
+    #[serde(rename_all = "camelCase")]
+    BoardEvent {
+        event: BoardEvent,
+        #[serde(default)]
+        board_id: Option<String>
+    },
+    /// A shock actually goes out (the OpenShock add-on): not when a cooldown or a failed check drops
+    /// it.
+    ShockSent,
+    /// Avatar touch starts or stops driving your toys or gear (the avatar haptics add-on).
+    Touch { event: TouchEvent }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToyEvent {
+    Connected,
+    Disconnected,
+    /// Its battery drops under `LOW_BATTERY`.
+    BatteryLow
+}
+
+/// A toy's battery counts as low under this (0–1).
+pub const LOW_BATTERY: f64 = 0.15;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum BoardEvent {
+    Online,
+    Offline
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TouchEvent {
+    Starts,
+    Stops
 }
 
 /// Longest gap of an `every` trigger: a day.
@@ -97,7 +137,9 @@ pub enum AppEvent {
     /// Stop everything is turned off.
     Resumed,
     /// Stop everything is turned on. Only chatbox steps run on it, right away.
-    Stopped
+    Stopped,
+    /// A viewer's command was held back by a lock, a limit or a cooldown.
+    ViewerHeldBack
 }
 
 /// What happens to the avatar leash (see `crate::leash`).
@@ -169,7 +211,19 @@ pub enum Guard {
         not: bool
     },
     /// A dice roll: true `percent` times out of 100.
-    Chance { percent: u8 }
+    Chance { percent: u8 },
+    /// The viewer whose command came last is in this viewer group, or with `not`, isn't.
+    #[serde(rename_all = "camelCase")]
+    ViewerGroup {
+        group_id: String,
+        #[serde(default)]
+        not: bool
+    },
+    /// A toy is connected to Intiface, or none is. Checked by the engine (see `Env`).
+    ToysConnected { connected: bool },
+    /// This board is online, or isn't. Checked by the engine (see `Env`).
+    #[serde(rename_all = "camelCase")]
+    BoardOnline { board_id: String, online: bool }
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -203,7 +257,10 @@ impl Guard {
                 within && (days.is_empty() || days.contains(&now.weekday))
             }
             Guard::Wearing { avatar_id, not, .. } => (context.avatar_id.as_deref() == Some(avatar_id.as_str())) != *not,
-            Guard::Chance { percent } => now.roll * 100.0 < f64::from(*percent)
+            Guard::Chance { percent } => now.roll * 100.0 < f64::from(*percent),
+            Guard::ViewerGroup { group_id, not } => context.viewer_groups.contains(group_id) != *not,
+            // The engine asks the app about devices before it gets here.
+            Guard::ToysConnected { .. } | Guard::BoardOnline { .. } => true
         }
     }
 }
@@ -216,7 +273,10 @@ pub struct Context {
     pub profile_id: Option<String>,
     pub viewers: u32,
     #[serde(default)]
-    pub avatar_id: Option<String>
+    pub avatar_id: Option<String>,
+    /// The viewer groups of whoever sent the last viewer command.
+    #[serde(default)]
+    pub viewer_groups: Vec<String>
 }
 
 /// Longest "held for" on a state.
@@ -227,7 +287,7 @@ impl Trigger {
     pub fn runs(&self) -> Runs {
         match self {
             Trigger::AvatarParameter { condition, .. } => condition.runs(),
-            Trigger::AvatarChanged { .. } | Trigger::AppEvent { .. } | Trigger::Leash { .. } | Trigger::Every { .. } => Runs::Moment
+            _ => Runs::Moment
         }
     }
 }
@@ -705,7 +765,13 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                 return Err("When Stop everything turns on, only the chatbox can say something, right away.".into());
             }
         }
-        Trigger::AppEvent { .. } | Trigger::Leash { .. } => {}
+        // A shock step would set itself off again.
+        Trigger::ShockSent => {
+            if automation.then.iter().any(|step| matches!(&step.action, Action::Control { control_type, .. } if control_type == "open-shock-shocker")) {
+                return Err("When a shock goes out, it can't send another one.".into());
+            }
+        }
+        Trigger::AppEvent { .. } | Trigger::Leash { .. } | Trigger::ToyEvent { .. } | Trigger::BoardEvent { .. } | Trigger::Touch { .. } => {}
     }
 
     if automation.only_if.len() > MAX_GUARDS {
@@ -736,7 +802,12 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                     return Err("A chance goes from 1 to 99 %.".into());
                 }
             }
-            Guard::Profile { .. } | Guard::Viewers { .. } => {}
+            Guard::ViewerGroup { group_id: id, .. } | Guard::BoardOnline { board_id: id, .. } => {
+                if id.is_empty() {
+                    return Err("Pick what each \"only if\" checks.".into());
+                }
+            }
+            Guard::Profile { .. } | Guard::Viewers { .. } | Guard::ToysConnected { .. } => {}
         }
     }
     let runs = automation.when.runs();
