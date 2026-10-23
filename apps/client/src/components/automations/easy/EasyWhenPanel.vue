@@ -1,0 +1,405 @@
+<script setup lang="ts">
+import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
+import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
+import FormSection from '@renderer/components/ui/FormSection.vue'
+import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
+import { useAddons } from '@renderer/composables/useAddons'
+import { useAutomations } from '@renderer/composables/useAutomations'
+import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { useControls } from '@renderer/composables/useControls'
+import { useOscMessages } from '@renderer/composables/useOscMessages'
+import type { Automation, AutomationTrigger, LeashEvent, ParameterValueType } from '@renderer/lib/tauri-bridge'
+import { isNoisyAddress } from '@renderer/utils/addressFilter'
+import type { AppEventType, ConditionType } from '@renderer/utils/automations'
+import { CONDITIONS, defaultCondition, fitStepsToTrigger, newAutomation, parameterFamily, parameterName, setTriggerParameter } from '@renderer/utils/automations'
+import { EASY_HELD, seconds } from '@renderer/utils/automationSentence'
+import { computed, ref } from 'vue'
+
+// Easy mode, "what starts it": what kind of thing, then which one and how it should react, in
+// plain words. Each choice maps onto the same trigger the Advanced editor edits.
+const props = defineProps<{ otherAvatar: boolean }>()
+const automation = defineModel<Automation>({ required: true })
+
+const { avatarDetails } = useAvatarDetails()
+const { describeContext } = useAutomations()
+const { controls } = useControls()
+const { isOn, offAddonForAutomationKind, offAddonForControlType } = useAddons()
+const { args } = useOscMessages()
+
+type Choice = 'avatar' | 'viewer' | 'switch' | 'leash' | 'resume'
+
+const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; description: string; icon: string }[] = [
+  { value: 'avatar', kind: 'avatar-parameter', title: 'Something on your avatar', description: 'A boop, a headpat, a grab, a toggle in your menu.', icon: 'i-lucide-person-standing' },
+  { value: 'viewer', kind: 'app-event', title: 'A viewer does something', description: 'Joins your share page, leaves, or uses a control.', icon: 'i-lucide-users' },
+  { value: 'switch', kind: 'avatar-changed', title: 'You put on an avatar', description: 'Also when the app starts while you wear it.', icon: 'i-lucide-repeat' },
+  { value: 'leash', kind: 'leash', title: 'Your leash', description: 'Someone grabs it, pulls you to running or lets go.', icon: 'i-tkosc-collar' },
+  { value: 'resume', kind: 'app-event', title: 'Controls come back', description: 'You turn Stop everything off again.', icon: 'i-lucide-power' }
+]
+
+const when = computed(() => automation.value.when)
+
+const choice = computed((): Choice => {
+  const w = when.value
+  if (w.kind === 'avatar-parameter') return 'avatar'
+  if (w.kind === 'avatar-changed') return 'switch'
+  if (w.kind === 'leash') return 'leash'
+  return w.event.type === 'resumed' ? 'resume' : 'viewer'
+})
+
+// An add-on's kind shows while it's on, or while this automation already uses it.
+const choices = computed(() => CHOICES.filter((c) => !offAddonForAutomationKind(c.kind) || c.value === choice.value))
+
+const choose = (value: Choice): void => {
+  if (value === choice.value || !avatarDetails.value) return
+  const { id, name } = avatarDetails.value
+  automation.value.when =
+    value === 'avatar'
+      ? newAutomation(id, name).when
+      : value === 'switch'
+        ? { kind: 'avatar-changed', avatarId: id, avatarName: name }
+        : value === 'leash'
+          ? { kind: 'leash', event: 'grabbed' }
+          : { kind: 'app-event', event: value === 'resume' ? { type: 'resumed' } : { type: 'viewer-joined' } }
+  fitStepsToTrigger(automation.value)
+}
+
+// ---- Something on your avatar
+
+const paramWhen = computed(() => (when.value.kind === 'avatar-parameter' ? when.value : null))
+const search = ref('')
+
+const parameters = computed(() =>
+  (avatarDetails.value?.parameters ?? [])
+    .filter((p) => p.output && !isNoisyAddress(p.name))
+    .map((p) => {
+      const address = p.output!.address
+      return {
+        address,
+        valueType: p.output!.type as ParameterValueType,
+        label: describeContext.value.controlForParameter?.(address)?.name ?? p.name,
+        family: parameterFamily(address)
+      }
+    })
+    .sort((a, b) => a.label.localeCompare(b.label))
+)
+
+const shown = computed(() => {
+  const query = search.value.trim().toLowerCase()
+  return query ? parameters.value.filter((p) => `${p.label} ${parameterName(p.address)}`.toLowerCase().includes(query)) : parameters.value
+})
+
+const KIND_HINT: Record<ParameterValueType, string> = { Bool: 'On or off', Int: 'One of a few', Float: '0 to 100%' }
+
+const now = (address: string, valueType: ParameterValueType): string | null => {
+  const value = args.value[address]?.[0]
+  if (value === undefined) return null
+  if (valueType === 'Bool') return value ? 'on' : 'off'
+  return valueType === 'Float' && typeof value === 'number' ? `${Math.round(value * 100)}%` : String(value)
+}
+
+const pick = (address: string): void => {
+  const item = parameters.value.find((p) => p.address === address)
+  setTriggerParameter(automation.value, address, item?.valueType ?? 'Bool')
+}
+
+// How it should react, by type, in plain words.
+const HOW: Record<ParameterValueType, { value: ConditionType; title: string; description: string }[]> = {
+  Bool: [
+    { value: 'turns-on', title: 'The moment it turns on', description: 'A boop lands, a grab starts, you flip it on.' },
+    { value: 'turns-off', title: 'When it turns off', description: 'They let go, you flip it off.' },
+    { value: 'is-on', title: "For as long as it's on", description: 'What happens can last until it turns off.' }
+  ],
+  Int: [
+    { value: 'becomes', title: 'The moment it switches', description: 'Runs once each time it changes to this.' },
+    { value: 'is', title: 'For as long as it stays', description: 'What happens can last until it changes again.' }
+  ],
+  Float: [
+    { value: 'any', title: 'Follow how strong it is', description: 'A closer headpat buzzes harder.' },
+    { value: 'rises-above', title: 'When it goes past a point', description: 'Runs once each time it crosses it.' },
+    { value: 'is-above', title: "For as long as it's past a point", description: 'What happens lasts while it stays there.' }
+  ]
+}
+
+const setHow = (type: ConditionType): void => {
+  if (!paramWhen.value) return
+  const value = 'value' in paramWhen.value.condition ? paramWhen.value.condition.value : undefined
+  paramWhen.value.condition = defaultCondition(type)
+  // The point or the option stays when switching between a moment and a state.
+  if (value !== undefined && 'value' in paramWhen.value.condition) paramWhen.value.condition.value = value
+  if (CONDITIONS[type].moment || type === 'any') paramWhen.value.heldMs = 0
+  fitStepsToTrigger(automation.value)
+}
+
+const conditionValue = computed({
+  get: () => (paramWhen.value && 'value' in paramWhen.value.condition ? paramWhen.value.condition.value : 0),
+  set: (value: number) => {
+    if (paramWhen.value && 'value' in paramWhen.value.condition) paramWhen.value.condition.value = value
+  }
+})
+
+// An Int's options, named by the control that drives it when there is one.
+const intOptions = computed(() => {
+  const control = paramWhen.value ? describeContext.value.controlForParameter?.(paramWhen.value.parameter) : undefined
+  return control?.type === 'enum' || control?.type === 'step-enum' ? control.options.map((o) => ({ value: String(o.value), label: o.name })) : null
+})
+
+const isState = computed(() => !!paramWhen.value && !CONDITIONS[paramWhen.value.condition.type].moment && paramWhen.value.condition.type !== 'any')
+
+const held = computed({
+  get: () => String(paramWhen.value?.heldMs ?? 0),
+  set: (value: string) => {
+    if (paramWhen.value) paramWhen.value.heldMs = Number(value)
+  }
+})
+const heldItems = EASY_HELD.map((ms) => ({ value: String(ms), label: ms ? seconds(ms) : 'At once' }))
+
+// USlider can hand back an array; only plain numbers are taken (see OpenShockFields.vue).
+const fromSlider = (value: number | number[] | undefined): void => {
+  if (typeof value === 'number') conditionValue.value = value
+}
+
+// ---- A viewer does something
+
+const eventWhen = computed(() => (when.value.kind === 'app-event' && when.value.event.type !== 'resumed' ? when.value : null))
+
+const VIEWER_EVENTS: { value: Exclude<AppEventType, 'resumed'>; label: string }[] = [
+  { value: 'viewer-joined', label: 'Joins' },
+  { value: 'first-viewer', label: 'Is the first to join' },
+  { value: 'last-viewer-left', label: 'Is the last to leave' },
+  { value: 'viewer-command', label: 'Uses a control' }
+]
+
+const eventType = computed({
+  get: () => (eventWhen.value?.event.type ?? 'viewer-joined') as Exclude<AppEventType, 'resumed'>,
+  set: (type) => {
+    if (eventWhen.value) eventWhen.value.event = type === 'viewer-command' ? { type, controlId: null, controlType: null } : { type }
+  }
+})
+
+// Which viewer commands count: any, any shock, or one control.
+const SHOCK = 'open-shock-shocker'
+const eventControl = computed({
+  get: (): string => {
+    const event = eventWhen.value?.event
+    if (event?.type !== 'viewer-command') return 'any'
+    return event.controlId ?? (event.controlType === SHOCK ? 'shock' : 'any')
+  },
+  set: (value: string) => {
+    if (eventWhen.value?.event.type !== 'viewer-command') return
+    eventWhen.value.event = {
+      type: 'viewer-command',
+      controlId: value === 'any' || value === 'shock' ? null : value,
+      controlType: value === 'shock' ? SHOCK : null
+    }
+  }
+})
+
+const eventControlItems = computed(() => [
+  { label: 'Any control', value: 'any' },
+  ...(isOn('openshock') || eventControl.value === 'shock' ? [{ label: 'Any shock', value: 'shock' }] : []),
+  ...controls.value.flatMap((group) =>
+    group.controls
+      .filter((control) => control.id === eventControl.value || !offAddonForControlType(control.type))
+      .map((control) => ({ label: `${control.name} · ${group.name}`, value: control.id }))
+  )
+])
+
+// ---- You put on an avatar
+
+const changedWhen = computed(() => (when.value.kind === 'avatar-changed' ? when.value : null))
+
+const changedItems = computed(() => {
+  const items: { value: string; label: string }[] = []
+  const w = changedWhen.value
+  if (w?.avatarId && w.avatarId !== avatarDetails.value?.id) items.push({ value: w.avatarId, label: w.avatarName ?? 'That avatar' })
+  if (avatarDetails.value) items.push({ value: avatarDetails.value.id, label: `${avatarDetails.value.name} (this one)` })
+  items.push({ value: 'any', label: 'Any avatar' })
+  return items
+})
+
+const changedTarget = computed({
+  get: () => changedWhen.value?.avatarId ?? 'any',
+  set: (value: string) => {
+    if (!changedWhen.value) return
+    if (value === 'any') Object.assign(changedWhen.value, { avatarId: null, avatarName: null })
+    else if (value === avatarDetails.value?.id) Object.assign(changedWhen.value, { avatarId: value, avatarName: avatarDetails.value.name })
+  }
+})
+
+// ---- Your leash
+
+const leashWhen = computed(() => (when.value.kind === 'leash' ? when.value : null))
+const LEASH_ITEMS: { value: LeashEvent; label: string }[] = [
+  { value: 'grabbed', label: 'Grabbed' },
+  { value: 'running', label: 'Pulled to running' },
+  { value: 'released', label: 'Let go' }
+]
+</script>
+
+<template>
+  <FormSection title="What starts it?">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-2.5">
+      <ChoiceCard
+        v-for="c in choices"
+        :key="c.value"
+        :title="c.title"
+        :description="c.description"
+        :icon="c.icon"
+        :selected="choice === c.value"
+        @click="choose(c.value)"
+      />
+    </div>
+
+    <template v-if="paramWhen">
+      <p
+        v-if="props.otherAvatar"
+        class="text-sm text-muted"
+      >
+        For {{ paramWhen.avatarName }}. Wear that avatar to pick something else.
+      </p>
+      <template v-else>
+        <ParameterListen
+          :can-pick="(address) => parameters.some((p) => p.address === address)"
+          @pick="pick"
+        />
+        <UFormField label="Or pick it from your avatar">
+          <div class="grid gap-2.5">
+            <UInput
+              v-model="search"
+              icon="i-lucide-search"
+              placeholder="Search"
+              class="w-full"
+            />
+            <div class="grid max-h-80 grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2 overflow-y-auto pr-1">
+              <button
+                v-for="p in shown"
+                :key="p.address"
+                type="button"
+                class="grid min-h-14 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-field border bg-(--aurora-well) px-3.5 py-2 text-left"
+                :class="paramWhen.parameter === p.address ? 'border-primary bg-primary/12' : 'border-transparent'"
+                :aria-pressed="paramWhen.parameter === p.address"
+                @click="pick(p.address)"
+              >
+                <b class="truncate font-semibold text-highlighted">{{ p.label }}</b>
+                <span class="row-span-2 font-mono text-xs text-muted">{{ now(p.address, p.valueType) }}</span>
+                <small class="truncate text-xs text-muted">{{ KIND_HINT[p.valueType] }}{{ p.family ? ` · ${p.family}` : '' }}</small>
+              </button>
+            </div>
+          </div>
+        </UFormField>
+      </template>
+
+      <template v-if="paramWhen.parameter">
+        <UFormField label="When should it react?">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-2.5">
+            <ChoiceCard
+              v-for="how in HOW[paramWhen.valueType]"
+              :key="how.value"
+              :title="how.title"
+              :description="how.description"
+              :selected="paramWhen.condition.type === how.value"
+              @click="setHow(how.value)"
+            />
+          </div>
+        </UFormField>
+
+        <UFormField
+          v-if="'value' in paramWhen.condition && paramWhen.valueType === 'Int'"
+          label="Which one?"
+        >
+          <SegmentedControl
+            v-if="intOptions"
+            :model-value="String(conditionValue)"
+            :items="intOptions"
+            class="w-fit max-w-full flex-wrap"
+            accent
+            aria-label="Which one?"
+            @update:model-value="conditionValue = Number($event)"
+          />
+          <UInput
+            v-else
+            v-model.number="conditionValue"
+            type="number"
+            step="1"
+            class="max-w-40"
+          />
+        </UFormField>
+        <UFormField
+          v-else-if="'value' in paramWhen.condition"
+          :label="`The point: ${Math.round(conditionValue * 100)}%`"
+        >
+          <USlider
+            :model-value="conditionValue"
+            :min="0"
+            :max="1"
+            :step="0.01"
+            @update:model-value="fromSlider"
+          />
+        </UFormField>
+
+        <UFormField
+          v-if="isState"
+          label="Ignore quick brushes"
+          description="How long it has to last before anything happens."
+        >
+          <SegmentedControl
+            v-model="held"
+            :items="heldItems"
+            class="w-fit max-w-full flex-wrap"
+            aria-label="Ignore quick brushes"
+          />
+        </UFormField>
+      </template>
+    </template>
+
+    <template v-else-if="eventWhen">
+      <UFormField label="The viewer…">
+        <SegmentedControl
+          v-model="eventType"
+          :items="VIEWER_EVENTS"
+          class="w-fit max-w-full flex-wrap"
+          accent
+          aria-label="What the viewer does"
+        />
+      </UFormField>
+      <UFormField
+        v-if="eventType === 'viewer-command'"
+        label="Which control?"
+        description="Only when it goes through: locks, limits and cooldowns still apply to viewers."
+      >
+        <USelectMenu
+          v-model="eventControl"
+          :items="eventControlItems"
+          value-key="value"
+          class="w-full"
+        />
+      </UFormField>
+    </template>
+
+    <UFormField
+      v-else-if="changedWhen"
+      label="Which avatar?"
+    >
+      <SegmentedControl
+        v-model="changedTarget"
+        :items="changedItems"
+        class="w-fit max-w-full flex-wrap"
+        accent
+        aria-label="Which avatar?"
+      />
+    </UFormField>
+
+    <UFormField
+      v-else-if="leashWhen"
+      label="When your leash is…"
+    >
+      <SegmentedControl
+        v-model="leashWhen.event"
+        :items="LEASH_ITEMS"
+        class="w-fit max-w-full flex-wrap"
+        accent
+        aria-label="Leash"
+      />
+    </UFormField>
+  </FormSection>
+</template>

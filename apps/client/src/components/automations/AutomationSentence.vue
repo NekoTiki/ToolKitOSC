@@ -1,18 +1,14 @@
 <script setup lang="ts">
-import type { Rich, Sentence } from '@renderer/utils/automationSentence'
+import RichText from '@renderer/components/automations/RichText'
+import type { Sentence } from '@renderer/utils/automationSentence'
 import { seconds } from '@renderer/utils/automationSentence'
-import { h } from 'vue'
 
 // An automation as one plain sentence, with names and values in bold (see automationSentence.ts).
 defineProps<{ sentence: Sentence }>()
-
-const RichText = (props: { parts: Rich }) =>
-  props.parts.map((part) => (part.strong ? h('b', { class: 'font-medium text-highlighted' }, part.text) : part.text))
-RichText.props = ['parts']
 </script>
 
 <template>
-  <span>
+  <span class="[&_b]:font-medium [&_b]:text-highlighted">
     {{ sentence.lead }} <RichText :parts="sentence.when" />,
     <template
       v-for="(step, index) in sentence.steps"

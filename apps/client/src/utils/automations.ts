@@ -182,7 +182,7 @@ export type ControlRunType = ControlRun['type']
 // What kind of trigger edge a step runs on (model.rs `Runs`).
 export type Runs = 'moment' | 'state' | 'follow'
 
-const runsFor = (condition: ConditionType): Runs =>
+export const runsFor = (condition: ConditionType): Runs =>
   CONDITIONS[condition].moment ? 'moment' : condition === 'any' ? 'follow' : 'state'
 
 // The ways to run a control, and the control types each fits (model.rs `run_fits`).
@@ -351,6 +351,20 @@ export const STEP_KINDS: Record<
   }
 }
 
+// What starts an automation, as an icon for the editor and the sentence.
+export const triggerIcon = (when: AutomationTrigger): string => {
+  switch (when.kind) {
+    case 'avatar-parameter':
+      return 'i-lucide-person-standing'
+    case 'avatar-changed':
+      return 'i-lucide-repeat'
+    case 'leash':
+      return 'i-tkosc-collar'
+    case 'app-event':
+      return when.event.type === 'resumed' ? 'i-lucide-power' : 'i-lucide-users'
+  }
+}
+
 // `live` leaves out the kinds of an add-on that's off (see useAddons).
 export const stepKindsFor = (condition: ConditionType, live: (kind: AutomationStep['kind']) => boolean = () => true): AutomationStep['kind'][] =>
   (Object.keys(STEP_KINDS) as AutomationStep['kind'][]).filter((kind) =>
@@ -513,6 +527,27 @@ export const fitStep = (
     default:
       return step
   }
+}
+
+// Keeps every step valid after the trigger changes: a hold can't follow a moment, and so on.
+export const fitStepsToTrigger = (automation: Automation): void => {
+  const condition = triggerCondition(automation.when)
+  automation.then = automation.then.map((step) => fitStep(step, condition))
+}
+
+// Points an avatar-parameter trigger at another parameter. A condition of the wrong type starts
+// over, and an automation without a name takes the parameter's.
+export const setTriggerParameter = (automation: Automation, address: string, valueType: ParameterValueType): void => {
+  const { when } = automation
+  if (when.kind !== 'avatar-parameter') return
+  when.parameter = address
+  when.valueType = valueType
+  if (CONDITIONS[when.condition.type].valueType !== valueType) {
+    when.condition = defaultCondition(conditionsFor(valueType)[0]!)
+    when.heldMs = 0
+  }
+  if (!automation.name) automation.name = parameterName(address)
+  fitStepsToTrigger(automation)
 }
 
 export const parameterName = (address: string): string =>
