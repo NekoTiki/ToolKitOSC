@@ -1,21 +1,27 @@
 <script setup lang="ts">
+import BhapticsStepFields from '@renderer/components/automations/BhapticsStepFields.vue'
+import OwoStepFields from '@renderer/components/automations/OwoStepFields.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
 import type { AutomationStep, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
-import type { ConditionType, ControlRunType, ParameterActionType } from '@renderer/utils/automations'
+import type { ConditionType, ControlRunType, OutputActionType, ParameterActionType } from '@renderer/utils/automations'
 import {
+  actionsFor,
   CHATBOX_MAX,
   controlRunsFor,
   defaultControlRun,
+  defaultOutput,
   defaultParameterAction,
   newStep,
+  OUTPUT_ACTIONS,
   PARAMETER_ACTIONS,
   parameterActionsFor,
   STEP_KINDS,
@@ -34,13 +40,14 @@ const props = defineProps<{
   trigger: string
   canRemove: boolean
 }>()
-const emit = defineEmits<{ remove: []; advanced: [] }>()
+const emit = defineEmits<{ remove: [] }>()
 const step = defineModel<AutomationStep>({ required: true })
 
 const { avatarDetails } = useAvatarDetails()
 const { describeContext } = useAutomations()
 const { controls } = useControls()
 const { lockedControlGroups } = useLockedControls()
+const { boards } = useBoards()
 const { offAddonForAutomationKind, offAddonForControlType } = useAddons()
 
 const EASY_KINDS: Record<AutomationStep['kind'], string> = {
@@ -311,6 +318,83 @@ const profileTarget = computed({
     if (profileStep.value) profileStep.value.profileId = value === NO_PROFILE ? null : value
   }
 })
+
+// ---- Switch something on a board
+
+const board = computed(() => (step.value.kind === 'board-output' ? step.value : null))
+
+const boardItems = computed(() =>
+  boards.value.flatMap((b) =>
+    (b.config ?? []).map((output) => ({ label: `${output.label} · ${b.name}${b.status === 'online' ? '' : ' (offline)'}`, value: `${b.id}:${output.pin}` }))
+  )
+)
+
+// The picked output as saved on its board, for its max on-time, and whether it can dim.
+const boardOutput = computed(() => (board.value ? boards.value.find((b) => b.id === board.value!.boardId)?.config?.find((o) => o.pin === board.value!.pin) : undefined))
+const boardPwm = computed(() => !!board.value && !!boards.value.find((b) => b.id === board.value!.boardId)?.outputs.some((p) => p.pin === board.value!.pin && p.pwm))
+
+// A pulse never outlasts the output's max on-time: the board would cut it short.
+const fitPulse = (): void => {
+  const output = board.value?.output
+  if (output?.type === 'pulse' && boardOutput.value && output.onMs > boardOutput.value.maxOnMs) output.onMs = boardOutput.value.maxOnMs
+}
+
+const boardTarget = computed({
+  get: () => (board.value && board.value.pin >= 0 ? `${board.value.boardId}:${board.value.pin}` : undefined),
+  set: (value: string | undefined) => {
+    if (!board.value || !value) return
+    const [boardId, pin] = value.split(':')
+    board.value.boardId = boardId!
+    board.value.pin = Number(pin)
+    fitPulse()
+  }
+})
+
+const BOARD_WAYS: Record<OutputActionType, string> = {
+  pulse: 'For a moment',
+  toggle: 'The other way',
+  off: 'Off',
+  hold: 'For as long as it lasts',
+  follow: 'Following it'
+}
+const boardWays = computed(() =>
+  actionsFor(props.condition)
+    .filter((type) => !OUTPUT_ACTIONS[type].needsPwm || boardPwm.value)
+    .map((type) => ({ value: type, label: BOARD_WAYS[type] }))
+)
+
+const boardWay = computed({
+  get: (): OutputActionType => board.value?.output.type ?? 'pulse',
+  set: (type: OutputActionType) => {
+    if (!board.value) return
+    board.value.output = defaultOutput(type)
+    if (type === 'follow') board.value.chatbox = false
+    if (!stepCanWait(board.value)) board.value.delayMs = 0
+    fitPulse()
+  }
+})
+
+const boardPulse = computed({
+  get: () => String(board.value?.output.type === 'pulse' ? board.value.output.onMs : 1000),
+  set: (value: string) => {
+    if (board.value?.output.type === 'pulse') board.value.output.onMs = Number(value)
+  }
+})
+const boardPulseItems = computed(() =>
+  EASY_PULSES.filter((ms) => !boardOutput.value || ms <= boardOutput.value.maxOnMs).map((ms) => ({ value: String(ms), label: seconds(ms) }))
+)
+
+// ---- Leash, bHaptics, OWO
+
+const leashStep = computed(() => (step.value.kind === 'leash-enabled' ? step.value : null))
+const leashOn = computed({
+  get: () => (leashStep.value?.enabled ? 'on' : 'off'),
+  set: (value: string) => {
+    if (leashStep.value) leashStep.value.enabled = value === 'on'
+  }
+})
+const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
+const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value : null))
 </script>
 
 <template>
@@ -496,21 +580,75 @@ const profileTarget = computed({
       Everything stops, toys and shockers included. Only you can turn it back on.
     </p>
 
-    <div
-      v-else
-      class="flex flex-wrap items-center gap-3"
+    <template v-else-if="board">
+      <UFormField label="Which output?">
+        <USelectMenu
+          v-model="boardTarget"
+          :items="boardItems"
+          value-key="value"
+          placeholder="Pick an output"
+          class="w-full"
+        />
+      </UFormField>
+      <template v-if="board.pin >= 0">
+        <UFormField
+          v-if="boardWays.length > 1"
+          label="How?"
+        >
+          <SegmentedControl
+            v-model="boardWay"
+            :items="boardWays"
+            class="w-fit max-w-full flex-wrap"
+            accent
+            aria-label="How?"
+          />
+        </UFormField>
+        <UFormField
+          v-if="board.output.type === 'pulse'"
+          label="For how long?"
+          :description="boardOutput ? `Up to ${seconds(boardOutput.maxOnMs)}, its max on-time.` : undefined"
+        >
+          <SegmentedControl
+            v-model="boardPulse"
+            :items="boardPulseItems"
+            class="w-fit"
+            aria-label="For how long?"
+          />
+        </UFormField>
+        <USwitch
+          v-if="board.output.type !== 'follow'"
+          :model-value="!!board.chatbox"
+          label="Also say it in the chatbox"
+          @update:model-value="board.chatbox = !!$event"
+        />
+      </template>
+    </template>
+
+    <UFormField
+      v-else-if="leashStep"
+      label="Leash moves me"
     >
-      <p class="text-sm text-muted">
-        This kind of step is edited in Advanced for now.
-      </p>
-      <UButton
-        color="neutral"
-        variant="subtle"
-        @click="emit('advanced')"
-      >
-        Open in Advanced
-      </UButton>
-    </div>
+      <SegmentedControl
+        v-model="leashOn"
+        :items="[
+          { value: 'on', label: 'Turn it on' },
+          { value: 'off', label: 'Turn it off' }
+        ]"
+        class="w-fit"
+        accent
+        aria-label="Leash moves me"
+      />
+    </UFormField>
+
+    <BhapticsStepFields
+      v-else-if="bhapticsStep"
+      :model-value="bhapticsStep"
+    />
+
+    <OwoStepFields
+      v-else-if="owoStep"
+      :model-value="owoStep"
+    />
 
     <UFormField
       v-if="stepCanWait(step) && (index > 0 || step.delayMs > 0)"
