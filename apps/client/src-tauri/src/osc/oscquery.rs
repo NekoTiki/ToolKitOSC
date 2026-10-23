@@ -286,6 +286,8 @@ pub async fn pull_on_avatar_load(app: AppHandle, avatar_id: String) {
 
     tracing::info!("Loaded {} current parameter value(s) for {avatar_id} ({} changed)", values.len(), changed.len());
 
+    crate::presets::keep_original_state(&app, &avatar_id, &snapshot);
+
     if changed.is_empty() {
         return;
     }

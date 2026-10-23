@@ -24,9 +24,18 @@ const excludedAddresses = ref<string[]>([])
 // different avatar (or switched again before the first one resolved) - only the response for the
 // avatar we're still on is allowed to overwrite `presets`/`excludedAddresses`.
 const loadedAvatarId = ref<string | null>(null)
+// The unsaved "Original state" preset of the avatar we're on: its values when it first loaded this
+// session. Kept apart from `presets` so only the Presets page offers it, not control pickers.
+export const ORIGINAL_STATE_ID = 'original'
+const originalState = ref<Preset | null>(null)
+
+api.onOriginalState((preset) => {
+  if (preset.avatarId === loadedAvatarId.value) originalState.value = preset
+})
 
 export function usePresets(): {
   presets: typeof presets
+  originalState: typeof originalState
   filterableParameters: ComputedRef<FilterableParameter[]>
   includedParameters: ComputedRef<FilterableParameter[]>
   coverage: ComputedRef<{ captured: number; total: number; ratio: number }>
@@ -51,6 +60,11 @@ export function usePresets(): {
 
   const loadForAvatar = (id: string): void => {
     loadedAvatarId.value = id
+    originalState.value = null
+
+    void api.originalState(id).then((preset) => {
+      if (loadedAvatarId.value === id && preset) originalState.value = preset
+    })
 
     void api.loadPresets(id).then((store) => {
       if (loadedAvatarId.value !== id) return
@@ -127,7 +141,8 @@ export function usePresets(): {
       }))
   }
 
-  const getPreset = (id: string): Preset | undefined => presets.value.find((p) => p.id === id)
+  const getPreset = (id: string): Preset | undefined =>
+    id === ORIGINAL_STATE_ID ? (originalState.value ?? undefined) : presets.value.find((p) => p.id === id)
 
   const addPreset = (name: string, icon: string | undefined, parameters: PresetParameter[]): string | null => {
     if (!avatarId.value) return null
@@ -182,6 +197,7 @@ export function usePresets(): {
 
   return {
     presets,
+    originalState,
     filterableParameters,
     includedParameters,
     coverage,

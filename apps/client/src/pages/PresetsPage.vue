@@ -9,7 +9,7 @@ import FormSection from '@renderer/components/ui/FormSection.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
-import { usePresets } from '@renderer/composables/usePresets'
+import { ORIGINAL_STATE_ID, usePresets } from '@renderer/composables/usePresets'
 import { api } from '@renderer/lib/tauri-bridge'
 import { timeAgo } from '@renderer/utils/time'
 import type { Preset, PresetParameter } from '@toolkitosc/shared-ui'
@@ -20,25 +20,28 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 // Presets: saved snapshots of parameter values, applied in one tap (from here or from a Preset
 // control). The list lives in the sidebar; the selected preset opens in the main pane as an
 // editor. "New from current state" pulls every value from VRChat first, so a new preset starts
-// complete. Replaces the preset list and preset modals.
+// complete. Replaces the preset list and preset modals. "Original state" is the avatar's values from
+// its first load this session: listed first, unsaved, and saved as a new preset rather than edited.
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const { avatarDetails } = useAvatarDetails()
-const { presets, getPreset, addPreset, updatePreset, deletePreset, applyPreset, captureParameters, coverage, includedParameters } = usePresets()
+const { presets, originalState, getPreset, addPreset, updatePreset, deletePreset, applyPreset, captureParameters, coverage, includedParameters } = usePresets()
 const { openModal: confirm } = useAreYouSureModal()
 
 const isNew = route.name === 'preset-new'
 const presetId = computed(() => (typeof route.params.presetId === 'string' ? route.params.presetId : null))
+const isOriginal = computed(() => presetId.value === ORIGINAL_STATE_ID)
+const listed = computed(() => (originalState.value ? [originalState.value, ...presets.value] : presets.value))
 const preset = computed(() => (presetId.value ? getPreset(presetId.value) : undefined))
 
 // /presets alone opens the first preset, if any.
 watch(
-  [presets, presetId],
+  [listed, presetId],
   () => {
     if (route.name !== 'presets') return
     if (presetId.value && !preset.value && presets.value.length) void router.replace(`/presets/${presets.value[0]!.id}`)
-    else if (!presetId.value && presets.value.length) void router.replace(`/presets/${presets.value[0]!.id}`)
+    else if (!presetId.value && listed.value.length) void router.replace(`/presets/${listed.value[0]!.id}`)
   },
   { immediate: true }
 )
@@ -130,7 +133,7 @@ const save = (): void => {
 
   saved.value = true
 
-  if (isNew) {
+  if (isNew || isOriginal.value) {
     const id = addPreset(name, draft.value.icon, draft.value.parameters)
 
     toast.add({ title: `Created "${name}"`, icon: 'i-lucide-check', color: 'success' })
@@ -150,6 +153,11 @@ const apply = (): void => {
 
   applyPreset(presetId.value)
   toast.add({ title: 'Preset applied', icon: 'i-lucide-play', color: 'success' })
+}
+
+const applyItem = (item: Preset): void => {
+  applyPreset(item.id)
+  toast.add({ title: `Applied "${item.name}"`, icon: 'i-lucide-play', color: 'success' })
 }
 
 const remove = async (): Promise<void> => {
@@ -183,7 +191,7 @@ onMounted(() => {
 })
 
 const duplicate = (item: Preset): void => {
-  const id = addPreset(`${item.name} copy`, item.icon, _.cloneDeep(item.parameters))
+  const id = addPreset(item.id === ORIGINAL_STATE_ID ? item.name : `${item.name} copy`, item.icon, _.cloneDeep(item.parameters))
 
   if (!id) return
 
@@ -205,16 +213,14 @@ const removeFromMenu = async (item: Preset): Promise<void> => {
 
 // A preset's actions, from its row in the sidebar: right-click it, or press "⋯" on the open one
 // (VR pointers have no right-click).
-const presetMenu = (item: Preset): DropdownMenuItem[][] => [
+const presetMenu = (item: Preset): DropdownMenuItem[][] => item.id === ORIGINAL_STATE_ID ? [
   [
-    {
-      label: 'Apply now',
-      icon: 'i-lucide-play',
-      onSelect: () => {
-        applyPreset(item.id)
-        toast.add({ title: `Applied "${item.name}"`, icon: 'i-lucide-play', color: 'success' })
-      }
-    },
+    { label: 'Apply now', icon: 'i-lucide-play', onSelect: () => applyItem(item) },
+    { label: 'Save as preset', icon: 'i-lucide-copy', onSelect: () => duplicate(item) }
+  ]
+] : [
+  [
+    { label: 'Apply now', icon: 'i-lucide-play', onSelect: () => applyItem(item) },
     {
       label: 'Rename',
       icon: 'i-lucide-pen',
@@ -252,22 +258,30 @@ onBeforeRouteLeave(async () => {
         class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1.5"
       >
         <UContextMenu
-          v-for="item in presets"
+          v-for="item in listed"
           :key="item.id"
           :items="presetMenu(item)"
         >
           <RouterLink
             :to="`/presets/${item.id}`"
-            class="grid min-h-14.5 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 rounded-2xl border px-2.5 py-2 transition-colors"
+            class="group grid min-h-14.5 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 rounded-2xl border px-2.5 py-2 transition-colors"
             :class="item.id === presetId ? 'border-primary/50 bg-primary/14' : 'border-transparent hover:bg-(--aurora-glass)'"
           >
             <span
-              class="row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
+              class="relative row-span-2 grid size-8.5 place-items-center rounded-xl bg-(--aurora-well)"
               :class="item.id === presetId ? 'text-primary' : 'text-muted'"
             >
               <UIcon
                 :name="item.icon || 'i-lucide-layers'"
                 class="size-4.5"
+              />
+              <!-- Shown on hover (or keyboard focus): applies the preset without opening it. -->
+              <UButton
+                icon="i-lucide-play"
+                variant="solid"
+                class="pointer-events-none absolute inset-0 justify-center rounded-xl opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                :aria-label="`Apply ${item.name}`"
+                @click.prevent.stop="applyItem(item)"
               />
             </span>
             <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ item.name }}</b>
@@ -287,11 +301,11 @@ onBeforeRouteLeave(async () => {
                 @click.prevent.stop
               />
             </UDropdownMenu>
-            <small class="col-start-2 truncate text-xs text-muted">{{ item.parameters.length }} parameters · {{ timeAgo(item.updatedAt) }}</small>
+            <small class="col-start-2 truncate text-xs text-muted">{{ item.parameters.length }} parameters · {{ item.id === ORIGINAL_STATE_ID ? 'This session' : timeAgo(item.updatedAt) }}</small>
           </RouterLink>
         </UContextMenu>
         <p
-          v-if="!presets.length"
+          v-if="!listed.length"
           class="px-1 text-sm text-muted"
         >
           No presets for this avatar yet.
@@ -321,7 +335,7 @@ onBeforeRouteLeave(async () => {
     >
       <PageHeader
         :title="isNew ? 'New preset' : preset?.name ?? 'Preset'"
-        :meta="isNew ? 'Captured from your avatar just now' : preset ? `Updated ${timeAgo(preset.updatedAt)}` : undefined"
+        :meta="isNew ? 'Captured from your avatar just now' : isOriginal ? 'When this avatar first loaded this session · not saved' : preset ? `Updated ${timeAgo(preset.updatedAt)}` : undefined"
         :crumbs="[{ label: 'Presets', to: '/presets' }, { label: isNew ? 'New' : preset?.name ?? '' }]"
       >
         <template
@@ -329,6 +343,7 @@ onBeforeRouteLeave(async () => {
           #actions
         >
           <UButton
+            v-if="!isOriginal"
             icon="i-lucide-trash-2"
             color="error"
             variant="soft"
@@ -484,10 +499,10 @@ onBeforeRouteLeave(async () => {
       </UButton>
       <UButton
         icon="i-lucide-check"
-        :disabled="!isNew && !dirty"
+        :disabled="!isNew && !isOriginal && !dirty"
         @click="save"
       >
-        {{ isNew ? 'Create preset' : 'Save changes' }}
+        {{ isNew ? 'Create preset' : isOriginal ? 'Save as preset' : 'Save changes' }}
       </UButton>
     </template>
   </PageLayout>
