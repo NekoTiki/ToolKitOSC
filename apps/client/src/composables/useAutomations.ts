@@ -4,6 +4,7 @@ import { useLockedControls } from '@renderer/composables/useLockedControls'
 import type { Automation } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { DescribeContext } from '@renderer/utils/automations'
+import { controlsByAddress } from '@renderer/utils/controlAddresses'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref } from 'vue'
 
@@ -61,13 +62,18 @@ export function useAutomations(): {
   const { boards } = useBoards()
   const { controls } = useControls()
   const { getLockedControlGroup } = useLockedControls()
-  const describeContext = computed(
-    (): DescribeContext => ({
+  const describeContext = computed((): DescribeContext => {
+    const all = controls.value.flatMap((group) => group.controls)
+    const byAddress = controlsByAddress(all)
+    const control = (controlId: string) => all.find((c) => c.id === controlId)
+    return {
       boards: boards.value,
-      controlName: (controlId) => controls.value.flatMap((group) => group.controls).find((c) => c.id === controlId)?.name,
-      profileName: (id) => getLockedControlGroup(id)?.name
-    })
-  )
+      controlName: (controlId) => control(controlId)?.name,
+      profileName: (id) => getLockedControlGroup(id)?.name,
+      control,
+      controlForParameter: (address) => byAddress.get(address)
+    }
+  })
 
   return {
     automations,

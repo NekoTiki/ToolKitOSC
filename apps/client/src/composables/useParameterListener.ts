@@ -1,6 +1,7 @@
 import { useControls } from '@renderer/composables/useControls'
 import { api } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
+import { controlsByAddress } from '@renderer/utils/controlAddresses'
 import type { Ref } from 'vue'
 import { computed, ref } from 'vue'
 
@@ -103,28 +104,8 @@ export function useParameterListener(): {
   stop: () => void
 } {
   const { controls } = useControls()
-  controlNames = () => {
-    const names = new Map<string, string>()
-    for (const control of controls.value.flatMap((group) => group.controls)) {
-      const addresses = (() => {
-        switch (control.type) {
-          case 'boolean':
-          case 'enum':
-          case 'step-enum':
-          case 'slider':
-            return [control.inputAddress]
-          case 'boolean-group':
-            return control.inputs.map((input) => input.inputAddress)
-          case 'boolean-enum':
-            return control.inputs.flatMap((input) => [...input.inputAddress.true, ...input.inputAddress.false])
-          default:
-            return []
-        }
-      })()
-      addresses.forEach((address) => names.set(address, control.name))
-    }
-    return names
-  }
+  controlNames = () =>
+    new Map([...controlsByAddress(controls.value.flatMap((group) => group.controls))].map(([address, control]) => [address, control.name]))
 
   const me = Symbol('listener')
   const mine = computed(() => owner.value === me)
