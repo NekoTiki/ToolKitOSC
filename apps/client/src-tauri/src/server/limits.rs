@@ -1,7 +1,8 @@
-//! The checks a viewer's command goes through, ported from
-//! `packages/shared-ui/src/utils/controlLimits.ts`. The relay runs the TypeScript ones and the host
-//! runs these, so they must agree: both are run against the same cases in
-//! `controlLimits.vectors.json` (vitest there, `cargo test` here). Change one, change the other.
+//! The checks a viewer's command goes through. Only the desktop app runs them: the relay forwards
+//! commands as they come, and viewers and its stats only see what this let through. The cases are in
+//! `packages/shared-ui/src/utils/controlLimits.vectors.json`. Its `resolved` part is also what
+//! `resolveControlForViewer` (shared-ui) shows each viewer, so that part must agree with
+//! `resolve_control_for_viewer` here (vitest there, `cargo test` here).
 //!
 //! Controls and commands stay JSON (`serde_json::Value`), as they arrive: every control type
 //! passes through without a Rust copy of its shape.

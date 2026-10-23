@@ -4,8 +4,7 @@ import type { Peer } from 'crossws'
 
 import type { User } from '#auth-utils'
 import type { ControlGroup, ControlType, PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
-import { VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '#shared/types/protocol'
-import { resolveControlForViewer, sanitizeCommand } from '#shared/utils/controlLimits'
+import { resolveControlForViewer } from '#shared/utils/controlLimits'
 import { guestName } from '#shared/utils/guestName'
 import {
   hostArgs,
@@ -19,7 +18,6 @@ import {
   sendClientListToHost,
   sendMessageToHost
 } from '~~/server/routes/host'
-import { scheduleControlActivation } from '~~/server/utils/controlStats'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
@@ -252,37 +250,11 @@ export default defineWebSocketHandler({
         // The host stopped everything: the page shows a paused card, and the host would reject it.
         if (hostPaused.has(roomId!)) return
 
-        // Check the command against the controls this viewer was sent (locks, the active profile's
-        // limits and their groups' rules, value types) so a hand-written message never reaches the
-        // host or the stats. A control the cache doesn't know is passed on as-is: the host decides,
-        // and logs it.
-        const control = hostControls
-          .get(roomId!)
-          ?.find((group) => group.id === data.message.groupId)
-          ?.controls.find((c) => c.id === data.message.controlId)
-
-        if (control) {
-          const command = sanitizeCommand(viewerControl(roomId!, sessionId, control), data.message)
-
-          if (!command) return
-
-          // A viewer's own pattern can be kept to viewers signed in with Discord.
-          const viewerPattern = command.type === 'intiface-pattern' && (command.value === VIEWER_PATTERN_ID || command.value === VIEWER_LIVE_ID)
-
-          if (viewerPattern && control.type === 'intiface-pattern' && control.viewerPatterns?.signedInOnly && !user?.discord?.id) return
-          // So can the OWO Skin, unless the control says otherwise.
-          if (control.type === 'owo' && control.signedInOnly !== false && !user?.discord?.id) return
-
-          data.message = { ...data.message, ...command }
-        }
-
-        // Live values while a viewer records a pattern aren't activations of their own, and neither
-        // is a bHaptics hold after its first message.
-        const live =
-          (data.message.type === 'intiface-pattern' && data.message.value === VIEWER_LIVE_ID) ||
-          (data.message.type === 'bhaptics' && data.message.value === 'hold' && data.message.start !== true)
-
-        if (!live) scheduleControlActivation(roomId!, data.message.groupId, data.message.controlId, data.message.type)
+        // Only the shape is checked here. Whether this viewer may do this (locks, limits, their
+        // groups' rules, sign-in, bans) is decided by the desktop app alone
+        // (apps/client/src-tauri/src/server/viewer_commands.rs), which clamps the value and answers
+        // with command-accepted. Viewers and the stats only ever see what it accepted.
+        if (typeof data.message?.groupId !== 'string' || typeof data.message?.controlId !== 'string' || typeof data.message?.type !== 'string') return
       } else {
         // Mirror the host's copy (see useWebsocketHost.ts), so the new name shows in everyone's list.
         const client = clientList.get(roomId!)?.get(sessionId)

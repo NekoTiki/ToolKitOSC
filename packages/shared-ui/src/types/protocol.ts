@@ -47,6 +47,10 @@ export interface WsEnvelope<Type extends string, Message> {
 // type) and an older viewer page can't draw the tile, so viewers need an updated server for it.
 //
 // Additive, no bump: the 'owo' control type and its commands, and 'owo-value-update', the same way.
+//
+// No bump: the relay no longer checks commands against the controls, only their shape; the
+// desktop app always did and now does alone. Its daily stats count command-accepted. A new control
+// type then needs no relay change to be let through, only a viewer page that can draw it.
 export const PROTOCOL_VERSION = 2
 
 // Oldest client PROTOCOL_VERSION the server still accepts. Raise this only once no compatibility
