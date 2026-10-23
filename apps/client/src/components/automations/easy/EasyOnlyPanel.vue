@@ -13,6 +13,8 @@ import { computed } from 'vue'
 // Checked when it starts, like in Advanced.
 defineProps<{ otherAvatar: boolean }>()
 const guards = defineModel<AutomationGuard[]>({ required: true })
+// One check is enough instead of all of them.
+const any = defineModel<boolean | undefined>('any')
 
 const { lockedControlGroups } = useLockedControls()
 
@@ -71,7 +73,10 @@ const youItems = [
   { value: `${VR_MODE}:no`, label: "You're on desktop" }
 ]
 
-const parameterGuards = computed(() => guards.value.flatMap((guard, index) => (guard.kind === 'parameter' && !isYou(guard) ? [index] : [])))
+// The rest are rows: parameters, time, avatar, chance.
+const otherGuards = computed(() =>
+  guards.value.flatMap((guard, index) => (guard.kind !== 'viewers' && guard.kind !== 'profile' && !isYou(guard) ? [index] : []))
+)
 
 const addCheck = (): void => {
   guards.value.push({ kind: 'parameter', parameter: '', valueType: 'Bool', condition: { type: 'is-on' }, not: false })
@@ -114,12 +119,12 @@ const addCheck = (): void => {
       />
     </UFormField>
     <UFormField
-      label="Something on your avatar"
-      description="For example: only while your ears are up."
+      label="More checks"
+      description="Your avatar's parameters, the time, which avatar you wear, or a dice roll."
     >
       <div class="grid gap-2.5">
         <AutomationGuardRow
-          v-for="index in parameterGuards"
+          v-for="index in otherGuards"
           :key="index"
           v-model="guards[index]!"
           :other-avatar="otherAvatar"
@@ -136,6 +141,22 @@ const addCheck = (): void => {
           </UButton>
         </div>
       </div>
+    </UFormField>
+    <UFormField
+      v-if="guards.length > 1"
+      label="How many have to be true?"
+    >
+      <SegmentedControl
+        :model-value="any ? 'any' : 'all'"
+        :items="[
+          { value: 'all', label: 'All of them' },
+          { value: 'any', label: 'Any one' }
+        ]"
+        class="w-fit"
+        accent
+        aria-label="How many have to be true?"
+        @update:model-value="any = $event === 'any' || undefined"
+      />
     </UFormField>
   </FormSection>
 </template>

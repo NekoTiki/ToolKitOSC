@@ -11,7 +11,17 @@ import { useOscMessages } from '@renderer/composables/useOscMessages'
 import type { Automation, AutomationTrigger, LeashEvent, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { AppEventType, ConditionType } from '@renderer/utils/automations'
-import { CONDITIONS, defaultCondition, fitStepsToTrigger, newAutomation, parameterFamily, parameterName, setTriggerParameter } from '@renderer/utils/automations'
+import {
+  CONDITIONS,
+  defaultCondition,
+  fitStepsToTrigger,
+  formatMinutes,
+  newAutomation,
+  parameterFamily,
+  parameterName,
+  setTriggerParameter,
+  STOPPED_STEP
+} from '@renderer/utils/automations'
 import { EASY_HELD, seconds } from '@renderer/utils/automationSentence'
 import type { Hand } from '@renderer/utils/builtinParameters'
 import { GESTURES, gestureTrigger, HAND_ADDRESS, handOf, YOU_STATES, youState, youTrigger } from '@renderer/utils/builtinParameters'
@@ -28,7 +38,7 @@ const { controls } = useControls()
 const { isOn, offAddonForAutomationKind, offAddonForControlType } = useAddons()
 const { args } = useOscMessages()
 
-type Choice = 'avatar' | 'gesture' | 'you' | 'viewer' | 'switch' | 'leash' | 'resume'
+type Choice = 'avatar' | 'gesture' | 'you' | 'viewer' | 'switch' | 'leash' | 'every' | 'resume' | 'stopped'
 
 const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; description: string; icon: string }[] = [
   { value: 'avatar', kind: 'avatar-parameter', title: 'Something on your avatar', description: 'A boop, a headpat, a grab, a toggle in your menu.', icon: 'i-lucide-person-standing' },
@@ -37,7 +47,9 @@ const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; 
   { value: 'viewer', kind: 'app-event', title: 'A viewer does something', description: 'Joins your share page, leaves, or uses a control.', icon: 'i-lucide-users' },
   { value: 'switch', kind: 'avatar-changed', title: 'You put on an avatar', description: 'Also when the app starts while you wear it.', icon: 'i-lucide-repeat' },
   { value: 'leash', kind: 'leash', title: 'Your leash', description: 'Someone grabs it, pulls you to running or lets go.', icon: 'i-tkosc-collar' },
-  { value: 'resume', kind: 'app-event', title: 'Controls come back', description: 'You turn Stop everything off again.', icon: 'i-lucide-power' }
+  { value: 'every', kind: 'every', title: 'Every so often', description: 'A reminder every few minutes while the app is open.', icon: 'i-lucide-timer' },
+  { value: 'resume', kind: 'app-event', title: 'Controls come back', description: 'You turn Stop everything off again.', icon: 'i-lucide-power' },
+  { value: 'stopped', kind: 'app-event', title: 'Stop everything turns on', description: 'Only the chatbox can still say something.', icon: 'i-lucide-octagon-x' }
 ]
 
 const when = computed(() => automation.value.when)
@@ -47,7 +59,8 @@ const choice = computed((): Choice => {
   if (w.kind === 'avatar-parameter') return handOf(w.parameter) ? 'gesture' : youState(w.parameter) ? 'you' : 'avatar'
   if (w.kind === 'avatar-changed') return 'switch'
   if (w.kind === 'leash') return 'leash'
-  return w.event.type === 'resumed' ? 'resume' : 'viewer'
+  if (w.kind === 'every') return 'every'
+  return w.event.type === 'resumed' ? 'resume' : w.event.type === 'stopped' ? 'stopped' : 'viewer'
 })
 
 // An add-on's kind shows while it's on, or while this automation already uses it.
@@ -67,9 +80,16 @@ const choose = (value: Choice): void => {
             ? { kind: 'avatar-changed', avatarId: id, avatarName: name }
             : value === 'leash'
               ? { kind: 'leash', event: 'grabbed' }
-              : { kind: 'app-event', event: value === 'resume' ? { type: 'resumed' } : { type: 'viewer-joined' } }
+              : value === 'every'
+                ? { kind: 'every', minutes: 30 }
+                : { kind: 'app-event', event: value === 'resume' ? { type: 'resumed' } : value === 'stopped' ? { type: 'stopped' } : { type: 'viewer-joined' } }
+  // Everything else is stopped by then: only the chatbox can still say so.
+  if (value === 'stopped') automation.value.then = [{ ...STOPPED_STEP }]
   fitStepsToTrigger(automation.value)
 }
+
+const everyWhen = computed(() => (when.value.kind === 'every' ? when.value : null))
+const EVERY_ITEMS = [5, 15, 30, 60, 120].map((minutes) => ({ value: String(minutes), label: formatMinutes(minutes) }))
 
 // ---- Something on your avatar
 
@@ -229,7 +249,7 @@ const builtinHeld = computed({
 
 // ---- A viewer does something
 
-const eventWhen = computed(() => (when.value.kind === 'app-event' && when.value.event.type !== 'resumed' ? when.value : null))
+const eventWhen = computed(() => (when.value.kind === 'app-event' && choice.value === 'viewer' ? when.value : null))
 
 const VIEWER_EVENTS: { value: Exclude<AppEventType, 'resumed'>; label: string }[] = [
   { value: 'viewer-joined', label: 'Joins' },
@@ -482,6 +502,21 @@ const LEASH_ITEMS: { value: LeashEvent; label: string }[] = [
         />
       </UFormField>
     </template>
+
+    <UFormField
+      v-else-if="everyWhen"
+      label="How often?"
+      description="Counted from when the app starts or you save it."
+    >
+      <SegmentedControl
+        :model-value="String(everyWhen.minutes)"
+        :items="EVERY_ITEMS"
+        class="w-fit max-w-full flex-wrap"
+        accent
+        aria-label="How often?"
+        @update:model-value="everyWhen.minutes = Number($event)"
+      />
+    </UFormField>
 
     <template v-else-if="eventWhen">
       <UFormField label="The viewer…">

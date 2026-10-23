@@ -30,6 +30,7 @@ import {
   fitStepsToTrigger,
   formatMs,
   LEASH_EVENTS,
+  MAX_EVERY_MINUTES,
   MAX_GUARDS,
   MAX_HELD_MS,
   MAX_STEPS,
@@ -41,6 +42,7 @@ import {
   STEP_KINDS,
   stepFits,
   stepKindsFor,
+  STOPPED_STEP,
   triggerCondition} from '@renderer/utils/automations'
 import { useLocalStorage } from '@vueuse/core'
 import { computed, ref, toRaw, watch } from 'vue'
@@ -111,8 +113,12 @@ const eventType = computed({
   get: (): AppEventType => eventWhen.value?.event.type ?? 'viewer-command',
   set: (type: AppEventType) => {
     if (eventWhen.value) eventWhen.value.event = type === 'viewer-command' ? { type, controlId: null, controlType: null } : { type }
+    // Everything else is stopped by then: only the chatbox can still say so.
+    if (type === 'stopped' && draft.value) draft.value.then = [{ ...STOPPED_STEP }]
   }
 })
+
+const everyWhen = computed(() => (draft.value?.when.kind === 'every' ? draft.value.when : null))
 
 const eventItems = (Object.keys(APP_EVENTS) as AppEventType[]).map((type) => ({ value: type, label: APP_EVENTS[type].label }))
 
@@ -173,7 +179,9 @@ const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
         ? { kind, event: { type: 'viewer-command', controlId: null, controlType: null } }
         : kind === 'leash'
           ? { kind, event: 'grabbed' }
-          : newAutomation(id, name).when
+          : kind === 'every'
+            ? { kind, minutes: 30 }
+            : newAutomation(id, name).when
   fitSteps()
 }
 
@@ -189,7 +197,8 @@ const TRIGGER_KINDS: Record<AutomationTrigger['kind'], { label: string; descript
     label: 'Leash',
     description: 'Someone grabs your avatar leash, pulls you to running or lets go.',
     icon: 'i-tkosc-collar'
-  }
+  },
+  every: { label: 'Every so often', description: 'Every few minutes while the app is open.', icon: 'i-lucide-timer' }
 }
 
 // An add-on's kinds show while it's on, or while this automation already uses one.
@@ -554,6 +563,21 @@ onBeforeRouteLeave(async () => {
           </UFormField>
 
           <UFormField
+            v-if="everyWhen"
+            label="Every"
+            :description="`Minutes, up to ${MAX_EVERY_MINUTES} (a day). Counted from when the app starts or you save it.`"
+          >
+            <UInput
+              :model-value="everyWhen.minutes"
+              type="number"
+              min="1"
+              :max="MAX_EVERY_MINUTES"
+              class="w-28"
+              @update:model-value="everyWhen.minutes = Math.min(MAX_EVERY_MINUTES, Math.max(1, Math.round(Number($event) || 1)))"
+            />
+          </UFormField>
+
+          <UFormField
             v-if="changedWhen"
             label="Avatar"
             description="Also runs when the app starts while you already wear it."
@@ -681,8 +705,25 @@ onBeforeRouteLeave(async () => {
 
         <FormSection
           title="Only if"
-          :description="draft.onlyIf.length ? 'All of these have to be true when it starts.' : 'Always runs. Add a condition to only run sometimes.'"
+          :description="
+            draft.onlyIf.length
+              ? draft.onlyIfAny
+                ? 'One of these has to be true when it starts.'
+                : 'All of these have to be true when it starts.'
+              : 'Always runs. Add a condition to only run sometimes.'
+          "
         >
+          <SegmentedControl
+            v-if="draft.onlyIf.length > 1"
+            :model-value="draft.onlyIfAny ? 'any' : 'all'"
+            :items="[
+              { value: 'all', label: 'All of these' },
+              { value: 'any', label: 'Any of these' }
+            ]"
+            aria-label="All or any"
+            class="w-fit"
+            @update:model-value="draft.onlyIfAny = $event === 'any' || undefined"
+          />
           <template
             v-if="draft.onlyIf.length < MAX_GUARDS"
             #actions

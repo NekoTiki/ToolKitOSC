@@ -411,9 +411,34 @@ export const triggerIcon = (when: AutomationTrigger): string => {
     case 'leash':
       return 'i-tkosc-collar'
     case 'app-event':
-      return when.event.type === 'resumed' ? 'i-lucide-power' : 'i-lucide-users'
+      return when.event.type === 'resumed' ? 'i-lucide-power' : when.event.type === 'stopped' ? 'i-lucide-octagon-x' : 'i-lucide-users'
+    case 'every':
+      return 'i-lucide-timer'
   }
 }
+
+// What Stop everything turning on can still do: say so in the chatbox (model.rs validate).
+export const STOPPED_STEP: AutomationStep = { kind: 'chatbox', text: 'Stop everything is on', delayMs: 0 }
+
+// Minutes of the day as 22:00.
+export const formatClock = (minute: number): string =>
+  `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`
+
+export const parseClock = (text: string): number | null => {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim())
+  if (!match) return null
+  const minute = Number(match[1]) * 60 + Number(match[2])
+  return Number(match[1]) < 24 && Number(match[2]) < 60 ? minute : null
+}
+
+// 0 = Monday, as model.rs Now counts.
+export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+// Longest gap of an "every" trigger (model.rs MAX_EVERY_MINUTES).
+export const MAX_EVERY_MINUTES = 24 * 60
+
+export const formatMinutes = (minutes: number): string =>
+  minutes % 60 === 0 ? `${minutes / 60} h` : minutes > 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`
 
 // `live` leaves out the kinds of an add-on that's off (see useAddons).
 export const stepKindsFor = (condition: ConditionType, live: (kind: AutomationStep['kind']) => boolean = () => true): AutomationStep['kind'][] =>
@@ -669,7 +694,8 @@ export const APP_EVENTS: Record<AppEventType, { label: string; description: stri
     label: 'Last viewer leaves',
     description: 'Nobody is on your share page any more.'
   },
-  resumed: { label: 'Controls resume', description: 'You turn Stop everything off again.' }
+  resumed: { label: 'Controls resume', description: 'You turn Stop everything off again.' },
+  stopped: { label: 'Stop everything turns on', description: 'Only the chatbox can still say something.' }
 }
 
 export const LEASH_EVENTS: Record<LeashEvent, { label: string; description: string }> = {
@@ -689,6 +715,7 @@ const describeEvent = (event: AppEvent, context?: DescribeContext): string => {
 export const describeWhen = (when: AutomationTrigger, context?: DescribeContext): string => {
   if (when.kind === 'app-event') return describeEvent(when.event, context)
   if (when.kind === 'leash') return `the leash is ${when.event === 'running' ? 'pulled to running' : when.event === 'released' ? 'let go' : 'grabbed'}`
+  if (when.kind === 'every') return `every ${formatMinutes(when.minutes)}`
   if (when.kind === 'avatar-changed')
     return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
@@ -852,14 +879,20 @@ export const describeGuard = (guard: AutomationGuard, context: DescribeContext):
       return guard.profileId
         ? `${context.profileName?.(guard.profileId) ?? 'a profile'} is active`
         : 'no profile is active'
+    case 'time':
+      return `it's ${formatClock(guard.from)}–${formatClock(guard.to)}${guard.days.length ? ` on ${guard.days.map((d) => WEEKDAYS[d]).join(', ')}` : ''}`
+    case 'wearing':
+      return `you ${guard.not ? "aren't" : 'are'} wearing ${guard.avatarName}`
+    case 'chance':
+      return `a ${guard.percent} % chance`
     default:
-      return guard.online ? 'viewers are on' : 'nobody is watching'
+      return !guard.online ? 'nobody is watching' : (guard.atLeast ?? 0) > 1 ? `at least ${guard.atLeast} viewers are on` : 'viewers are on'
   }
 }
 
 export const describe = (automation: Automation, context: DescribeContext): string => {
   const onlyIf = automation.onlyIf.length
-    ? `, only if ${automation.onlyIf.map((g) => describeGuard(g, context)).join(' and ')}`
+    ? `, only if ${automation.onlyIf.map((g) => describeGuard(g, context)).join(automation.onlyIfAny ? ' or ' : ' and ')}`
     : ''
   return `When ${describeWhen(automation.when, context)}${onlyIf} → ${automation.then.map((step) => describeStep(step, context)).join(' · ')}`
 }

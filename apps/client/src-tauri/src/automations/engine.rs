@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use super::model::{
-    Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, LeashEvent, OutputAction, ParameterAction, Retrigger, Runs, ToyRun, Trigger,
-    ValueType
+    Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, LeashEvent, Now, OutputAction, ParameterAction, Retrigger, Runs, ToyRun,
+    Trigger, ValueType
 };
 use crate::boards::protocol::OutputMessage;
 
@@ -35,6 +35,8 @@ pub trait Env {
     /// Whether the add-on this step needs is on (see `crate::addons`). Steps of an add-on that's
     /// off are skipped.
     fn live(&self, action: &Action) -> bool;
+    /// The local clock and a fresh dice roll, for time and chance guards.
+    fn now(&self) -> Now;
 }
 
 #[derive(Default)]
@@ -148,6 +150,8 @@ pub struct State {
     values: HashMap<String, f64>,
     /// Ids last reported as running.
     reported: HashSet<String>,
+    /// When each `every` automation runs next.
+    timers: HashMap<String, Instant>,
     /// What the frontend last said about the profile and viewers, for guards.
     pub context: Context
 }
@@ -216,18 +220,20 @@ impl State {
 
     /// Something the frontend reports, e.g. a viewer using a control.
     pub fn on_event(&mut self, happened: &AppEvent, env: &dyn Env) -> Vec<Effect> {
-        self.on_moment(|when| matches!(when, Trigger::AppEvent { event } if event.matches(happened)), env)
+        // Stop everything turning on is the one thing that runs while it's on (chatbox steps only).
+        let while_paused = *happened == AppEvent::Stopped;
+        self.on_moment(|when| matches!(when, Trigger::AppEvent { event } if event.matches(happened)), while_paused, env)
     }
 
     /// The avatar leash was grabbed, pulled to running or let go.
     pub fn on_leash(&mut self, happened: LeashEvent, env: &dyn Env) -> Vec<Effect> {
-        self.on_moment(|when| matches!(when, Trigger::Leash { event } if *event == happened), env)
+        self.on_moment(|when| matches!(when, Trigger::Leash { event } if *event == happened), false, env)
     }
 
     /// Fires every automation whose trigger `matches`.
-    fn on_moment(&mut self, matches: impl Fn(&Trigger) -> bool, env: &dyn Env) -> Vec<Effect> {
+    fn on_moment(&mut self, matches: impl Fn(&Trigger) -> bool, while_paused: bool, env: &dyn Env) -> Vec<Effect> {
         let mut effects = Vec::new();
-        if self.paused {
+        if self.paused && !while_paused {
             return effects;
         }
         let now = Instant::now();
@@ -240,7 +246,13 @@ impl State {
     }
 
     fn guards_hold(&self, automation: &Automation, env: &dyn Env) -> bool {
-        automation.only_if.iter().all(|guard| guard.holds(&self.context, &|address| self.value(address, env)))
+        let now = env.now();
+        let holds = |guard: &super::model::Guard| guard.holds(&self.context, now, &|address| self.value(address, env));
+        if automation.only_if_any && !automation.only_if.is_empty() {
+            automation.only_if.iter().any(holds)
+        } else {
+            automation.only_if.iter().all(holds)
+        }
     }
 
     fn fire(&mut self, automation: &Automation, now: Instant, env: &dyn Env, effects: &mut Vec<Effect>) {
@@ -538,6 +550,25 @@ impl State {
             return effects;
         }
 
+        let every: Vec<(Automation, u32)> = self
+            .automations
+            .iter()
+            .filter(|a| a.enabled)
+            .filter_map(|a| match a.when {
+                Trigger::Every { minutes } => Some((a.clone(), minutes)),
+                _ => None
+            })
+            .collect();
+        self.timers.retain(|id, _| every.iter().any(|(a, _)| &a.id == id));
+        for (automation, minutes) in every {
+            let gap = Duration::from_secs(u64::from(minutes) * 60);
+            let due = *self.timers.entry(automation.id.clone()).or_insert(now + gap);
+            if due <= now {
+                self.timers.insert(automation.id.clone(), now + gap);
+                self.fire(&automation, now, env, &mut effects);
+            }
+        }
+
         let (due, waiting): (Vec<Pending>, Vec<Pending>) = std::mem::take(&mut self.pending).into_iter().partition(|p| p.due <= now);
         self.pending = waiting;
         for pending in due {
@@ -621,6 +652,7 @@ impl State {
         let now = Instant::now();
         let mut effects = Vec::new();
         self.pending.retain(|p| p.automation_id != automation_id);
+        self.timers.remove(automation_id);
         self.unclaim(automation_id, None, now, &mut effects);
         self.runtime.remove(automation_id);
         self.report(now, &mut effects);
@@ -700,6 +732,10 @@ mod tests {
         fn live(&self, action: &Action) -> bool {
             !matches!(action, Action::BoardOutput { board_id, .. } if board_id == "off")
         }
+        /// Monday noon, and a roll of 0.5.
+        fn now(&self) -> Now {
+            Now { weekday: 0, minute: 12 * 60, roll: 0.5 }
+        }
     }
 
     fn board(output: OutputAction) -> Step {
@@ -728,6 +764,7 @@ mod tests {
             cooldown_ms: 0,
             retrigger: Retrigger::Restart,
             only_if: Vec::new(),
+            only_if_any: false,
             created_by: None
         }
     }
@@ -1253,13 +1290,13 @@ mod tests {
         let mut state = State::default();
         let mut a = automation("a", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
         a.only_if = vec![
-            Guard::Viewers { online: true },
+            Guard::Viewers { online: true, at_least: 0 },
             Guard::Parameter { parameter: "/avatar/parameters/Armed".into(), value_type: ValueType::Bool, condition: Condition::IsOn, not: false }
         ];
         state.automations.push(a);
 
         assert!(change(&mut state, 0.0, 1.0).is_empty(), "no viewers");
-        state.context = Context { profile_id: None, viewers: 2 };
+        state.context = Context { profile_id: None, viewers: 2, avatar_id: None };
         assert!(change(&mut state, 0.0, 1.0).is_empty(), "not armed");
         state.on_parameter("avtr_1", "/avatar/parameters/Armed", Some(0.0), 1.0, &TestEnv);
         assert_eq!(change(&mut state, 0.0, 1.0).len(), 1);
@@ -1279,6 +1316,61 @@ mod tests {
 
     fn ran(effects: &[Effect]) -> usize {
         effects.iter().filter(|e| matches!(e, Effect::Ran(_))).count()
+    }
+
+    #[test]
+    fn time_wearing_chance_and_viewer_count_guards() {
+        let noon = Now { weekday: 0, minute: 12 * 60, roll: 0.5 };
+        let context = Context { profile_id: None, viewers: 2, avatar_id: Some("avtr_1".into()) };
+        let holds = |guard: Guard| guard.holds(&context, noon, &|_| None);
+
+        assert!(holds(Guard::Time { from: 11 * 60, to: 13 * 60, days: vec![] }));
+        assert!(!holds(Guard::Time { from: 11 * 60, to: 13 * 60, days: vec![5, 6] }), "weekends only");
+        assert!(!holds(Guard::Time { from: 22 * 60, to: 2 * 60, days: vec![] }), "night only");
+        let night = Now { minute: 60, ..noon };
+        assert!(Guard::Time { from: 22 * 60, to: 2 * 60, days: vec![] }.holds(&context, night, &|_| None), "across midnight");
+
+        assert!(holds(Guard::Wearing { avatar_id: "avtr_1".into(), avatar_name: "A".into(), not: false }));
+        assert!(holds(Guard::Wearing { avatar_id: "avtr_2".into(), avatar_name: "B".into(), not: true }));
+        assert!(holds(Guard::Chance { percent: 60 }));
+        assert!(!holds(Guard::Chance { percent: 40 }));
+        assert!(holds(Guard::Viewers { online: true, at_least: 2 }));
+        assert!(!holds(Guard::Viewers { online: true, at_least: 3 }));
+    }
+
+    #[test]
+    fn any_guard_is_enough_with_only_if_any() {
+        let mut state = State::default();
+        let mut a = automation("a", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.only_if = vec![Guard::Viewers { online: true, at_least: 0 }, Guard::Profile { profile_id: Some("spicy".into()) }];
+        a.only_if_any = true;
+        state.automations.push(a);
+        assert!(change(&mut state, 0.0, 1.0).is_empty(), "neither");
+        state.context.profile_id = Some("spicy".into());
+        assert_eq!(change(&mut state, 0.0, 1.0).len(), 1, "one is enough");
+    }
+
+    #[test]
+    fn stopped_runs_chatbox_steps_while_paused() {
+        let mut state = State::default();
+        let mut a = automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![Step { action: Action::Chatbox { text: "Paused".into() }, delay_ms: 0 }]);
+        a.when = Trigger::AppEvent { event: AppEvent::Stopped };
+        state.automations.push(a);
+        state.set_paused(true);
+        assert_eq!(app_phases(&state.on_event(&AppEvent::Stopped, &TestEnv)), vec![(0, Phase::Run)]);
+        assert!(app_phases(&state.on_event(&AppEvent::Resumed, &TestEnv)).is_empty());
+    }
+
+    #[test]
+    fn every_waits_its_gap_first() {
+        let mut state = State::default();
+        let mut a = automation_with("a", Condition::TurnsOn, ValueType::Bool, vec![Step { action: Action::Chatbox { text: "Hydrate".into() }, delay_ms: 0 }]);
+        a.when = Trigger::Every { minutes: 30 };
+        state.automations.push(a);
+        assert_eq!(ran(&state.tick(&TestEnv)), 0, "not at once");
+        state.timers.insert("a".into(), Instant::now());
+        assert_eq!(ran(&state.tick(&TestEnv)), 1);
+        assert_eq!(ran(&state.tick(&TestEnv)), 0, "then waits again");
     }
 
     #[test]
