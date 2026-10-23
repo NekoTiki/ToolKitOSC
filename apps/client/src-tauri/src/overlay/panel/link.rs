@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
@@ -82,17 +82,9 @@ async fn serve(app: &AppHandle, stream: tokio::net::TcpStream, token: &str) -> R
     }
 }
 
-/// Something pressed on the panel. Pause and profiles live in the webview, which gets
-/// `overlay-action`; Stop also stops here right away, in case the window is busy.
+/// Something pressed on the panel.
 fn act(app: &AppHandle, action: ToApp) {
     tracing::info!("Panel: {action:?}");
-    if action == ToApp::Stop {
-        crate::automations::set_paused(app, true);
-        let handle = app.clone();
-        tauri::async_runtime::spawn(async move {
-            crate::addons::stop_everything(&handle).await;
-        });
-    }
     match &action {
         ToApp::Control { group_id, control_id, level, pick } => {
             super::pinned::press(app, group_id, control_id, *level, *pick);
@@ -105,8 +97,13 @@ fn act(app: &AppHandle, action: ToApp) {
                 tracing::warn!("Panel: couldn't start Intiface Central: {err}");
             }
         }
-        ToApp::Stop | ToApp::Resume | ToApp::Profile { .. } => {
-            let _ = app.emit("overlay-action", &action);
+        ToApp::Stop => crate::setup::stop::stop_now(app),
+        ToApp::Resume => crate::setup::stop::resume(app),
+        // A profile deleted since is ignored.
+        ToApp::Profile { id } => {
+            if let Err(err) = crate::setup::switch_profile(app, id.clone()) {
+                tracing::debug!("Panel: couldn't switch the profile: {err}");
+            }
         }
         ToApp::Hello { .. } => {}
     }

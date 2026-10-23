@@ -6,7 +6,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 use super::{overlay, pinned, store};
-use crate::wrist::protocol::{AddonRow, Home, Pinned, Pull, State, ToyRow, Viewer};
+use crate::wrist::protocol::{AddonRow, Home, Pinned, Profile, Pull, State, ToyRow, Viewer};
 
 const RECENT: Duration = Duration::from_secs(60);
 
@@ -18,6 +18,8 @@ pub fn build(app: &AppHandle) -> State {
     let toys = toys(app);
     let (watching, signed_in) = crate::server::viewer_counts(app);
     let paused = crate::automations::is_paused(app);
+    let setup = crate::setup::snapshot(app);
+    let profiles = setup.profiles.iter().map(|profile| Profile { id: profile.id.clone(), name: profile.name.clone() }).collect();
     let mut panel = overlay(app).panel.lock().unwrap();
     while panel.recent.front().is_some_and(|at| at.elapsed() > RECENT) {
         panel.recent.pop_front();
@@ -26,7 +28,7 @@ pub fn build(app: &AppHandle) -> State {
         paused,
         panel: settings.panel,
         theme: panel.theme.clone(),
-        home: Home { watching, signed_in, recent: panel.recent.len(), profile: panel.profile.clone(), profiles: panel.profiles.clone() },
+        home: Home { watching, signed_in, recent: panel.recent.len(), profile: setup.active_profile, profiles },
         activity: panel.activity.iter().cloned().collect(),
         viewers,
         pinned,
@@ -46,12 +48,13 @@ fn pull(app: &AppHandle) -> Option<Pull> {
 /// Who's on the share page, with their groups' names and what they did last.
 fn viewers(app: &AppHandle) -> Vec<Viewer> {
     let viewers = crate::server::viewers(app);
+    let names = crate::setup::viewers::groups(app);
     let panel = overlay(app).panel.lock().unwrap();
     viewers
         .into_iter()
         .map(|(viewer, groups)| Viewer {
             last: panel.activity.iter().find(|entry| entry.who == viewer.display_name).cloned(),
-            groups: groups.iter().filter_map(|id| panel.groups.iter().find(|group| &group.id == id).map(|group| group.name.clone())).collect(),
+            groups: groups.iter().filter_map(|id| names.iter().find(|group| &group.id == id).map(|group| group.name.clone())).collect(),
             signed_in: viewer.discord_id.is_some(),
             name: viewer.display_name
         })

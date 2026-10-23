@@ -74,3 +74,21 @@ pub fn setup_unban(app: AppHandle, scope: String, value: String) -> Result<(), S
 pub fn setup_migrate_viewers(app: AppHandle, viewers: super::viewers::ViewersFile) -> Result<(), String> {
     super::viewers::migrate(&app, viewers)
 }
+
+/// Whether Stop everything is on.
+#[tauri::command]
+pub fn stop_paused(app: AppHandle) -> bool {
+    super::stop::is_paused(&app)
+}
+
+/// Lets viewers, assistants and automations act again after Stop everything.
+#[tauri::command]
+pub fn stop_resume(app: AppHandle) {
+    super::stop::resume(&app);
+}
+
+/// Once, from the paused state the webview used to keep in localStorage.
+#[tauri::command]
+pub fn stop_migrate(app: AppHandle, paused: bool) {
+    super::stop::migrate(&app, paused);
+}

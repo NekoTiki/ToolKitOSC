@@ -32,11 +32,6 @@ pub fn automation_test(app: AppHandle, id: String) -> Result<(), String> {
     super::test(&app, &id)
 }
 
-/// Mirrors Stop everything's paused state.
-#[tauri::command]
-pub fn automations_set_paused(app: AppHandle, paused: bool) {
-    super::set_paused(&app, paused);
-}
 
 /// Something happened in the app that automations can start from (a viewer used a control...).
 #[tauri::command]
@@ -44,7 +39,7 @@ pub fn automation_event(app: AppHandle, event: super::model::AppEvent) {
     super::event(&app, &event);
 }
 
-/// The active profile and how many viewers are on, for "only if".
+/// How many viewers are on, for "only if".
 #[tauri::command]
 pub fn automations_set_context(app: AppHandle, context: super::model::Context) {
     super::set_context(&app, context);

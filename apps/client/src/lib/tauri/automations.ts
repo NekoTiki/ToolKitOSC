@@ -70,8 +70,8 @@ export type AutomationGuard =
   | { kind: 'viewers'; online: boolean }
 
 // What "only if" needs from the app.
+// How many viewers are on, for "only if". Rust knows the active profile itself.
 export interface AutomationContext {
-  profileId: string | null
   viewers: number
 }
 
@@ -190,8 +190,6 @@ export const automationsApi = {
   automationSetEnabled: (id: string, enabled: boolean): Promise<void> =>
     invoke('automation_set_enabled', { id, enabled }),
   automationTest: (id: string): Promise<void> => invoke('automation_test', { id }),
-  automationsSetPaused: (paused: boolean): Promise<void> =>
-    invoke('automations_set_paused', { paused }),
   automationEvent: (event: AppEvent): Promise<void> => invoke('automation_event', { event }),
   automationsSetContext: (context: AutomationContext): Promise<void> =>
     invoke('automations_set_context', { context }),

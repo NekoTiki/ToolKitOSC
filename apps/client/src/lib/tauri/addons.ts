@@ -56,7 +56,15 @@ export const addonsApi = {
   // Starts or stops it right away. Turning one off stops its devices first.
   addonsSetEnabled: (id: string, enabled: boolean): Promise<void> => invoke('addons_set_enabled', { id, enabled }),
   addonsFinishSetup: (dismissKept: boolean): Promise<void> => invoke('addons_finish_setup', { dismissKept }),
+  // Stop everything: every add-on stops and nothing can act until stopResume().
   addonsStopEverything: (): Promise<AddonStopFailure[]> => invoke('addons_stop_everything'),
+  stopResume: (): Promise<void> => invoke('stop_resume'),
+  stopPaused: (): Promise<boolean> => invoke('stop_paused'),
+  stopMigrate: (paused: boolean): Promise<void> => invoke('stop_migrate', { paused }),
+  // Stop everything turned on or off, from anywhere (the panel, an automation, TKOSC/Panic...).
+  onPausedChanged: (callback: (paused: boolean) => void): void => {
+    void listen<boolean>('paused-changed', (event) => callback(event.payload))
+  },
   onAddonsUpdate: (callback: (state: AddonsState) => void): void => {
     void listen<AddonsState>('addons-update', (event) => callback(event.payload))
   },

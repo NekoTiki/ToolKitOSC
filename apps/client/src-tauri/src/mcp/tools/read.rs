@@ -4,7 +4,7 @@
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::{schemars, tool, tool_router};
 use serde_json::json;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 use super::json;
 use crate::mcp::server::Session;
@@ -201,10 +201,7 @@ impl Session {
     #[tool(description = "Stops everything at once, like the host's Stop button: every toy, pattern, shocker and board output, and no viewer or assistant can act until the host resumes. Use it if anything goes wrong. There's no way for you to resume.")]
     async fn stop_everything(&self, Parameters(StopRequest { reason }): Parameters<StopRequest>) -> Result<String, String> {
         tracing::warn!("MCP: an assistant stopped everything ({})", reason.as_deref().unwrap_or("no reason given"));
-        crate::automations::set_paused(&self.app, true);
-        // The pause itself lives in the webview, which carries it out as for the wrist panel's Stop.
-        let _ = self.app.emit("overlay-action", crate::wrist::protocol::ToApp::Stop);
-        let failures = crate::addons::stop_everything(&self.app).await;
+        let failures = crate::setup::stop::stop(&self.app).await;
         if failures.is_empty() {
             Ok("Everything stopped. The host has to resume.".to_owned())
         } else {

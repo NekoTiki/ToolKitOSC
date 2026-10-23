@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 
 use crate::state::AppState;
 use crate::types::{OscArg, OscMessage};
-use crate::wrist::protocol::{Profile, Theme};
+use crate::wrist::protocol::Theme;
 use model::{NotifySettings, Target};
 use notify::{Kind, Toast};
 
@@ -155,8 +155,13 @@ pub fn automation_ran(app: &AppHandle, name: &str) {
 }
 
 /// The profiles and the active one, the viewer groups and the theme, from the webview.
-pub fn set_context(app: &AppHandle, profiles: Vec<Profile>, profile: Option<String>, groups: Vec<Profile>, theme: Theme) {
-    panel::set_context(app, profiles, profile, groups, theme);
+pub fn set_theme(app: &AppHandle, theme: Theme) {
+    panel::set_theme(app, theme);
+}
+
+/// The controls, profiles or viewer groups changed (see `setup`): the panel shows them.
+pub fn setup_changed(app: &AppHandle) {
+    panel::refresh(app);
 }
 
 /// A live avatar parameter from VRChat: `TKOSC/Hud` shows or hides the HUD while the add-on is on.

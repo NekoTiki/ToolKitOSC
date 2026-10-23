@@ -7,6 +7,7 @@
 //! The list is global. An avatar-parameter trigger carries its avatar, so it only runs while that
 //! avatar is worn. Only live changes count: values read when an avatar loads never reach here
 //! (see `osc::udp::handle_message`).
+mod app_steps;
 mod control_runs;
 mod engine;
 pub mod model;
@@ -122,8 +123,8 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 }
             }
             Effect::App(run) => {
-                // Control steps run here; profiles, the chatbox and Stop everything in the webview.
-                if !control_runs::run(app, &run) {
+                // Control, profile and Stop everything steps run here; the chatbox in the webview.
+                if !control_runs::run(app, &run) && !app_steps::run(app, &run) {
                     let _ = app.emit("automation-run", run);
                 }
             }
@@ -321,7 +322,7 @@ pub fn test(app: &AppHandle, id: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Stop everything is on (mirrored from the webview, see `set_paused`).
+/// Stop everything is on (see `setup::stop`, which keeps it).
 pub fn is_paused(app: &AppHandle) -> bool {
     automations(app).state.lock().unwrap().paused
 }
@@ -342,8 +343,15 @@ pub fn event(app: &AppHandle, event: &model::AppEvent) {
     apply(app, effects);
 }
 
+/// How many viewers are on, from the webview. The profile comes from `set_profile`.
 pub fn set_context(app: &AppHandle, context: model::Context) {
-    automations(app).state.lock().unwrap().context = context;
+    let mut state = automations(app).state.lock().unwrap();
+    state.context = model::Context { profile_id: state.context.profile_id.take(), ..context };
+}
+
+/// The worn avatar's active profile, for "only if".
+pub fn set_profile(app: &AppHandle, profile_id: Option<String>) {
+    automations(app).state.lock().unwrap().context.profile_id = profile_id;
 }
 
 fn number(message: &OscMessage) -> Option<f64> {
@@ -383,6 +391,7 @@ pub fn avatar_worn(app: &AppHandle, avatar_id: &str) {
 pub fn avatar_changed(app: &AppHandle) {
     // Control holds and pulses belonged to the old avatar's controls: forgotten, not put back.
     control_runs::forget();
+    app_steps::avatar_changed();
     let effects = automations(app).state.lock().unwrap().release_all();
     apply(app, effects);
 }
