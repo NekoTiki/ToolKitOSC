@@ -161,6 +161,11 @@ pub fn set_policy(app: &AppHandle, policy: policy::Policy) {
     server(app).inner.lock().unwrap().policy = Some(policy);
 }
 
+/// Whether the server signed us in, so it takes more than `auth-token`.
+pub fn authed(app: &AppHandle) -> bool {
+    server(app).inner.lock().unwrap().authed
+}
+
 /// The link's state, None before the first connect.
 pub fn status(app: &AppHandle) -> Option<Status> {
     server(app).inner.lock().unwrap().status
@@ -199,7 +204,7 @@ fn policy_and_client(app: &AppHandle, peer_id: &str) -> Option<(policy::Policy, 
 }
 
 /// Sends a `{type, message}` envelope Rust built itself.
-fn send_message(app: &AppHandle, kind: &str, message: serde_json::Value) {
+pub(crate) fn send_message(app: &AppHandle, kind: &str, message: serde_json::Value) {
     let text = serde_json::json!({ "type": kind, "message": message }).to_string();
     debug_out(app, &text);
     send(app, text);
@@ -344,6 +349,10 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
             }
         }
         crate::overlay::viewers_changed(app);
+        crate::setup::sync(app, false);
+    }
+    if kind.as_deref() == Some("auth-success") {
+        crate::setup::sync(app, true);
     }
 
     if kind.as_deref() == Some("command") {

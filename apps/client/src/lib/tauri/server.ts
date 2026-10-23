@@ -84,9 +84,6 @@ export const serverApi = {
   serverDisconnect: (): Promise<void> => invoke('server_disconnect'),
   // One `{type, message}` envelope as JSON text. Dropped while the link is down.
   serverSend: (text: string): Promise<void> => invoke('server_send', { text }),
-  // The avatar parameters the share page shows. Rust sends their values itself, now and on change.
-  serverSetForwardedAddresses: (addresses: string[]): Promise<void> =>
-    invoke('server_set_forwarded_addresses', { addresses }),
   // These three resolve once the listener is registered.
   onServerStatus: (callback: (status: ServerStatus) => void): Promise<unknown> =>
     listen<ServerStatus>('server-status', (event) => callback(event.payload)),

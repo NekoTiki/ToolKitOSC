@@ -2,7 +2,6 @@ import { useAiAccess } from '@renderer/composables/useAiAccess'
 import { useAiCredits } from '@renderer/composables/useAiCredits'
 import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
 import { useAuth } from '@renderer/composables/useAuth'
-import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useChatbox } from '@renderer/composables/useChatbox'
 import { describeViewer, useClientsDb } from '@renderer/composables/useClientsDb'
 import { useClientType } from '@renderer/composables/useClientType'
@@ -12,12 +11,11 @@ import { onPatternRunEnd } from '@renderer/composables/useIntifacePatterns'
 import { useShareSettings } from '@renderer/composables/useShareSettings'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
 import { useTheme } from '@renderer/composables/useTheme'
-import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { assistantName } from '@renderer/utils/viewers'
-import type { ClientListEntry, ControlTypes, ViewerGroupsMessage } from '@toolkitosc/shared-ui'
+import type { ClientListEntry, ControlTypes } from '@toolkitosc/shared-ui'
 import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import type { ComputedRef } from 'vue'
@@ -76,43 +74,10 @@ export function useWebsocketHost(): {
   open: () => void
   close: () => void
 } {
-  const { visibleControls, setControlLastUser, getControl } = useControls(() => sendControls())
-
-
+  // Rust sends the controls viewers may see, the parameters they use and who is in which viewer
+  // group to the server itself (src-tauri/src/setup/sync.rs).
+  const { visibleControls, setControlLastUser, getControl } = useControls()
   const { user } = useAuth()
-  const { avatarDetails } = useAvatarDetails()
-
-  const addressList = computed<Set<string>>(() => {
-    const addresses = new Set<string>()
-
-    // visibleControls, not controls: a hidden group's addresses must never be forwarded to
-    // clients either, or its live OSC state would leak to the share page even though the group
-    // itself doesn't.
-    visibleControls.value?.forEach((group) => {
-      group.controls.forEach((control) => {
-        if (control.type === 'boolean') {
-          addresses.add(control.inputAddress)
-        } else if (control.type === 'boolean-group') {
-          control.inputs.forEach((input) => {
-            addresses.add(input.inputAddress)
-          })
-        } else if (control.type === 'boolean-enum') {
-          control.inputs.forEach((input) => {
-            input.inputAddress.true.forEach((e) => addresses.add(e))
-            input.inputAddress.false.forEach((e) => addresses.add(e))
-          })
-        } else if (
-          control.type === 'enum' ||
-          control.type === 'slider' ||
-          control.type === 'step-enum'
-        ) {
-          addresses.add(control.inputAddress)
-        }
-      })
-    })
-
-    return addresses
-  })
 
   watch(
     [visibleControls, serverSupportedControlTypes],
@@ -147,7 +112,6 @@ export function useWebsocketHost(): {
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
   const { paused } = useStopEverything()
-  const { viewerGroups, activeGroupIds } = useViewerGroups()
   const { selectedPrimary, selectedSecondary } = useTheme()
 
   // A viewer's command Rust checked and ran (src-tauri/src/server/commands.rs), or accepted
@@ -240,11 +204,9 @@ export function useWebsocketHost(): {
       serverSupportedControlTypes.value = data.message.supportedControlTypes
       protocolMismatchReason.value = null
       useAiAccess().applyUpdate(data.message.aiAccess)
-      sendControls()
       sendTheme()
       sendMessage('share-settings', shareSettings.value)
       sendMessage('pause-state', { paused: paused.value })
-      sendMessage('viewer-groups', viewerGroupsMessage.value)
     } else if (data.type === 'auth-error') {
       // Rust forgets this token and connects again, signed out.
       console.error('Authentication failed:', data.message)
@@ -318,12 +280,6 @@ export function useWebsocketHost(): {
     void api.serverSend(JSON.stringify({ type, message }))
   }
 
-  // Rust sends the current value of each of these addresses after the controls, then every change.
-  const sendControls = (): void => {
-    sendMessage('controls-update', { avatarId: avatarDetails.value?.id ?? null, groups: visibleControls.value })
-    void api.serverSetForwardedAddresses(Array.from(addressList.value))
-  }
-
   const sendTheme = (): void => {
     sendMessage('theme-update', {
       primary: selectedPrimary.value,
@@ -377,28 +333,6 @@ export function useWebsocketHost(): {
   watch(paused, (value) => {
     if (status.value === 'OPEN') sendMessage('pause-state', { paused: value })
   })
-
-  // Who on the share page is in which viewer group, so the server sends each of them their own
-  // copy of the controls. Changes when someone joins or leaves, is added to or removed from a
-  // group, a temporary membership ends, or a group is renamed or recolored.
-  const viewerGroupsMessage = computed<ViewerGroupsMessage>(() => {
-    const members: Record<string, string[]> = {}
-
-    clients.value.forEach((client) => {
-      const ids = activeGroupIds(describeViewer(client).key)
-
-      if (ids.length) members[client.peerId] = ids
-    })
-
-    return { groups: viewerGroups.value, members }
-  })
-
-  watch(viewerGroupsMessage, (message, previous) => {
-    if (status.value === 'OPEN' && JSON.stringify(message) !== JSON.stringify(previous)) sendMessage('viewer-groups', message)
-  })
-
-  // When a profile's limits on a toy change, Rust brings running toys within them (see
-  // clamp_running in src-tauri/src/server/policy.rs), from the snapshot pushed above.
 
   return { clients, status, sendMessage, open, close }
 }
