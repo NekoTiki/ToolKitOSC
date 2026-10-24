@@ -498,7 +498,11 @@ pub fn fire(app: &AppHandle, fire: Fire) -> Result<(), String> {
     let task = tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(fire.delay_ms)).await;
         if available(&task_app) {
+            let shock = controls.iter().any(|control| control.kind == ControlType::Shock);
             send(&task_app, controls, name);
+            if shock {
+                crate::automations::shock_sent(&task_app);
+            }
         }
     });
 
@@ -645,7 +649,7 @@ impl crate::addons::Addon for Addon {
             needs: &[],
             needs_any: &[],
             control_types: &["open-shock-shocker"],
-            automation_kinds: &[],
+            automation_kinds: &["shock-sent"],
             pages: &[]
         }
     }

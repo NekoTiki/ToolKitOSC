@@ -260,6 +260,7 @@ fn tick(app: &AppHandle) {
     crate::owo::set_zones(app, muscles);
     crate::toys::set_touch(app, touches, priority);
     send_level(app, strongest);
+    touch_changed(app, strongest > priority.threshold);
 
     *haptics(app).levels.lock().unwrap() = levels;
     emit_view(app, false);
@@ -288,6 +289,19 @@ fn send_switch(app: &AppHandle, enabled: bool) {
     if let Err(err) = crate::osc::send(&state, &command) {
         tracing::warn!("Couldn't send {SWITCH_PARAMETER}: {err}");
     }
+}
+
+/// Whether touch drives anything, as automations last heard it.
+static TOUCHING: Mutex<bool> = Mutex::new(false);
+
+/// Tells automations when touch starts or stops.
+// shortcut: any zone counts; add a zone to the Touch trigger if someone wants only one.
+fn touch_changed(app: &AppHandle, touching: bool) {
+    if std::mem::replace(&mut *TOUCHING.lock().unwrap(), touching) == touching {
+        return;
+    }
+    let event = if touching { crate::automations::model::TouchEvent::Starts } else { crate::automations::model::TouchEvent::Stops };
+    crate::automations::touch_event(app, event);
 }
 
 /// `TKOSC/HapticsLevel`, when the worn avatar has it and the level changed.
@@ -398,7 +412,7 @@ impl crate::addons::Addon for Addon {
             needs: &[],
             needs_any: &["intiface", "bhaptics", "owo"],
             control_types: &[],
-            automation_kinds: &[],
+            automation_kinds: &["touch"],
             pages: &["haptics"]
         }
     }

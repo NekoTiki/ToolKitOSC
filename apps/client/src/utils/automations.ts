@@ -14,6 +14,7 @@ import type {
   ParameterAction,
   ParameterCondition,
   ParameterValueType,
+  ToyEvent,
   ToyRun
 } from '@renderer/lib/tauri-bridge'
 import type { ControlType, ControlTypes } from '@toolkitosc/shared-ui'
@@ -457,7 +458,21 @@ export const triggerIcon = (when: AutomationTrigger): string => {
       return when.event.type === 'resumed' ? 'i-lucide-power' : when.event.type === 'stopped' ? 'i-lucide-octagon-x' : 'i-lucide-users'
     case 'every':
       return 'i-lucide-timer'
+    case 'toy-event':
+      return 'i-lucide-vibrate'
+    case 'board-event':
+      return 'i-lucide-cpu'
+    case 'shock-sent':
+      return 'i-lucide-zap'
+    case 'touch':
+      return 'i-lucide-hand'
   }
+}
+
+export const TOY_EVENTS: Record<ToyEvent, string> = {
+  connected: 'A toy connects',
+  disconnected: 'A toy disconnects',
+  'battery-low': "A toy's battery runs low"
 }
 
 // What Stop everything turning on can still do: say so in the chatbox (model.rs validate).
@@ -760,6 +775,7 @@ export const APP_EVENTS: Record<AppEventType, { label: string; description: stri
     description: 'Nobody is on your share page any more.'
   },
   resumed: { label: 'Controls resume', description: 'You turn Stop everything off again.' },
+  'viewer-held-back': { label: 'A viewer is held back', description: 'A lock, a limit or a cooldown stopped their command.' },
   stopped: { label: 'Stop everything turns on', description: 'Only the chatbox can still say something.' }
 }
 
@@ -781,6 +797,10 @@ export const describeWhen = (when: AutomationTrigger, context?: DescribeContext)
   if (when.kind === 'app-event') return describeEvent(when.event, context)
   if (when.kind === 'leash') return `the leash is ${when.event === 'running' ? 'pulled to running' : when.event === 'released' ? 'let go' : 'grabbed'}`
   if (when.kind === 'every') return `every ${formatMinutes(when.minutes)}`
+  if (when.kind === 'toy-event') return TOY_EVENTS[when.event].toLowerCase()
+  if (when.kind === 'board-event') return `${when.boardId ? (context?.boards.find((b) => b.id === when.boardId)?.name ?? 'a board') : 'a board'} goes ${when.event}`
+  if (when.kind === 'shock-sent') return 'a shock goes out'
+  if (when.kind === 'touch') return `avatar touch ${when.event === 'starts' ? 'starts' : 'stops'}`
   if (when.kind === 'avatar-changed')
     return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
@@ -856,6 +876,7 @@ export interface DescribeContext {
   // A built-in or saved toy pattern's name.
   patternName?: (id: string) => string | undefined
   automationName?: (id: string) => string | undefined
+  groupName?: (id: string) => string | undefined
 }
 
 const describeControlRun = (run: ControlRun): string => {
@@ -975,6 +996,12 @@ export const describeGuard = (guard: AutomationGuard, context: DescribeContext):
       return `you ${guard.not ? "aren't" : 'are'} wearing ${guard.avatarName}`
     case 'chance':
       return `a ${guard.percent} % chance`
+    case 'viewer-group':
+      return `the viewer ${guard.not ? "isn't" : 'is'} in ${context.groupName?.(guard.groupId) ?? 'a group'}`
+    case 'toys-connected':
+      return guard.connected ? 'a toy is connected' : 'no toy is connected'
+    case 'board-online':
+      return `${context.boards.find((b) => b.id === guard.boardId)?.name ?? 'a board'} is ${guard.online ? 'online' : 'offline'}`
     default:
       return !guard.online ? 'nobody is watching' : (guard.atLeast ?? 0) > 1 ? `at least ${guard.atLeast} viewers are on` : 'viewers are on'
   }

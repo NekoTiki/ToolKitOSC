@@ -7,9 +7,10 @@ import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
+import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
 import { useOscMessages } from '@renderer/composables/useOscMessages'
-import type { Automation, AutomationTrigger, LeashEvent, ParameterValueType } from '@renderer/lib/tauri-bridge'
+import type { Automation, AutomationTrigger, LeashEvent, ParameterValueType, ToyEvent } from '@renderer/lib/tauri-bridge'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { AppEventType, ConditionType } from '@renderer/utils/automations'
 import {
@@ -21,7 +22,8 @@ import {
   parameterFamily,
   parameterName,
   setTriggerParameter,
-  STOPPED_STEP
+  STOPPED_STEP,
+  TOY_EVENTS
 } from '@renderer/utils/automations'
 import { EASY_HELD, seconds } from '@renderer/utils/automationSentence'
 import type { Hand } from '@renderer/utils/builtinParameters'
@@ -38,8 +40,9 @@ const { describeContext } = useAutomations()
 const { controls } = useControls()
 const { isOn, offAddonForAutomationKind, offAddonForControlType } = useAddons()
 const { args } = useOscMessages()
+const { boards } = useBoards()
 
-type Choice = 'avatar' | 'gesture' | 'you' | 'viewer' | 'switch' | 'leash' | 'every' | 'resume' | 'stopped'
+type Choice = 'avatar' | 'gesture' | 'you' | 'viewer' | 'switch' | 'leash' | 'toys' | 'board' | 'shock' | 'touch' | 'every' | 'resume' | 'stopped'
 
 const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; description: string; icon: string }[] = [
   { value: 'avatar', kind: 'avatar-parameter', title: 'Something on your avatar', description: 'A boop, a headpat, a grab, a toggle in your menu.', icon: 'i-lucide-person-standing' },
@@ -48,6 +51,10 @@ const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; 
   { value: 'viewer', kind: 'app-event', title: 'A viewer does something', description: 'Joins your share page, leaves, or uses a control.', icon: 'i-lucide-users' },
   { value: 'switch', kind: 'avatar-changed', title: 'You put on an avatar', description: 'Also when the app starts while you wear it.', icon: 'i-lucide-repeat' },
   { value: 'leash', kind: 'leash', title: 'Your leash', description: 'Someone grabs it, pulls you to running or lets go.', icon: 'i-tkosc-collar' },
+  { value: 'toys', kind: 'toy-event', title: 'Your toys', description: 'A toy connects, disconnects or runs low.', icon: 'i-lucide-vibrate' },
+  { value: 'board', kind: 'board-event', title: 'An ESP32 board', description: 'It goes offline or comes back.', icon: 'i-lucide-cpu' },
+  { value: 'shock', kind: 'shock-sent', title: 'A shock goes out', description: 'When OpenShock actually sends it.', icon: 'i-lucide-zap' },
+  { value: 'touch', kind: 'touch', title: 'Avatar touch', description: 'Touch starts or stops driving your toys or gear.', icon: 'i-lucide-hand' },
   { value: 'every', kind: 'every', title: 'Every so often', description: 'A reminder every few minutes while the app is open.', icon: 'i-lucide-timer' },
   { value: 'resume', kind: 'app-event', title: 'Controls come back', description: 'You turn Stop everything off again.', icon: 'i-lucide-power' },
   { value: 'stopped', kind: 'app-event', title: 'Stop everything turns on', description: 'Only the chatbox can still say something.', icon: 'i-lucide-octagon-x' }
@@ -61,6 +68,10 @@ const choice = computed((): Choice => {
   if (w.kind === 'avatar-changed') return 'switch'
   if (w.kind === 'leash') return 'leash'
   if (w.kind === 'every') return 'every'
+  if (w.kind === 'toy-event') return 'toys'
+  if (w.kind === 'board-event') return 'board'
+  if (w.kind === 'shock-sent') return 'shock'
+  if (w.kind === 'touch') return 'touch'
   return w.event.type === 'resumed' ? 'resume' : w.event.type === 'stopped' ? 'stopped' : 'viewer'
 })
 
@@ -83,6 +94,14 @@ const choose = (value: Choice): void => {
               ? { kind: 'leash', event: 'grabbed' }
               : value === 'every'
                 ? { kind: 'every', minutes: 30 }
+                : value === 'toys'
+                  ? { kind: 'toy-event', event: 'battery-low' }
+                  : value === 'board'
+                    ? { kind: 'board-event', event: 'offline', boardId: null }
+                    : value === 'shock'
+                      ? { kind: 'shock-sent' }
+                      : value === 'touch'
+                        ? { kind: 'touch', event: 'starts' }
                 : { kind: 'app-event', event: value === 'resume' ? { type: 'resumed' } : value === 'stopped' ? { type: 'stopped' } : { type: 'viewer-joined' } }
   // Everything else is stopped by then: only the chatbox can still say so.
   if (value === 'stopped') automation.value.then = [{ ...STOPPED_STEP }]
@@ -90,6 +109,11 @@ const choose = (value: Choice): void => {
 }
 
 const everyWhen = computed(() => (when.value.kind === 'every' ? when.value : null))
+const toyWhen = computed(() => (when.value.kind === 'toy-event' ? when.value : null))
+const TOY_ITEMS = (Object.keys(TOY_EVENTS) as ToyEvent[]).map((event) => ({ value: event, label: TOY_EVENTS[event] }))
+const boardWhen = computed(() => (when.value.kind === 'board-event' ? when.value : null))
+const boardItems = computed(() => [{ value: 'any', label: 'Any board' }, ...boards.value.map((b) => ({ value: b.id, label: b.name }))])
+const touchWhen = computed(() => (when.value.kind === 'touch' ? when.value : null))
 const EVERY_ITEMS = [5, 15, 30, 60, 120].map((minutes) => ({ value: String(minutes), label: formatMinutes(minutes) }))
 
 // ---- Something on your avatar
@@ -262,7 +286,8 @@ const VIEWER_EVENTS: { value: Exclude<AppEventType, 'resumed'>; label: string }[
   { value: 'viewer-joined', label: 'Joins' },
   { value: 'first-viewer', label: 'Is the first to join' },
   { value: 'last-viewer-left', label: 'Is the last to leave' },
-  { value: 'viewer-command', label: 'Uses a control' }
+  { value: 'viewer-command', label: 'Uses a control' },
+  { value: 'viewer-held-back', label: 'Is held back' }
 ]
 
 const eventType = computed({
@@ -511,6 +536,61 @@ const LEASH_ITEMS: { value: LeashEvent; label: string }[] = [
         />
       </UFormField>
     </template>
+
+    <UFormField
+      v-else-if="toyWhen"
+      label="When…"
+    >
+      <SegmentedControl
+        v-model="toyWhen.event"
+        :items="TOY_ITEMS"
+        class="w-fit max-w-full flex-wrap"
+        accent
+        aria-label="Toy event"
+      />
+    </UFormField>
+
+    <template v-else-if="boardWhen">
+      <UFormField label="Which board?">
+        <SegmentedControl
+          :model-value="boardWhen.boardId ?? 'any'"
+          :items="boardItems"
+          class="w-fit max-w-full flex-wrap"
+          accent
+          aria-label="Which board?"
+          @update:model-value="boardWhen.boardId = $event === 'any' ? null : $event"
+        />
+      </UFormField>
+      <UFormField label="When it…">
+        <SegmentedControl
+          v-model="boardWhen.event"
+          :items="[
+            { value: 'offline', label: 'Goes offline' },
+            { value: 'online', label: 'Comes back' }
+          ]"
+          class="w-fit"
+          accent
+          aria-label="Board event"
+        />
+      </UFormField>
+    </template>
+
+    <UFormField
+      v-else-if="touchWhen"
+      label="When touch…"
+      description="Any zone or socket that drives your toys, bHaptics or OWO gear."
+    >
+      <SegmentedControl
+        v-model="touchWhen.event"
+        :items="[
+          { value: 'starts', label: 'Starts' },
+          { value: 'stops', label: 'Stops' }
+        ]"
+        class="w-fit"
+        accent
+        aria-label="Touch"
+      />
+    </UFormField>
 
     <UFormField
       v-else-if="everyWhen"

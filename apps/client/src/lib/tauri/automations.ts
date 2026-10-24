@@ -57,6 +57,8 @@ export type AppEvent =
   | { type: 'resumed' }
   // Stop everything is turned on: only chatbox steps run, right away.
   | { type: 'stopped' }
+  // A lock, a limit or a cooldown held a viewer's command back.
+  | { type: 'viewer-held-back' }
 
 export type AppEventTrigger = { kind: 'app-event'; event: AppEvent }
 
@@ -67,7 +69,24 @@ export type LeashTrigger = { kind: 'leash'; event: LeashEvent }
 // Every `minutes` while the app is open, counted from when it starts or is saved.
 export type EveryTrigger = { kind: 'every'; minutes: number }
 
-export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger | AppEventTrigger | LeashTrigger | EveryTrigger
+// Add-on events: a toy connects, disconnects or runs low; a board comes online or goes offline
+// (boardId null: any); a shock actually goes out; avatar touch starts or stops.
+export type ToyEvent = 'connected' | 'disconnected' | 'battery-low'
+export type ToyEventTrigger = { kind: 'toy-event'; event: ToyEvent }
+export type BoardEventTrigger = { kind: 'board-event'; event: 'online' | 'offline'; boardId: string | null }
+export type ShockSentTrigger = { kind: 'shock-sent' }
+export type TouchTrigger = { kind: 'touch'; event: 'starts' | 'stops' }
+
+export type AutomationTrigger =
+  | AvatarParameterTrigger
+  | AvatarChangedTrigger
+  | AppEventTrigger
+  | LeashTrigger
+  | EveryTrigger
+  | ToyEventTrigger
+  | BoardEventTrigger
+  | ShockSentTrigger
+  | TouchTrigger
 
 // Has to be true for an automation to start; checked when it starts, not while it runs.
 export type AutomationGuard =
@@ -88,6 +107,10 @@ export type AutomationGuard =
   | { kind: 'wearing'; avatarId: string; avatarName: string; not: boolean }
   // True `percent` times out of 100.
   | { kind: 'chance'; percent: number }
+  // Whoever sent the last viewer command is in this group (or with `not`, isn't).
+  | { kind: 'viewer-group'; groupId: string; not: boolean }
+  | { kind: 'toys-connected'; connected: boolean }
+  | { kind: 'board-online'; boardId: string; online: boolean }
 
 // What "only if" needs from the app.
 // How many viewers are on, for "only if". Rust knows the active profile itself.

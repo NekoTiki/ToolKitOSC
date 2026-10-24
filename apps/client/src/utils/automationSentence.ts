@@ -79,6 +79,8 @@ const describeEvent = (event: AppEvent, context?: DescribeContext): Rich => {
       return rich`you turn ${strong('Stop everything')} off`
     case 'stopped':
       return rich`${strong('Stop everything')} turns on`
+    case 'viewer-held-back':
+      return rich`a viewer is ${strong('held back')} by a lock, limit or cooldown`
   }
 }
 
@@ -96,6 +98,18 @@ export const sentenceWhen = (when: AutomationTrigger, context?: DescribeContext)
       return when.avatarId ? rich`you put on ${strong(when.avatarName ?? 'an avatar')}` : rich`you switch avatar`
     case 'every':
       return rich`${strong(formatMinutes(when.minutes))} have passed`
+    case 'toy-event':
+      return when.event === 'battery-low'
+        ? rich`a toy's battery ${strong('runs low')}`
+        : rich`a toy ${strong(when.event === 'connected' ? 'connects' : 'disconnects')}`
+    case 'board-event': {
+      const board = when.boardId ? (context?.boards.find((b) => b.id === when.boardId)?.name ?? 'a board') : 'a board'
+      return rich`${strong(board)} ${strong(when.event === 'online' ? 'comes back online' : 'goes offline')}`
+    }
+    case 'shock-sent':
+      return rich`a ${strong('shock')} goes out`
+    case 'touch':
+      return rich`avatar touch ${strong(when.event === 'starts' ? 'starts' : 'stops')}`
     case 'avatar-parameter': {
       if (!when.parameter) return rich`something on your avatar changes`
       // A gesture or what you're doing: the same on every avatar.
@@ -319,6 +333,12 @@ const sentenceGuard = (guard: AutomationGuard, context?: DescribeContext): Rich 
       return guard.not ? rich`you're not wearing ${strong(guard.avatarName)}` : rich`you're wearing ${strong(guard.avatarName)}`
     case 'chance':
       return rich`a ${strong(`${guard.percent}%`)} chance says yes`
+    case 'viewer-group':
+      return rich`the viewer ${guard.not ? 'is not' : 'is'} in ${strong(context?.groupName?.(guard.groupId) ?? 'a group')}`
+    case 'toys-connected':
+      return guard.connected ? rich`a toy is ${strong('connected')}` : rich`${strong('no toy')} is connected`
+    case 'board-online':
+      return rich`${strong(context?.boards.find((b) => b.id === guard.boardId)?.name ?? 'a board')} is ${strong(guard.online ? 'online' : 'offline')}`
     case 'profile':
       return guard.profileId ? rich`the ${strong(context?.profileName?.(guard.profileId) ?? 'a')} profile is on` : rich`no profile is on`
     case 'parameter': {

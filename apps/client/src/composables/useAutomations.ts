@@ -2,6 +2,7 @@ import { useBoards } from '@renderer/composables/useBoards'
 import { useControls } from '@renderer/composables/useControls'
 import { getPattern } from '@renderer/composables/useIntifacePatterns'
 import { useLockedControls } from '@renderer/composables/useLockedControls'
+import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import type { Automation } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { DescribeContext } from '@renderer/utils/automations'
@@ -63,6 +64,7 @@ export function useAutomations(): {
   const { boards } = useBoards()
   const { controls } = useControls()
   const { getLockedControlGroup } = useLockedControls()
+  const { getGroup } = useViewerGroups()
   const describeContext = computed((): DescribeContext => {
     const all = controls.value.flatMap((group) => group.controls)
     const byAddress = controlsByAddress(all)
@@ -74,7 +76,8 @@ export function useAutomations(): {
       control,
       controlForParameter: (address) => byAddress.get(address),
       patternName: (id) => getPattern(id)?.name,
-      automationName: (id) => automations.value.find((a) => a.id === id)?.name
+      automationName: (id) => automations.value.find((a) => a.id === id)?.name,
+      groupName: (id) => getGroup(id)?.name
     }
   })
 

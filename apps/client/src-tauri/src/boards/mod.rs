@@ -14,7 +14,7 @@ pub mod protocol;
 mod store;
 pub mod commands;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -216,6 +216,9 @@ fn start_link(app: &AppHandle, id: &str) {
     }
 }
 
+/// Boards that have been online since they last went offline, for automations.
+static WAS_ONLINE: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
 fn set_status(app: &AppHandle, id: &str, status: LinkStatus) {
     {
         let mut inner = boards(app).inner.lock().unwrap();
@@ -237,6 +240,21 @@ fn set_status(app: &AppHandle, id: &str, status: LinkStatus) {
             _ => None
         };
         inner.status.insert(id.to_string(), (status, since));
+    }
+    // Only a board that was online can go offline: not one still looking for its board at start.
+    let event = {
+        let mut online = WAS_ONLINE.lock().unwrap();
+        let online = online.get_or_insert_with(HashSet::new);
+        match status {
+            LinkStatus::Online => online.insert(id.to_owned()).then_some(crate::automations::model::BoardEvent::Online),
+            LinkStatus::Offline | LinkStatus::NeedsPairing | LinkStatus::UpdateFirmware => {
+                online.remove(id).then_some(crate::automations::model::BoardEvent::Offline)
+            }
+            LinkStatus::Connecting => None
+        }
+    };
+    if let Some(event) = event {
+        crate::automations::board_event(app, event, id);
     }
     emit(app);
 }
@@ -489,7 +507,7 @@ impl crate::addons::Addon for Addon {
             needs: &[],
             needs_any: &[],
             control_types: &[],
-            automation_kinds: &["board-output"],
+            automation_kinds: &["board-output", "board-event"],
             pages: &[]
         }
     }
