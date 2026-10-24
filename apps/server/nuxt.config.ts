@@ -74,7 +74,9 @@ export default defineNuxtConfig({
     // Where the sqlite file (drizzle + node:sqlite, see server/db/index.ts) lives - relative to
     // Nitro's cwd (apps/server in dev, /app in the production Docker image, where docker-compose.yml
     // mounts a host volume at this same path so it survives image rebuilds).
-    sqlitePath: './data/app.db'
+    sqlitePath: './data/app.db',
+    // Optional Discord webhook for admin alerts (see server/utils/alerts.ts).
+    alertDiscordWebhook: ''
   },
   devServer: {
     port: 3000,

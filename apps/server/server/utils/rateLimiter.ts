@@ -1,3 +1,5 @@
+import { sendAlert } from '~~/server/utils/alerts'
+
 // Fixed-window counter, per key - cheap and good enough here: what matters is catching a client
 // sending far more messages than any real interaction would, not smoothing bursts perfectly. The
 // window resets wholesale on expiry rather than sliding, so a client could in principle send up to
@@ -23,6 +25,17 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>()
 
+// Rate-limited messages across every share page in the current minute, for the flood alert.
+const FLOOD_ALERT_PER_MINUTE = 100
+let limitedThisMinute = { minute: 0, count: 0 }
+
+const noteLimited = (): void => {
+  const minute = Math.floor(Date.now() / 60_000)
+
+  if (limitedThisMinute.minute !== minute) limitedThisMinute = { minute, count: 0 }
+  if (++limitedThisMinute.count === FLOOD_ALERT_PER_MINUTE) sendAlert('flood', `${FLOOD_ALERT_PER_MINUTE}+ share-page messages were rate limited in one minute.`)
+}
+
 export function isRateLimited(key: string, maxPerWindow = DEFAULT_MAX_PER_WINDOW): boolean {
   const now = Date.now()
   const bucket = buckets.get(key)
@@ -34,7 +47,11 @@ export function isRateLimited(key: string, maxPerWindow = DEFAULT_MAX_PER_WINDOW
 
   bucket.count += 1
 
-  return bucket.count > maxPerWindow
+  if (bucket.count <= maxPerWindow) return false
+
+  noteLimited()
+
+  return true
 }
 
 // Called on disconnect (see ws/[ws].ts's close handler) - without this, a bucket for every

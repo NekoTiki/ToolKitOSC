@@ -5,6 +5,7 @@ import { aiGenerationLog, users } from '~~/server/db/schema'
 import { notifyAdmins } from '~~/server/routes/admin/ws'
 import { getAiProvider } from '~~/server/utils/ai'
 import { getPromptProfile } from '~~/server/utils/ai/profiles'
+import { sendAlert } from '~~/server/utils/alerts'
 
 export type FailureReason = 'access-denied' | 'credit-limit' | 'provider-error'
 
@@ -89,7 +90,18 @@ export interface GenerationLogEntry {
 // "worked / why it didn't" reporting (see server/api/admin/stats.get.ts). Full error detail still
 // only ever goes to console.error at the call site (see suggest-controls.post.ts); this stores a
 // truncated excerpt, since it's meant for at-a-glance display, not full diagnostics.
+// Failures in a row per provider, for the "provider keeps failing" alert. A success resets it.
+const failureStreaks = new Map<string, number>()
+const FAILURE_STREAK_ALERT = 5
+
 export async function logGenerationAttempt(input: LogAttemptInput): Promise<void> {
+  if (input.provider) {
+    const streak = input.success ? 0 : (failureStreaks.get(input.provider) ?? 0) + 1
+
+    failureStreaks.set(input.provider, streak)
+    if (streak >= FAILURE_STREAK_ALERT) sendAlert(`provider:${input.provider}`, `${providerLabel(input.provider)} failed ${streak} times in a row (last: ${input.failureReason ?? 'unknown'}).`)
+  }
+
   const db = getDb()
   const createdAt = new Date()
 

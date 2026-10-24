@@ -114,7 +114,7 @@ docker run --rm -e PORT=8080 -p 8080:8080 ghcr.io/nekotiki/toolkitosc-server:lat
 ```
 
 ### Healthcheck
-The image includes a basic `HEALTHCHECK` hitting `/`. For a dedicated endpoint, create an API route and adjust the Dockerfile accordingly.
+The image's `HEALTHCHECK` calls `/api/health`, which answers 503 when the database doesn't respond. Uptime monitors can use it too.
 
 ### Rebuild Strategy
 The Docker build caches dependency installation using every workspace's `package.json` +
