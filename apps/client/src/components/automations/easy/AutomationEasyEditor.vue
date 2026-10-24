@@ -82,7 +82,6 @@ const removeStep = (index: number): void => {
     :trigger="automation.when.kind === 'avatar-parameter' ? automation.when.parameter : ''"
     :can-remove="automation.then.length > 1"
     @remove="removeStep(stepIndex)"
-    @advanced="emit('advanced')"
   />
   <EasyOnlyPanel
     v-else-if="selected === 'only'"
