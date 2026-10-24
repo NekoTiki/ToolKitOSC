@@ -62,3 +62,38 @@ export async function resetMainShareCode(discordId: string): Promise<string> {
 
   return mainShareCode(discordId)
 }
+
+export async function customShareName(discordId: string): Promise<string | null> {
+  const [link] = await getDb()
+    .select({ code: shareLinks.code })
+    .from(shareLinks)
+    .where(and(eq(shareLinks.discordId, discordId), eq(shareLinks.kind, 'custom')))
+    .limit(1)
+
+  return link?.code ?? null
+}
+
+// Sets (or with null, clears) the host's custom name. The old name 404s and is free for anyone.
+// The caller checks the name with isValidShareName first.
+export async function setCustomShareName(discordId: string, name: string | null): Promise<'ok' | 'taken'> {
+  const db = getDb()
+  const [owner] = await db.select().from(shareLinks).where(eq(shareLinks.code, name ?? '')).limit(1)
+
+  if (owner) return owner.discordId === discordId && owner.kind === 'custom' ? 'ok' : 'taken'
+
+  // Some old base62 links are all lowercase: a name equal to one would take over that host's page.
+  if (name && (await resolveShareCode(name))) return 'taken'
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(shareLinks).where(and(eq(shareLinks.discordId, discordId), eq(shareLinks.kind, 'custom')))
+
+      if (name) await tx.insert(shareLinks).values({ code: name, discordId, kind: 'custom', createdAt: new Date() })
+    })
+  } catch {
+    // Someone took it between the check and the insert.
+    return 'taken'
+  }
+
+  return 'ok'
+}

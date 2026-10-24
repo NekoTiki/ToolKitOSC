@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { encodeShareCode } from '#shared/utils/shortLink'
 import type { ShareInfo } from '~~/server/api/share/[shareId].get'
 
 const { loggedIn, user, clear } = useUserSession()
@@ -14,14 +13,15 @@ useHead({
 const requestUrl = useRequestURL()
 const serverWsUrl = computed(() => requestUrl.origin.replace(/^http/, 'ws'))
 
-// The share room is keyed by the Discord id (see the server's host.ts getRoomId); the link uses
-// the short, reversible `/s/<code>` form of it.
+// The custom name if they picked one, else their random link (see server/db/shareLinks.ts).
 const discordId = computed(() => user.value?.discord?.id ?? null)
-const shareUrl = computed(() => (discordId.value ? `${requestUrl.origin}/s/${encodeShareCode(discordId.value)}` : null))
+const { data: links } = await useFetch('/api/share-link', { immediate: !!discordId.value, watch: [discordId] })
+const shareCode = computed(() => links.value?.custom ?? links.value?.main ?? null)
+const shareUrl = computed(() => (shareCode.value ? `${requestUrl.origin}/s/${shareCode.value}` : null))
 
 // Whether this user's desktop app is connected right now - the same room lookup the share page's
 // link preview uses, so no dedicated endpoint is needed.
-const { data: hostInfo } = useFetch<ShareInfo>(() => `/api/share/${discordId.value}`, { immediate: !!discordId.value, watch: [discordId] })
+const { data: hostInfo } = useFetch<ShareInfo>(() => `/api/share/${shareCode.value}`, { immediate: !!shareCode.value, watch: [shareCode] })
 
 const toast = useToast()
 

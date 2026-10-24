@@ -45,3 +45,10 @@ export const decodeShareCode = (code: string): string | null => {
 
   return n.toString()
 }
+
+// A share link's custom name (/s/<name>): 3 to 24 lowercase letters, digits and inner dashes.
+// Checked by the server; the app uses it to explain a rejected name before sending it.
+const SHARE_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,22}[a-z0-9]$/
+const RESERVED_SHARE_NAMES = ['admin', 'official', 'staff', 'support', 'tkosc', 'toolkitosc']
+
+export const isValidShareName = (name: string): boolean => SHARE_NAME_PATTERN.test(name) && !RESERVED_SHARE_NAMES.includes(name)
