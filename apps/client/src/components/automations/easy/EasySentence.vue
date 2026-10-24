@@ -19,7 +19,7 @@ const emit = defineEmits<{ addStep: []; advanced: [] }>()
 const selected = defineModel<string>('selected', { required: true })
 
 const part = (slot: string, kind: 'when' | 'step' | 'extra', missing = false): string[] => [
-  'inline-flex max-w-full cursor-pointer items-center gap-2 rounded-field border px-3.5 py-1 text-left align-middle leading-snug transition-colors',
+  'mx-1 inline-flex max-w-full cursor-pointer items-center gap-2 rounded-field border px-3.5 py-1 text-left align-middle leading-snug transition-colors',
   missing
     ? 'border-dashed border-accented text-muted'
     : kind === 'when'
@@ -36,7 +36,7 @@ const part = (slot: string, kind: 'when' | 'step' | 'extra', missing = false): s
     <!-- Tall lines, so the parts on wrapped lines don't touch. -->
     <p
       class="m-0 text-xl text-muted"
-      style="line-height: 2.5"
+      style="line-height: 3"
     >
       {{ sentence.lead }}
       <button

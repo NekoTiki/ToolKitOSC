@@ -10,6 +10,7 @@ import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
+import { useAutomationIdeas } from '@renderer/composables/useAutomationIdeas'
 import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useBoards } from '@renderer/composables/useBoards'
@@ -69,8 +70,18 @@ const savedJson = ref('')
 const leaving = ref(false)
 const saving = ref(false)
 const showAllParameters = ref(false)
-// Easy (the sentence) or Advanced (every setting), remembered on this computer.
-const mode = useLocalStorage<'easy' | 'advanced'>('automations_editorMode', 'easy')
+// Easy (the sentence) or Advanced (every setting), remembered on this computer. An idea always
+// opens in Easy, without changing what's remembered until you switch.
+const savedMode = useLocalStorage<'easy' | 'advanced'>('automations_editorMode', 'easy')
+const ideaVisit = ref(!!route.query.idea)
+const mode = computed({
+  get: () => (ideaVisit.value ? 'easy' : savedMode.value),
+  set: (value: 'easy' | 'advanced') => {
+    ideaVisit.value = false
+    savedMode.value = value
+  }
+})
+const { ideas } = useAutomationIdeas()
 
 // Fills the form once what it needs has loaded (the list and the avatar arrive asynchronously).
 watch(
@@ -78,7 +89,9 @@ watch(
   () => {
     if (draft.value) return
     if (isNew && avatarDetails.value) {
-      draft.value = newAutomation(avatarDetails.value.id, avatarDetails.value.name)
+      // From "Start from an idea", or blank.
+      const idea = ideas.value.find((i) => i.id === route.query.idea)
+      draft.value = idea ? structuredClone(toRaw(idea.automation)) : newAutomation(avatarDetails.value.id, avatarDetails.value.name)
       savedJson.value = JSON.stringify(draft.value)
     } else if (stored.value) {
       draft.value = structuredClone(toRaw(stored.value))
@@ -440,7 +453,7 @@ onBeforeRouteLeave(async () => {
 
     <div
       v-if="!draft"
-      class="grid max-w-3xl gap-3.5"
+      class="grid gap-3.5"
     >
       <FormSection
         :title="isNew ? 'Wear an avatar first' : 'This automation doesn\'t exist any more'"
@@ -462,7 +475,7 @@ onBeforeRouteLeave(async () => {
          Advanced: when, only if, what it does, then its limits. -->
     <div
       v-else
-      class="grid max-w-4xl gap-3.5"
+      class="grid gap-3.5"
     >
       <FormSection>
         <div class="flex flex-wrap items-end gap-3.5">

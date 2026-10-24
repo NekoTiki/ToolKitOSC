@@ -17,7 +17,7 @@ defineSlots<{ default?(): unknown; aside?(): unknown }>()
 <template>
   <button
     type="button"
-    class="grid min-h-21.5 cursor-pointer content-start gap-1.5 rounded-field border p-3.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+    class="grid min-h-21.5 cursor-pointer grid-cols-[minmax(0,1fr)] content-start gap-1.5 rounded-field border p-3.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45"
     :class="selected ? 'border-primary bg-primary/14 shadow-[inset_0_0_0_1px_var(--ui-primary)]' : 'border-default bg-(--aurora-glass) hover:bg-elevated'"
     :aria-pressed="selected"
     :disabled="disabled"

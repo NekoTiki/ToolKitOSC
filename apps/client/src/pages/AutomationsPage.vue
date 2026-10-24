@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AutomationIdeas from '@renderer/components/automations/AutomationIdeas.vue'
 import AutomationSentence from '@renderer/components/automations/AutomationSentence.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -99,6 +100,8 @@ const groups = computed(() => [
       </PageHeader>
     </template>
 
+    <AutomationIdeas class="mb-3.5" />
+
     <EmptyState
       v-if="!automations.length"
       icon="i-lucide-workflow"
@@ -118,7 +121,7 @@ const groups = computed(() => [
 
     <div
       v-else
-      class="grid max-w-4xl gap-3.5"
+      class="grid gap-3.5"
     >
       <template
         v-for="group in groups"
