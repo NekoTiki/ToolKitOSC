@@ -82,6 +82,17 @@ export interface AuthSuccessMessage {
 // this account from /dashboard (see apps/server's api/admin/users/*) - lets the desktop client
 // dynamically show/hide the "AI Generate" button and provider/profile pickers without needing to
 // reconnect or re-poll for it.
+// A notice from the server's admins ("restarting in 5 minutes"), to every host and, when the admin
+// chooses, every share page. null clears it. Sent again on connect until it expires.
+export interface ServerNotice {
+  id: string
+  text: string
+  level: 'info' | 'warning'
+  // Unix ms, or null until an admin clears it.
+  expiresAt: number | null
+  onSharePages: boolean
+}
+
 export interface AiAccessUpdateMessage {
   hasAccess: boolean
   canSelectModel: boolean
@@ -338,6 +349,7 @@ export type ServerToHostMessage =
   | WsEnvelope<'ai-generate-error', AiGenerateErrorMessage>
   // A server admin pressed Stop everything for this host (dashboard Live page).
   | WsEnvelope<'admin-stop', null>
+  | WsEnvelope<'server-notice', ServerNotice | null>
 
 // Server -> browser viewer, over /ws/[roomId].
 export type ServerToViewerMessage =
@@ -358,6 +370,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'presence', PresenceMessage>
   | WsEnvelope<'viewer-action', ViewerActionMessage>
   | WsEnvelope<'host-paused', boolean>
+  | WsEnvelope<'server-notice', ServerNotice | null>
 
 // Browser viewer -> server, over /ws/[roomId].
 export type ViewerToServerMessage =

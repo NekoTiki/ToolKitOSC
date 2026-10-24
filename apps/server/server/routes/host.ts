@@ -28,6 +28,7 @@ import {
 import { getAiAccess } from '~~/server/utils/ai/access'
 import { recordControlInventory, scheduleControlActivation } from '~~/server/utils/controlStats'
 import { roomsChanged } from '~~/server/utils/liveRooms'
+import { currentNotice } from '~~/server/utils/serverNotice'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -194,6 +195,11 @@ export default defineWebSocketHandler({
         addClient(roomId!, peer.id, { peer, user, ip: userIp, connectedAt: Date.now() })
 
         sendClientListToHost(roomId!)
+
+        const notice = currentNotice()
+
+        if (notice) peer.send({ type: 'server-notice', message: notice })
+
         sendToEveryoneInRoom(roomId!, { type: 'host-status', message: 'online' })
         roomsChanged()
       } catch (error) {

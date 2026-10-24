@@ -78,7 +78,7 @@ useSeoMeta({
 // groups in a sidebar - or a row of chips on a phone - and the selected group's tiles filling the
 // page, in the host's theme. Sign-in, banned, offline and disconnected are full-page states
 // rather than modals.
-const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, status, hostStatus, open, close, sendMessage } =
+const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, notice, status, hostStatus, open, close, sendMessage } =
   useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
@@ -383,6 +383,19 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
             <small class="font-mono text-[11px] text-muted">{{ group.controls.length }}</small>
           </button>
         </nav>
+
+        <div
+          v-if="notice"
+          class="mx-4 mt-3 flex items-center gap-3 rounded-field border px-3.5 py-3 text-sm lg:mx-5.5"
+          :class="notice.level === 'warning' ? 'border-warning/40 bg-warning/10' : 'border-info/40 bg-info/10'"
+        >
+          <UIcon
+            name="i-lucide-megaphone"
+            class="size-5 shrink-0"
+            :class="notice.level === 'warning' ? 'text-warning' : 'text-info'"
+          />
+          <span>{{ notice.text }}</span>
+        </div>
 
         <div
           v-if="!pageState && hostOffline"
