@@ -19,6 +19,7 @@ use crate::mcp::Mcp;
 use crate::openshock::OpenShock;
 use crate::overlay::Overlay;
 use crate::owo::Owo;
+use crate::presets::Preset;
 use crate::server::Server;
 use crate::setup::Setup;
 use crate::toys::patterns::Patterns;
@@ -31,6 +32,9 @@ pub struct AppState {
     /// module-level `OSC_MESSAGES` Map.
     pub messages: Mutex<HashMap<String, OscMessage>>,
     pub avatar_details: Mutex<Option<AvatarDetails>>,
+    /// Each avatar's values the first time it loaded since the app started, by avatar ID (see
+    /// `presets::original_state`). Never saved: it's gone when the app quits.
+    pub original_states: Mutex<HashMap<String, Preset>>,
     /// The last avatar ID whose OSC config couldn't be read (see `osc::udp::on_avatar_change`).
     /// The poll retries it every tick, so this only keeps the warning to once per avatar.
     pub unresolved_avatar: Mutex<Option<String>>,
@@ -100,6 +104,7 @@ impl Default for AppState {
         Self {
             messages: Mutex::new(HashMap::new()),
             avatar_details: Mutex::new(None),
+            original_states: Mutex::new(HashMap::new()),
             unresolved_avatar: Mutex::new(None),
             cache_throttle: CacheThrottle::default(),
             sender_socket: Mutex::new(None),

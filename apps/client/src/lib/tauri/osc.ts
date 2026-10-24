@@ -1,7 +1,7 @@
 // OSC to and from VRChat, the worn avatar and its presets - src-tauri/src/osc/ and presets.rs.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { AvatarDetails, OscCommand, OSCMessage, PresetStore } from '@toolkitosc/shared-ui'
+import type { AvatarDetails, OscCommand, OSCMessage, Preset, PresetStore } from '@toolkitosc/shared-ui'
 
 export const oscApi = {
   ready: (): void => {
@@ -32,6 +32,12 @@ export const oscApi = {
   loadPresets: (avatarId: string): Promise<PresetStore> => invoke('load_presets', { avatarId }),
   savePresets: (avatarId: string, store: PresetStore): Promise<void> =>
     invoke('save_presets', { avatarId, store }),
+  // The avatar's values from its first load this session, kept unsaved (see the backend's
+  // keep_original_state). Null until VRChat's values are in.
+  originalState: (avatarId: string): Promise<Preset | null> => invoke('original_state', { avatarId }),
+  onOriginalState: (callback: (preset: Preset) => void): void => {
+    void listen<Preset>('original-state', (event) => callback(event.payload))
+  },
   forcePullParameters: (missingOnly: boolean): Promise<number> =>
     invoke('force_pull_parameters', { missingOnly })
 }

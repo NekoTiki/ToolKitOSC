@@ -145,6 +145,7 @@ pub fn run() {
             osc::commands::ready,
             presets::load_presets,
             presets::save_presets,
+            presets::original_state,
             osc::commands::force_pull_parameters,
             // Running a control as you
             controls::control_run,
