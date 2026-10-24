@@ -24,7 +24,7 @@ const emit = defineEmits<{
   (e: 'reconnected'): void
 }>()
 
-const { adminFetch, redirectIfUnauthorized } = useAdminApi()
+const { redirectIfUnauthorized } = useAdminApi()
 const { successIcon, failureIcon, refundedIcon, providerIcon, profileIcon } = useAiLogIcons()
 
 const seeAllLink = computed(() => (props.discordId ? `/dashboard/generations?user=${props.discordId}` : '/dashboard/generations'))
@@ -181,57 +181,19 @@ function applyGenerationLogged(attempt: Attempt): void {
   emit('generation-logged', attempt)
 }
 
-let ws: WebSocket | null = null
-let reconnectTimeout: ReturnType<typeof setTimeout> | undefined
-
-async function connectWs(): Promise<void> {
-  try {
-    // The WS upgrade itself can't go through requireUserSession the way this fetch does, so this
-    // ticket - minted over an authenticated REST call - is the actual auth check (see the server's
-    // adminWsTickets.ts).
-    const { ticket } = await adminFetch<{ ticket: string }>('/api/admin/ws-ticket')
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-
-    ws = new WebSocket(`${protocol}//${location.host}/admin/ws?ticket=${ticket}`)
-
-    // Catches up on anything missed while disconnected - a real reload, not the incremental path
-    // above, since there's no way to know what was missed. Runs on the very first connect too
-    // (harmless, just one extra fetch layered on top of the useFetch calls above, which already
-    // ran once during SSR/on mount).
-    ws.addEventListener('open', () => {
-      void refreshAttempts()
-      void refreshLiveAttempts()
-      emit('reconnected')
-    })
-
-    ws.addEventListener('message', (event: MessageEvent<string>) => {
-      try {
-        const data = JSON.parse(event.data) as GenerationLoggedEvent | GenerationStartedEvent
-
-        if (data.type === 'generation-logged') applyGenerationLogged(data.attempt)
-        else if (data.type === 'generation-started') applyGenerationStarted(data.attempt)
-      } catch (err) {
-        console.error('[admin-ws] failed to apply message:', err)
-      }
-    })
-
-    ws.addEventListener('close', () => {
-      ws = null
-      // Best-effort reconnect - a dashboard tab left open shouldn't need a manual reload just
-      // because the connection dropped once (a server restart, a network blip).
-      reconnectTimeout = setTimeout(connectWs, 5000)
-    })
-  } catch {
-    reconnectTimeout = setTimeout(connectWs, 5000)
+useAdminSocket<GenerationLoggedEvent | GenerationStartedEvent>(
+  (data) => {
+    if (data.type === 'generation-logged') applyGenerationLogged(data.attempt)
+    else if (data.type === 'generation-started') applyGenerationStarted(data.attempt)
+  },
+  // Catches up on anything missed while disconnected - a real reload, not the incremental path
+  // above, since there's no way to know what was missed. Runs on the very first connect too.
+  () => {
+    void refreshAttempts()
+    void refreshLiveAttempts()
+    emit('reconnected')
   }
-}
-
-onMounted(connectWs)
-onBeforeUnmount(() => {
-  clearTimeout(reconnectTimeout)
-  ws?.close()
-  ws = null
-})
+)
 
 // Which attempt rows have their error message expanded - keyed by attempt id, reset on navigation
 // (not persisted), so re-opening the page always starts collapsed.

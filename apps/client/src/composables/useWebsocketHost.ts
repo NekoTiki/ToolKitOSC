@@ -247,6 +247,14 @@ export function useWebsocketHost(): {
       useAiGenerationStatus().applyResult(data.message)
     } else if (data.type === 'ai-generate-error') {
       useAiGenerationStatus().applyError(data.message)
+    } else if (data.type === 'admin-stop') {
+      // Rust already stopped everything.
+      useToast().add({
+        title: 'An admin of the server stopped everything',
+        description: 'Resume when you are ready.',
+        icon: 'i-lucide-octagon-x',
+        color: 'warning'
+      })
     }
   }
 

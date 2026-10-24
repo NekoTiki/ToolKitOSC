@@ -27,6 +27,7 @@ import {
 } from '~~/server/routes/ws/[ws]'
 import { getAiAccess } from '~~/server/utils/ai/access'
 import { recordControlInventory, scheduleControlActivation } from '~~/server/utils/controlStats'
+import { roomsChanged } from '~~/server/utils/liveRooms'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -67,6 +68,7 @@ interface Host {
   peer: Peer
   user: User
   ip: string
+  connectedAt: number
 }
 
 const getRoomId = (peerId: string): string | null => {
@@ -189,10 +191,11 @@ export default defineWebSocketHandler({
 
         const userIp = useWsIp(peer)
 
-        addClient(roomId!, peer.id, { peer, user, ip: userIp })
+        addClient(roomId!, peer.id, { peer, user, ip: userIp, connectedAt: Date.now() })
 
         sendClientListToHost(roomId!)
         sendToEveryoneInRoom(roomId!, { type: 'host-status', message: 'online' })
+        roomsChanged()
       } catch (error) {
         console.error('Authentication failed:', error)
         peer.send({ type: 'auth-error', message: 'Invalid authentication token' })
@@ -268,6 +271,7 @@ export default defineWebSocketHandler({
       else hostPaused.delete(roomId)
 
       sendToEveryoneInRoom(roomId, { type: 'host-paused', message: paused })
+      roomsChanged()
     } else if (data.type === 'command-accepted') {
       const client = clientList.get(roomId)?.get(data.message.peerId)
 
@@ -292,6 +296,7 @@ export default defineWebSocketHandler({
 
       hostLastAction.set(roomId, action)
       countActivation(roomId, data.message.groupId, data.message.controlId)
+      roomsChanged()
       sendToEveryoneInRoom(roomId, {
         type: 'viewer-action',
         message: showViewers(roomId) ? action : { ...action, viewer: null }
@@ -312,6 +317,7 @@ export default defineWebSocketHandler({
     // see each other because the host's choice was forgotten.
     hostLastAction.delete(roomId)
     sendToEveryoneInRoom(roomId, { type: 'host-status', message: 'offline' })
+    roomsChanged()
   },
   error(peer, error) {
     console.error('[ws] error', peer, error)
