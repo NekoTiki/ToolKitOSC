@@ -122,6 +122,12 @@ export const PARAMETER_ACTIONS: Record<
     description: 'Follows the value, mapped onto a range.',
     fits: (c) => c === 'any',
     valueTypes: ['Float']
+  },
+  add: {
+    label: 'Add',
+    description: 'Adds to it, or takes away with a negative amount, within its range.',
+    fits: (c) => CONDITIONS[c].moment,
+    valueTypes: ['Int', 'Float']
   }
 }
 
@@ -398,8 +404,36 @@ export const STEP_KINDS: Record<
     description: 'Stop every toy and pattern, without pausing anything else.',
     icon: 'i-lucide-circle-stop',
     runs: ['moment']
+  },
+  'automation-enabled': {
+    label: 'Automation on/off',
+    description: 'Turn another automation on or off, e.g. for a mode.',
+    icon: 'i-lucide-toggle-right',
+    runs: ['moment']
+  },
+  'vr-toast': {
+    label: 'VR message',
+    description: 'Show a message in VR, through your overlay.',
+    icon: 'i-lucide-message-circle',
+    runs: ['moment']
+  },
+  'one-of': {
+    label: 'One of these',
+    description: 'Do one of a few things, picked at random each time.',
+    icon: 'i-lucide-dices',
+    runs: ['moment']
+  },
+  'osc-message': {
+    label: 'OSC message',
+    description: 'Advanced: send any OSC address to VRChat, like /input/Jump. Nothing checks it.',
+    icon: 'i-lucide-terminal',
+    runs: ['moment']
   }
 }
+
+// What chatbox and VR messages can fill in (model.rs PLACEHOLDERS).
+export const PLACEHOLDER_HINT = 'Can say {viewer}, {control} and {value} (the last viewer command) and {avatar}.'
+export const MAX_ONE_OF = 6
 
 // What starts an automation, as an icon for the editor and the sentence.
 export const triggerIcon = (when: AutomationTrigger): string => {
@@ -481,6 +515,8 @@ export const defaultParameterAction = (
       return { type, value: 1 }
     case 'follow':
       return { type, min: 0, max: 1 }
+    case 'add':
+      return valueType === 'Float' ? { type, amount: 0.1 } : { type, amount: 1 }
     default:
       return valueType === 'Bool' ? { type } : { type: 'set', value: 1 }
   }
@@ -568,6 +604,14 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
       return { kind, toys: [], run: defaultToyRun(toyRunsFor(condition)[0] ?? 'pulse'), delayMs: 0 }
     case 'toy-pattern':
       return { kind, toys: [], patternId: 'wave', ms: 10_000, whileHeld: runsFor(condition) === 'state', delayMs: 0 }
+    case 'automation-enabled':
+      return { kind, automationId: '', enabled: true, delayMs: 0 }
+    case 'vr-toast':
+      return { kind, text: '', delayMs: 0 }
+    case 'one-of':
+      return { kind, options: [{ kind: 'chatbox', text: '' }, { kind: 'chatbox', text: '' }], delayMs: 0 }
+    case 'osc-message':
+      return { kind, address: '/input/Jump', value: true, delayMs: 0 }
     default:
       return { kind, delayMs: 0 }
   }
@@ -762,6 +806,8 @@ export const describeParameterAction = (action: AvatarParameterAction): string =
       return `${name}: ${formatValue(action.set.value, action.valueType)} while held`
     case 'follow':
       return `${name}: follow ${action.set.min} to ${action.set.max}`
+    case 'add':
+      return `${name}: ${action.set.amount > 0 ? '+' : ''}${action.set.amount}`
     default:
       return `${name}: toggle`
   }
@@ -778,6 +824,7 @@ export interface DescribeContext {
   controlForParameter?: (address: string) => ControlType | undefined
   // A built-in or saved toy pattern's name.
   patternName?: (id: string) => string | undefined
+  automationName?: (id: string) => string | undefined
 }
 
 const describeControlRun = (run: ControlRun): string => {
@@ -851,6 +898,18 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
       break
     case 'stop-toys':
       what = 'stop toys'
+      break
+    case 'automation-enabled':
+      what = `turn ${context.automationName?.(step.automationId) ?? 'an automation'} ${step.enabled ? 'on' : 'off'}`
+      break
+    case 'vr-toast':
+      what = `VR message "${step.text}"`
+      break
+    case 'one-of':
+      what = `one of: ${step.options.map((option) => describeStep({ ...option, delayMs: 0 }, context)).join(' / ')}`
+      break
+    case 'osc-message':
+      what = `OSC ${step.address} ${String(step.value)}`
       break
     default:
       what = 'stop everything'

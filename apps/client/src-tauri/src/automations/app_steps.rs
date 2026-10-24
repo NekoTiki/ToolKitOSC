@@ -1,4 +1,5 @@
-//! Profile and Stop everything steps, run here so they work with the window closed. Chatbox steps
+//! Profile, Stop everything, automation on/off and VR message steps, run here so they work with
+//! the window closed. Chatbox steps
 //! still go to the webview, which has the chatbox settings.
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -25,6 +26,18 @@ pub fn run(app: &AppHandle, run: &AppRun) -> bool {
         Action::Profile { profile_id, .. } => {
             if !blocked {
                 profile(app, format!("{}:{}", run.automation_id, run.step), profile_id, &run.phase);
+            }
+            true
+        }
+        Action::AutomationEnabled { automation_id, enabled } => {
+            if run.phase == Phase::Run && !blocked {
+                super::set_enabled(app, automation_id, *enabled);
+            }
+            true
+        }
+        Action::VrToast { text } => {
+            if run.phase == Phase::Run && !blocked {
+                crate::overlay::automation_message(app, &super::fill(app, text));
             }
             true
         }

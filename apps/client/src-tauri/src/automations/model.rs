@@ -361,8 +361,24 @@ pub enum Action {
         while_held: bool
     },
     /// Stops every toy and pattern, without pausing anything else.
-    StopToys
+    StopToys,
+    /// Turns another automation on or off.
+    #[serde(rename_all = "camelCase")]
+    AutomationEnabled { automation_id: String, enabled: bool },
+    /// Shows a message in VR (the overlay add-on). Takes the chatbox's placeholders.
+    VrToast { text: String },
+    /// Runs one of these moments, picked at random each time.
+    OneOf { options: Vec<Action> },
+    /// Sends any OSC message to VRChat, e.g. `/input/Jump`. Nothing checks what it does, so
+    /// assistants aren't offered it.
+    #[schemars(skip)]
+    OscMessage { address: String, value: crate::types::OscArg }
 }
+
+/// Most options of a "one of these" step.
+pub const MAX_ONE_OF: usize = 6;
+/// What chatbox and VR toast text can say about what started it (see `mod.rs` `fill`).
+pub const PLACEHOLDERS: [&str; 4] = ["{viewer}", "{control}", "{value}", "{avatar}"];
 
 /// One toy motor, saved the way toy controls save it (see shared-ui `IntifaceActuatorRef`): the
 /// names are only shown while the toy is off.
@@ -445,7 +461,20 @@ pub enum ParameterAction {
     /// The value while the state condition holds, then back to what it was.
     Hold { value: f64 },
     /// A Float follows the trigger, mapped onto min..max (-1–1).
-    Follow { min: f64, max: f64 }
+    Follow { min: f64, max: f64 },
+    /// Adds `amount` (negative to take away) to an Int or a Float, kept within its range.
+    Add { amount: f64 }
+}
+
+impl ValueType {
+    /// What a parameter of this type can hold.
+    pub fn clamp(self, value: f64) -> f64 {
+        match self {
+            ValueType::Bool => value.clamp(0.0, 1.0).round(),
+            ValueType::Int => value.round().clamp(0.0, 255.0),
+            ValueType::Float => value.clamp(-1.0, 1.0)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -671,6 +700,9 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
     }
     for step in &automation.then {
         validate_step(step, runs, trigger)?;
+        if matches!(&step.action, Action::AutomationEnabled { automation_id, .. } if *automation_id == automation.id) {
+            return Err("It can't turn itself on or off.".into());
+        }
     }
 
     Ok(())
@@ -709,6 +741,7 @@ impl Action {
             Action::BhapticsPulse { ms, .. } => *ms,
             Action::Toy { run: ToyRun::Pulse { ms, .. } | ToyRun::Ramp { ms, .. }, .. } => *ms,
             Action::ToyPattern { ms, while_held: false, .. } => *ms,
+            Action::OneOf { options } => options.iter().map(Action::busy_ms).max().unwrap_or(0),
             _ => 0
         }
     }
@@ -724,6 +757,8 @@ impl Action {
                 | Action::Toy { .. }
                 | Action::ToyPattern { .. }
                 | Action::StopToys
+                | Action::AutomationEnabled { .. }
+                | Action::VrToast { .. }
         )
     }
 }
@@ -786,6 +821,16 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
                 ParameterAction::Toggle => {
                     if *value_type != ValueType::Bool {
                         return Err("Only a Bool can be toggled.".into());
+                    }
+                }
+                ParameterAction::Add { amount } => {
+                    let fits = match value_type {
+                        ValueType::Bool => false,
+                        ValueType::Int => amount.fract() == 0.0 && (-255.0..=255.0).contains(amount),
+                        ValueType::Float => (-2.0..=2.0).contains(amount)
+                    };
+                    if *amount == 0.0 || !fits {
+                        return Err("Add a whole number to an Int, or up to ±2 to a Float. A Bool can only be set or toggled.".into());
                     }
                 }
                 ParameterAction::Follow { min, max } => {
@@ -871,6 +916,35 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
             }
         }
         Action::StopToys => {}
+        Action::AutomationEnabled { automation_id, .. } => {
+            if automation_id.is_empty() {
+                return Err("Pick the automation it turns on or off.".into());
+            }
+        }
+        Action::VrToast { text } => {
+            if text.trim().is_empty() || text.chars().count() > CHATBOX_MAX {
+                return Err(format!("Write the message, up to {CHATBOX_MAX} characters."));
+            }
+        }
+        Action::OneOf { options } => {
+            if !(2..=MAX_ONE_OF).contains(&options.len()) {
+                return Err(format!("\"One of these\" picks from 2 to {MAX_ONE_OF} things."));
+            }
+            for option in options {
+                if matches!(option, Action::OneOf { .. }) {
+                    return Err("\"One of these\" can't hold another one.".into());
+                }
+                validate_step(&Step { action: option.clone(), delay_ms: 0 }, Runs::Moment, trigger)?;
+            }
+        }
+        Action::OscMessage { address, value } => {
+            if !address.starts_with('/') || address.len() < 2 || address.contains(char::is_whitespace) {
+                return Err("An OSC address starts with / and has no spaces, like /input/Jump.".into());
+            }
+            if matches!(value, crate::types::OscArg::Str(text) if text.chars().count() > CHATBOX_MAX) {
+                return Err(format!("An OSC text value takes up to {CHATBOX_MAX} characters."));
+            }
+        }
         Action::Chatbox { text } => {
             if text.trim().is_empty() {
                 return Err("Write the chatbox message.".into());
@@ -1182,6 +1256,23 @@ mod tests {
 
         let stop: Step = serde_json::from_str(r#"{"kind":"stop-toys"}"#).unwrap();
         assert_eq!(stop.action, Action::StopToys);
+    }
+
+    #[test]
+    fn more_steps_validate() {
+        let ok = |json: &str| validate_step(&serde_json::from_str::<Step>(json).unwrap(), Runs::Moment, None).is_ok();
+        assert!(ok(r#"{"kind":"one-of","options":[{"kind":"chatbox","text":"a"},{"kind":"stop-toys"}]}"#));
+        assert!(!ok(r#"{"kind":"one-of","options":[{"kind":"chatbox","text":"a"}]}"#), "needs two");
+        assert!(!ok(r#"{"kind":"one-of","options":[{"kind":"chatbox","text":"a"},{"kind":"toy","run":{"type":"hold","level":1}}]}"#), "moments only");
+        assert!(ok(r#"{"kind":"osc-message","address":"/input/Jump","value":true}"#));
+        assert!(!ok(r#"{"kind":"osc-message","address":"input Jump","value":1}"#));
+        assert!(ok(r#"{"kind":"avatar-parameter","parameter":"/avatar/parameters/Outfit","valueType":"Int","set":{"type":"add","amount":1}}"#));
+        assert!(!ok(r#"{"kind":"avatar-parameter","parameter":"/avatar/parameters/Ears","valueType":"Bool","set":{"type":"add","amount":1}}"#));
+        assert!(ok(r#"{"kind":"vr-toast","text":"Hi {viewer}"}"#));
+
+        let mut a = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        a.then = vec![Step { action: Action::AutomationEnabled { automation_id: a.id.clone(), enabled: false }, delay_ms: 0 }];
+        assert!(validate(&a).is_err(), "turns itself off");
     }
 
     #[test]

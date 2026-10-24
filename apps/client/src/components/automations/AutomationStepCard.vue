@@ -36,12 +36,16 @@ import {
   PARAMETER_ACTIONS,
   parameterActionsFor,
   parameterName,
+  PLACEHOLDER_HINT,
   STEP_KINDS,
   stepCanWait,
   stepKindsFor
 } from '@renderer/utils/automations'
 import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
+
+// Async: it shows the options of "one of these" with this card, which would import itself.
+const MoreStepFields = defineAsyncComponent(() => import('@renderer/components/automations/MoreStepFields.vue'))
 
 // One step of an automation's "Do": what it drives, how, and how long after the trigger.
 const props = defineProps<{
@@ -52,6 +56,10 @@ const props = defineProps<{
   // Editing an automation for an avatar that isn't worn: its parameters can't be listed.
   otherAvatar: boolean
   canRemove: boolean
+  // The automation being edited, which a step can't turn on or off.
+  automationId?: string
+  // An option of a "one of these" step: no delay, and no "one of these" inside.
+  nested?: boolean
 }>()
 const emit = defineEmits<{ remove: [] }>()
 const step = defineModel<AutomationStep>({ required: true })
@@ -69,7 +77,7 @@ const { setAddon } = useAddonSwitch()
 // The kinds that can run on this condition, plus the current one so a step that no longer fits
 // still shows what it is.
 const kinds = computed(() => {
-  const fitting = stepKindsFor(props.condition, (kind) => !offAddonForAutomationKind(kind))
+  const fitting = stepKindsFor(props.condition, (kind) => !offAddonForAutomationKind(kind) && !(props.nested && kind === 'one-of'))
   return fitting.includes(step.value.kind) ? fitting : [...fitting, step.value.kind]
 })
 
@@ -417,6 +425,11 @@ const leashValue = computed({
 
 const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
 const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value : null))
+const moreStep = computed(() =>
+  step.value.kind === 'automation-enabled' || step.value.kind === 'vr-toast' || step.value.kind === 'one-of' || step.value.kind === 'osc-message'
+    ? step.value
+    : null
+)
 const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind === 'toy-pattern' ? step.value : null))
 
 const toInt = (value: number | string): number =>
@@ -427,9 +440,9 @@ const toInt = (value: number | string): number =>
   <div class="grid gap-3.5 rounded-field border border-default bg-(--aurora-glass) p-3.5">
     <!-- The header carries the delay, so the body is only about what the step does. -->
     <div class="flex flex-wrap items-center gap-2.5">
-      <span class="text-sm font-semibold text-highlighted">Step {{ index + 1 }}</span>
+      <span class="text-sm font-semibold text-highlighted">{{ nested ? 'Option' : 'Step' }} {{ index + 1 }}</span>
       <label
-        v-if="stepCanWait(step)"
+        v-if="stepCanWait(step) && !nested"
         class="ml-auto flex items-center gap-2 text-sm text-muted"
         :title="`How long after it's triggered this step starts. Up to ${formatMs(MAX_DELAY_MS)}.`"
       >
@@ -451,7 +464,7 @@ const toInt = (value: number | string): number =>
         icon="i-lucide-trash-2"
         color="neutral"
         variant="ghost"
-        :class="stepCanWait(step) ? '' : 'ml-auto'"
+        :class="stepCanWait(step) && !nested ? '' : 'ml-auto'"
         :aria-label="`Remove step ${index + 1}`"
         @click="emit('remove')"
       />
@@ -743,6 +756,20 @@ const toInt = (value: number | string): number =>
             />
           </UFormField>
         </div>
+
+        <UFormField
+          v-else-if="param.set.type === 'add'"
+          label="Amount"
+          :description="param.valueType === 'Float' ? 'Up to ±2. Negative takes away.' : 'A whole number. Negative takes away.'"
+        >
+          <UInput
+            :model-value="param.set.amount"
+            type="number"
+            :step="param.valueType === 'Float' ? 0.05 : 1"
+            class="w-32"
+            @update:model-value="param.set.type === 'add' && (param.set.amount = Number($event) || 0)"
+          />
+        </UFormField>
       </template>
     </template>
 
@@ -923,7 +950,7 @@ const toInt = (value: number | string): number =>
       <UFormField
         label="Message"
         :hint="`${chatboxStep.text.length} / ${CHATBOX_MAX}`"
-        :description="chatboxEnabled ? 'Sent at most every 3 seconds.' : undefined"
+        :description="chatboxEnabled ? `Sent at most every 3 seconds. ${PLACEHOLDER_HINT}` : undefined"
         :error="
           chatboxEnabled
             ? false
@@ -979,6 +1006,14 @@ const toInt = (value: number | string): number =>
       :key="step.kind"
       :model-value="toyStep"
       :condition="condition"
+    />
+
+    <MoreStepFields
+      v-else-if="moreStep"
+      :model-value="moreStep"
+      :automation-id="automationId ?? ''"
+      :trigger="trigger"
+      :other-avatar="otherAvatar"
     />
 
     <p

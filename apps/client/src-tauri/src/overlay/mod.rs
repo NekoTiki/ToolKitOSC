@@ -154,6 +154,11 @@ pub fn automation_ran(app: &AppHandle, name: &str) {
     push(app, |n| n.automations, Toast { kind: Kind::Automation, who: None, what: format!("automation {name} ran"), detail: String::new() });
 }
 
+/// An automation's VR message step: always shown, whatever the toast settings say.
+pub fn automation_message(app: &AppHandle, text: &str) {
+    push(app, |_| true, Toast { kind: Kind::Automation, who: None, what: text.to_owned(), detail: String::new() });
+}
+
 /// The profiles and the active one, the viewer groups and the theme, from the webview.
 pub fn set_theme(app: &AppHandle, theme: Theme) {
     panel::set_theme(app, theme);
@@ -211,7 +216,7 @@ impl crate::addons::Addon for Addon {
             needs: &[],
             needs_any: &[],
             control_types: &[],
-            automation_kinds: &[],
+            automation_kinds: &["vr-toast"],
             pages: &[]
         }
     }

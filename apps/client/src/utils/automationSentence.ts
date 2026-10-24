@@ -198,6 +198,10 @@ export const sentenceStep = (step: AutomationStep, context?: DescribeContext): R
       const { set } = step
       if (set.type === 'toggle') return rich`flip ${name}`
       if (set.type === 'follow') return [...rich`move ${name} with it`, ...range(set.min, set.max)]
+      if (set.type === 'add') {
+        const amount = step.valueType === 'Float' ? pct(Math.abs(set.amount)) : String(Math.abs(set.amount))
+        return set.amount < 0 ? rich`take ${strong(amount)} off ${name}` : rich`add ${strong(amount)} to ${name}`
+      }
       const value = strong(parameterValue(step.parameter, step.valueType, set.value, context))
       const text = step.valueType === 'Bool' ? rich`turn ${name} ${value}` : rich`set ${name} to ${value}`
       return set.type === 'hold' ? [...text, ...rich` for as long as it lasts`] : text
@@ -246,6 +250,17 @@ export const sentenceStep = (step: AutomationStep, context?: DescribeContext): R
     }
     case 'stop-toys':
       return [strong('stop your toys')]
+    case 'automation-enabled':
+      return rich`turn ${strong(context?.automationName?.(step.automationId) ?? 'an automation')} ${strong(step.enabled ? 'on' : 'off')}`
+    case 'vr-toast':
+      return rich`show ${strong(`“${step.text}”`)} in VR`
+    case 'one-of':
+      return [
+        { text: 'do one of: ' },
+        ...step.options.flatMap((option, i) => [...(i ? [{ text: ' or ' }] : []), ...sentenceStep({ ...option, delayMs: 0 }, context)])
+      ]
+    case 'osc-message':
+      return rich`send ${strong(String(step.value))} to ${strong(step.address)}`
   }
 }
 
@@ -259,7 +274,12 @@ export const stepMissing = (step: AutomationStep): boolean => {
     case 'board-output':
       return step.pin < 0
     case 'chatbox':
+    case 'vr-toast':
       return !step.text.trim()
+    case 'automation-enabled':
+      return !step.automationId
+    case 'one-of':
+      return step.options.some((option) => stepMissing({ ...option, delayMs: 0 }))
     default:
       return false
   }

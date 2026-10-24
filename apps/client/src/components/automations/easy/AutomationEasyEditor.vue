@@ -81,6 +81,8 @@ const removeStep = (index: number): void => {
     :condition="condition"
     :trigger="automation.when.kind === 'avatar-parameter' ? automation.when.parameter : ''"
     :can-remove="automation.then.length > 1"
+    :automation-id="automation.id"
+    :other-avatar="otherAvatar"
     @remove="removeStep(stepIndex)"
   />
   <EasyOnlyPanel

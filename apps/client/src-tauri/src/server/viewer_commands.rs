@@ -214,6 +214,7 @@ fn execute(
     // Toasts are only for you, so they name the viewer whatever the share page shows.
     let value = outcome.shock.as_ref().or_else(|| sent.get("value"));
     crate::overlay::viewer_command(app, who, control, kind.unwrap_or_default(), control_name, value);
+    crate::automations::note_viewer(who, control_name, value);
 
     // Automations can start from it. A shock that didn't go out (cooldown) doesn't count.
     if let Some(control) = control {
