@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// Most steps one automation can run.
 pub const MAX_STEPS: usize = 8;
 /// Longest "after" delay on a step.
-pub const MAX_DELAY_MS: u32 = 10_000;
+pub const MAX_DELAY_MS: u32 = 300_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,8 +87,19 @@ pub enum Trigger {
     /// it.
     ShockSent,
     /// Avatar touch starts or stops driving your toys or gear (the avatar haptics add-on).
-    Touch { event: TouchEvent }
+    Touch { event: TouchEvent },
+    /// Another automation starts, or with `when_stops`, stops running. Chains stop after
+    /// `MAX_CHAIN` links so two automations can't keep starting each other.
+    #[serde(rename_all = "camelCase")]
+    AfterAutomation {
+        automation_id: String,
+        #[serde(default)]
+        when_stops: bool
+    }
 }
+
+/// How many automations in a row can start each other from one event.
+pub const MAX_CHAIN: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -223,7 +234,10 @@ pub enum Guard {
     ToysConnected { connected: bool },
     /// This board is online, or isn't. Checked by the engine (see `Env`).
     #[serde(rename_all = "camelCase")]
-    BoardOnline { board_id: String, online: bool }
+    BoardOnline { board_id: String, online: bool },
+    /// Another automation is running, or isn't. Checked by the engine, which knows.
+    #[serde(rename_all = "camelCase")]
+    AutomationRunning { automation_id: String, running: bool }
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -260,7 +274,7 @@ impl Guard {
             Guard::Chance { percent } => now.roll * 100.0 < f64::from(*percent),
             Guard::ViewerGroup { group_id, not } => context.viewer_groups.contains(group_id) != *not,
             // The engine asks the app about devices before it gets here.
-            Guard::ToysConnected { .. } | Guard::BoardOnline { .. } => true
+            Guard::ToysConnected { .. } | Guard::BoardOnline { .. } | Guard::AutomationRunning { .. } => true
         }
     }
 }
@@ -335,7 +349,24 @@ pub struct Step {
     #[serde(flatten)]
     pub action: Action,
     #[serde(default)]
-    pub delay_ms: u32
+    pub delay_ms: u32,
+    /// The delay counts from when the step before it is done, not from the trigger.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub after_previous: bool
+}
+
+/// When each step starts, in ms after the trigger: `after_previous` ones wait for the step before
+/// to be done (its own delay plus how long it runs).
+pub fn step_starts(steps: &[Step]) -> Vec<u32> {
+    let mut previous_end = 0u32;
+    steps
+        .iter()
+        .map(|step| {
+            let start = if step.after_previous { previous_end.saturating_add(step.delay_ms) } else { step.delay_ms };
+            previous_end = start.saturating_add(step.action.busy_ms());
+            start
+        })
+        .collect()
 }
 
 fn one_or_many<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Step>, D::Error> {
@@ -771,6 +802,11 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                 return Err("When a shock goes out, it can't send another one.".into());
             }
         }
+        Trigger::AfterAutomation { automation_id, .. } => {
+            if automation_id.is_empty() || *automation_id == automation.id {
+                return Err("Pick another automation for it to follow.".into());
+            }
+        }
         Trigger::AppEvent { .. } | Trigger::Leash { .. } | Trigger::ToyEvent { .. } | Trigger::BoardEvent { .. } | Trigger::Touch { .. } => {}
     }
 
@@ -802,7 +838,7 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                     return Err("A chance goes from 1 to 99 %.".into());
                 }
             }
-            Guard::ViewerGroup { group_id: id, .. } | Guard::BoardOnline { board_id: id, .. } => {
+            Guard::ViewerGroup { group_id: id, .. } | Guard::BoardOnline { board_id: id, .. } | Guard::AutomationRunning { automation_id: id, .. } => {
                 if id.is_empty() {
                     return Err("Pick what each \"only if\" checks.".into());
                 }
@@ -901,9 +937,9 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
         .into());
     }
     if step.delay_ms > MAX_DELAY_MS {
-        return Err(format!("A step can wait up to {} s.", MAX_DELAY_MS / 1000));
+        return Err(format!("A step can wait up to {} minutes.", MAX_DELAY_MS / 60_000));
     }
-    if step.delay_ms > 0 && step.action.runs() == Runs::Follow {
+    if (step.delay_ms > 0 || step.after_previous) && step.action.runs() == Runs::Follow {
         return Err("Follow can't wait: it follows the value as it changes.".into());
     }
 
@@ -1054,7 +1090,7 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
                 if matches!(option, Action::OneOf { .. }) {
                     return Err("\"One of these\" can't hold another one.".into());
                 }
-                validate_step(&Step { action: option.clone(), delay_ms: 0 }, Runs::Moment, trigger)?;
+                validate_step(&Step { action: option.clone(), delay_ms: 0, after_previous: false }, Runs::Moment, trigger)?;
             }
         }
         Action::OscMessage { address, value } => {
@@ -1096,7 +1132,7 @@ mod tests {
                 held_ms: 0,
                 also: Vec::new()
             },
-            then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output, chatbox: false }, delay_ms: 0 }],
+            then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output, chatbox: false }, delay_ms: 0, after_previous: false }],
             cooldown_ms: 0,
             retrigger: Retrigger::Restart,
             only_if: Vec::new(),
@@ -1199,12 +1235,12 @@ mod tests {
         let automation: Automation = serde_json::from_value(json).unwrap();
         assert_eq!(
             automation.then,
-            vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output: OutputAction::Toggle, chatbox: false }, delay_ms: 0 }]
+            vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output: OutputAction::Toggle, chatbox: false }, delay_ms: 0, after_previous: false }]
         );
     }
 
     fn parameter_step(parameter: &str, value_type: ValueType, set: ParameterAction) -> Step {
-        Step { action: Action::AvatarParameter { parameter: parameter.into(), value_type, set }, delay_ms: 0 }
+        Step { action: Action::AvatarParameter { parameter: parameter.into(), value_type, set }, delay_ms: 0, after_previous: false }
     }
 
     #[test]
@@ -1235,7 +1271,8 @@ mod tests {
     fn control_step(control_type: &str, run: ControlRun) -> Step {
         Step {
             action: Action::Control { group_id: "g".into(), control_id: "c".into(), control_type: control_type.into(), run },
-            delay_ms: 0
+            delay_ms: 0,
+            after_previous: false
         }
     }
 
@@ -1250,18 +1287,18 @@ mod tests {
         assert!(validate(&a).is_err(), "pulse without a length");
         a.then = vec![control_step("boolean", ControlRun::Hold { value: serde_json::json!(true) })];
         assert!(validate(&a).is_err(), "hold on a moment");
-        a.then = vec![Step { action: Action::Chatbox { text: "x".repeat(CHATBOX_MAX + 1) }, delay_ms: 0 }];
+        a.then = vec![Step { action: Action::Chatbox { text: "x".repeat(CHATBOX_MAX + 1) }, delay_ms: 0, after_previous: false }];
         assert!(validate(&a).is_err(), "chatbox too long");
-        a.then = vec![Step { action: Action::Profile { profile_id: None, while_held: true }, delay_ms: 0 }];
+        a.then = vec![Step { action: Action::Profile { profile_id: None, while_held: true }, delay_ms: 0, after_previous: false }];
         assert!(validate(&a).is_err(), "profile hold on a moment");
 
         let mut held = sample(Condition::IsOn, ValueType::Bool, OutputAction::Hold);
         held.then = vec![
             control_step("intiface-pattern", ControlRun::Hold { value: serde_json::json!("pulse") }),
-            Step { action: Action::Profile { profile_id: Some("p".into()), while_held: true }, delay_ms: 0 }
+            Step { action: Action::Profile { profile_id: Some("p".into()), while_held: true }, delay_ms: 0, after_previous: false }
         ];
         assert!(validate(&held).is_ok());
-        held.then.push(Step { action: Action::StopEverything, delay_ms: 0 });
+        held.then.push(Step { action: Action::StopEverything, delay_ms: 0, after_previous: false });
         assert!(validate(&held).is_err(), "stop everything on a state");
     }
 
@@ -1282,7 +1319,7 @@ mod tests {
         let mut changed = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
         changed.when = Trigger::AvatarChanged { avatar_id: None, avatar_name: None };
         assert!(validate(&changed).is_ok());
-        changed.then[0] = Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output: OutputAction::Hold, chatbox: false }, delay_ms: 0 };
+        changed.then[0] = Step { action: Action::BoardOutput { board_id: "b".into(), pin: 4, output: OutputAction::Hold, chatbox: false }, delay_ms: 0, after_previous: false };
         assert!(validate(&changed).is_err(), "an avatar change is a moment");
     }
 
@@ -1403,7 +1440,7 @@ mod tests {
         assert!(ok(r#"{"kind":"vr-toast","text":"Hi {viewer}"}"#));
 
         let mut a = sample(Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
-        a.then = vec![Step { action: Action::AutomationEnabled { automation_id: a.id.clone(), enabled: false }, delay_ms: 0 }];
+        a.then = vec![Step { action: Action::AutomationEnabled { automation_id: a.id.clone(), enabled: false }, delay_ms: 0, after_previous: false }];
         assert!(validate(&a).is_err(), "turns itself off");
     }
 

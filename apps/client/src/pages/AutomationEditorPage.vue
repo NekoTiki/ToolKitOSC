@@ -127,6 +127,8 @@ const toyEventItems = (Object.keys(TOY_EVENTS) as ToyEvent[]).map((event) => ({ 
 const boardWhen = computed(() => (draft.value?.when.kind === 'board-event' ? draft.value.when : null))
 const boardTargetItems = computed(() => [{ value: 'any', label: 'Any board' }, ...boards.value.map((b) => ({ value: b.id, label: b.name }))])
 const touchWhen = computed(() => (draft.value?.when.kind === 'touch' ? draft.value.when : null))
+const chainWhen = computed(() => (draft.value?.when.kind === 'after-automation' ? draft.value.when : null))
+const chainItems = computed(() => automations.value.filter((a) => a.id !== draft.value?.id).map((a) => ({ value: a.id, label: a.name })))
 
 const eventItems = (Object.keys(APP_EVENTS) as AppEventType[]).map((type) => ({ value: type, label: APP_EVENTS[type].label }))
 
@@ -197,6 +199,8 @@ const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
                   ? { kind }
                   : kind === 'touch'
                     ? { kind, event: 'starts' }
+                    : kind === 'after-automation'
+                      ? { kind, automationId: '', whenStops: false }
                     : newAutomation(id, name).when
   fitSteps()
 }
@@ -218,7 +222,8 @@ const TRIGGER_KINDS: Record<AutomationTrigger['kind'], { label: string; descript
   'toy-event': { label: 'Toys', description: 'A toy connects, disconnects or runs low.', icon: 'i-lucide-vibrate' },
   'board-event': { label: 'ESP32 board', description: 'A board goes offline or comes back.', icon: 'i-lucide-cpu' },
   'shock-sent': { label: 'Shock sent', description: "When OpenShock actually sends a shock, not when it's held back.", icon: 'i-lucide-zap' },
-  touch: { label: 'Avatar touch', description: 'Touch starts or stops driving your toys or gear.', icon: 'i-lucide-hand' }
+  touch: { label: 'Avatar touch', description: 'Touch starts or stops driving your toys or gear.', icon: 'i-lucide-hand' },
+  'after-automation': { label: 'Another automation', description: 'Another automation runs or is done. Up to 3 in a row start each other.', icon: 'i-lucide-link' }
 }
 
 // An add-on's kinds show while it's on, or while this automation already uses one.
@@ -630,6 +635,28 @@ onBeforeRouteLeave(async () => {
                 class="w-fit"
               />
             </UFormField>
+          </template>
+
+          <template v-if="chainWhen">
+            <UFormField label="Automation">
+              <USelectMenu
+                v-model="chainWhen.automationId"
+                :items="chainItems"
+                value-key="value"
+                placeholder="Pick an automation"
+                class="w-full"
+              />
+            </UFormField>
+            <SegmentedControl
+              :model-value="chainWhen.whenStops ? 'stops' : 'runs'"
+              :items="[
+                { value: 'runs', label: 'When it runs' },
+                { value: 'stops', label: 'When it is done' }
+              ]"
+              aria-label="When it runs or ends"
+              class="w-fit"
+              @update:model-value="chainWhen.whenStops = $event === 'stops'"
+            />
           </template>
 
           <UFormField

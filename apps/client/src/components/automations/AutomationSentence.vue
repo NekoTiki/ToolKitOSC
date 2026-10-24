@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import RichText from '@renderer/components/automations/RichText'
 import type { Sentence } from '@renderer/utils/automationSentence'
-import { seconds } from '@renderer/utils/automationSentence'
 
 // An automation as one plain sentence, with names and values in bold (see automationSentence.ts).
 defineProps<{ sentence: Sentence }>()
@@ -15,7 +14,7 @@ defineProps<{ sentence: Sentence }>()
       :key="index"
     >
       <template v-if="index">
-        then{{ step.delayMs ? ` after ${seconds(step.delayMs)}` : '' }}
+        then{{ step.after }}
       </template>
       <RichText :parts="step.text" />,
     </template>

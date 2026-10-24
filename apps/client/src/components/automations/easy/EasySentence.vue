@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import RichText from '@renderer/components/automations/RichText'
 import type { Sentence } from '@renderer/utils/automationSentence'
-import { seconds } from '@renderer/utils/automationSentence'
 
 // The Easy editor's sentence: the same words as the list, with each part a button that opens its
 // panel below. Parts still to fill in are dashed.
@@ -56,7 +55,7 @@ const part = (slot: string, kind: 'when' | 'step' | 'extra', missing = false): s
         :key="index"
       >
         <template v-if="index">
-          then{{ step.delayMs ? ` after ${seconds(step.delayMs)}` : '' }}
+          then{{ step.after }}
         </template>
         <button
           type="button"

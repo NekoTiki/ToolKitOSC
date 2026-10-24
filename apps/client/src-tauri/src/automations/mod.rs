@@ -207,13 +207,18 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 }
             }
             Effect::Activity(activity) => {
+                let stopped = (!activity.running).then(|| activity.id.clone());
                 let _ = app.emit("automation-activity", activity);
+                if let Some(id) = stopped {
+                    chain(app, &id, true);
+                }
             }
             Effect::Ran(id) => {
                 if let Some(automation) = list(app).into_iter().find(|a| a.id == id) {
                     crate::overlay::automation_ran(app, &automation.name);
                 }
-                let _ = app.emit("automation-ran", id);
+                let _ = app.emit("automation-ran", id.clone());
+                chain(app, &id, false);
             }
             Effect::Skipped { automation_id, action } => {
                 let Some(addon) = addon_off(app, &action) else {
@@ -388,8 +393,8 @@ pub fn test(app: &AppHandle, id: &str) -> Result<(), String> {
 
     // Everything is checked before anything is sent.
     let mut steps = Vec::new();
-    for (index, step) in automation.then.iter().enumerate() {
-        steps.push((step.delay_ms, test_step(app, id, index, &step.action)?));
+    for (index, (step, start)) in automation.then.iter().zip(model::step_starts(&automation.then)).enumerate() {
+        steps.push((start, test_step(app, id, index, &step.action)?));
     }
 
     let app = app.clone();
@@ -424,6 +429,26 @@ pub fn set_paused(app: &AppHandle, paused: bool) {
     let effects = automations(app).state.lock().unwrap().set_paused(paused);
     apply(app, effects);
     crate::overlay::paused(app, paused);
+}
+
+thread_local! {
+    /// How many automations deep the one starting now is, counting from the event.
+    static CHAIN: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Starts what follows automation `id`, unless the chain is already `MAX_CHAIN` long, so two
+/// automations can't keep starting each other at once.
+fn chain(app: &AppHandle, id: &str, stopped: bool) {
+    let depth = CHAIN.with(|c| c.get());
+    if depth >= model::MAX_CHAIN {
+        tracing::info!("Automation chain stopped after {depth} links at {id}");
+        return;
+    }
+    CHAIN.with(|c| c.set(depth + 1));
+    trigger(app, |when| {
+        matches!(when, model::Trigger::AfterAutomation { automation_id, when_stops } if automation_id == id && *when_stops == stopped)
+    });
+    CHAIN.with(|c| c.set(depth));
 }
 
 fn trigger(app: &AppHandle, matches: impl Fn(&model::Trigger) -> bool) {

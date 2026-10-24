@@ -76,6 +76,8 @@ export type ToyEventTrigger = { kind: 'toy-event'; event: ToyEvent }
 export type BoardEventTrigger = { kind: 'board-event'; event: 'online' | 'offline'; boardId: string | null }
 export type ShockSentTrigger = { kind: 'shock-sent' }
 export type TouchTrigger = { kind: 'touch'; event: 'starts' | 'stops' }
+// Another automation starts, or with `whenStops`, stops running.
+export type AfterAutomationTrigger = { kind: 'after-automation'; automationId: string; whenStops: boolean }
 
 export type AutomationTrigger =
   | AvatarParameterTrigger
@@ -87,6 +89,7 @@ export type AutomationTrigger =
   | BoardEventTrigger
   | ShockSentTrigger
   | TouchTrigger
+  | AfterAutomationTrigger
 
 // Has to be true for an automation to start; checked when it starts, not while it runs.
 export type AutomationGuard =
@@ -111,6 +114,7 @@ export type AutomationGuard =
   | { kind: 'viewer-group'; groupId: string; not: boolean }
   | { kind: 'toys-connected'; connected: boolean }
   | { kind: 'board-online'; boardId: string; online: boolean }
+  | { kind: 'automation-running'; automationId: string; running: boolean }
 
 // What "only if" needs from the app.
 // How many viewers are on, for "only if". Rust knows the active profile itself.
@@ -228,8 +232,9 @@ export type AutomationRun = { automationId: string; step: number; action: Automa
   { phase: 'run' | 'start' | 'stop' } | { phase: 'follow'; value: number }
 )
 
-// One thing an automation does, starting `delayMs` after the trigger.
-export type AutomationStep = AutomationAction & { delayMs: number }
+// One thing an automation does, starting `delayMs` after the trigger, or with `afterPrevious`
+// after the step before it is done.
+export type AutomationStep = AutomationAction & { delayMs: number; afterPrevious?: boolean }
 
 export interface Automation {
   id: string

@@ -143,7 +143,7 @@ export const PARAMETER_ACTIONS: Record<
 
 // Most steps one automation can run, and the longest "after" delay (model.rs MAX_STEPS, MAX_DELAY_MS).
 export const MAX_STEPS = 8
-export const MAX_DELAY_MS = 10_000
+export const MAX_DELAY_MS = 300_000
 // model.rs CHATBOX_MAX, MAX_TOY_PULSE_MS.
 export const CHATBOX_MAX = 144
 export const MAX_TOY_PULSE_MS = 60_000
@@ -466,7 +466,41 @@ export const triggerIcon = (when: AutomationTrigger): string => {
       return 'i-lucide-zap'
     case 'touch':
       return 'i-lucide-hand'
+    case 'after-automation':
+      return 'i-lucide-link'
   }
+}
+
+// How long a step keeps running after it starts (model.rs busy_ms), 0 for at once, null for
+// holds and follows, which last until the trigger ends.
+export const stepBusyMs = (step: AutomationAction): number | null => {
+  if (stepRuns(step) !== 'moment') return null
+  switch (step.kind) {
+    case 'control':
+      return step.run.type === 'pulse' ? step.run.ms : 0
+    case 'board-output':
+      return step.output.type === 'pulse' ? step.output.onMs * step.output.count + step.output.offMs * (step.output.count - 1) : 0
+    case 'bhaptics-pulse':
+      return step.ms
+    case 'toy':
+      return step.run.type === 'pulse' || step.run.type === 'ramp' ? step.run.ms : 0
+    case 'toy-pattern':
+      return step.ms
+    case 'one-of':
+      return Math.max(0, ...step.options.map((option) => stepBusyMs(option) ?? 0))
+    default:
+      return 0
+  }
+}
+
+// When each step starts after the trigger (model.rs step_starts).
+export const stepStarts = (steps: AutomationStep[]): number[] => {
+  let previousEnd = 0
+  return steps.map((step) => {
+    const start = step.afterPrevious ? previousEnd + step.delayMs : step.delayMs
+    previousEnd = start + (stepBusyMs(step) ?? 0)
+    return start
+  })
 }
 
 export const TOY_EVENTS: Record<ToyEvent, string> = {
@@ -801,6 +835,7 @@ export const describeWhen = (when: AutomationTrigger, context?: DescribeContext)
   if (when.kind === 'board-event') return `${when.boardId ? (context?.boards.find((b) => b.id === when.boardId)?.name ?? 'a board') : 'a board'} goes ${when.event}`
   if (when.kind === 'shock-sent') return 'a shock goes out'
   if (when.kind === 'touch') return `avatar touch ${when.event === 'starts' ? 'starts' : 'stops'}`
+  if (when.kind === 'after-automation') return `${context?.automationName?.(when.automationId) ?? 'another automation'} ${when.whenStops ? 'stops' : 'runs'}`
   if (when.kind === 'avatar-changed')
     return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
@@ -1002,6 +1037,8 @@ export const describeGuard = (guard: AutomationGuard, context: DescribeContext):
       return guard.connected ? 'a toy is connected' : 'no toy is connected'
     case 'board-online':
       return `${context.boards.find((b) => b.id === guard.boardId)?.name ?? 'a board'} is ${guard.online ? 'online' : 'offline'}`
+    case 'automation-running':
+      return `${context.automationName?.(guard.automationId) ?? 'another automation'} is ${guard.running ? '' : 'not '}running`
     default:
       return !guard.online ? 'nobody is watching' : (guard.atLeast ?? 0) > 1 ? `at least ${guard.atLeast} viewers are on` : 'viewers are on'
   }

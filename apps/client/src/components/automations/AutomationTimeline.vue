@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationStep } from '@renderer/lib/tauri-bridge'
-import { STEP_KINDS, stepRuns } from '@renderer/utils/automations'
+import { STEP_KINDS, stepBusyMs, stepStarts } from '@renderer/utils/automations'
 import { seconds } from '@renderer/utils/automationSentence'
 import { computed } from 'vue'
 
@@ -9,30 +9,17 @@ import { computed } from 'vue'
 // something that happens at once.
 const props = defineProps<{ steps: AutomationStep[] }>()
 
-// How long a step runs, null until the trigger ends, 0 at once.
-const length = (step: AutomationStep): number | null => {
-  if (stepRuns(step) !== 'moment') return null
-  switch (step.kind) {
-    case 'control':
-      return step.run.type === 'pulse' ? step.run.ms : 0
-    case 'board-output':
-      return step.output.type === 'pulse' ? step.output.onMs * step.output.count + step.output.offMs * (step.output.count - 1) : 0
-    case 'bhaptics-pulse':
-      return step.ms
-    default:
-      return 0
-  }
-}
-
 const timeline = computed(() => {
-  const end = Math.max(2000, ...props.steps.map((step) => step.delayMs + (length(step) ?? 1500)))
+  const starts = stepStarts(props.steps)
+  const end = Math.max(2000, ...props.steps.map((step, i) => starts[i]! + (stepBusyMs(step) ?? 1500)))
   const total = end * 1.15
   const at = (ms: number): number => (ms / total) * 100
   const tick = total > 20_000 ? 5000 : total > 6000 ? 1000 : 500
   return {
     rows: props.steps.map((step, index) => {
-      const ms = length(step)
-      return { label: `${index + 1} · ${STEP_KINDS[step.kind].label}`, left: at(step.delayMs), width: ms === null ? 100 - at(step.delayMs) : at(ms), open: ms === null, dot: ms === 0 }
+      const ms = stepBusyMs(step)
+      const start = starts[index]!
+      return { label: `${index + 1} · ${STEP_KINDS[step.kind].label}`, left: at(start), width: ms === null ? 100 - at(start) : at(ms), open: ms === null, dot: ms === 0 }
     }),
     ticks: Array.from({ length: Math.floor(total / tick) + 1 }, (_, i) => ({ left: at(i * tick), label: seconds(i * tick) }))
   }
