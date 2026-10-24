@@ -86,6 +86,7 @@ const removeStep = (index: number): void => {
   <EasyOnlyPanel
     v-else-if="selected === 'only'"
     v-model="automation.onlyIf"
+    v-model:any="automation.onlyIfAny"
     :other-avatar="otherAvatar"
   />
   <EasyOftenPanel

@@ -1,3 +1,4 @@
+import { useAutomations } from '@renderer/composables/useAutomations'
 import { useChatbox } from '@renderer/composables/useChatbox'
 import { useClientsDb } from '@renderer/composables/useClientsDb'
 import { useStopEverything } from '@renderer/composables/useStopEverything'
@@ -18,6 +19,7 @@ export function useAutomationRunner(): void {
   const { announceNotice } = useChatbox()
   const { paused } = useStopEverything()
   const { onlineClients } = useClientsDb()
+  const { automations } = useAutomations()
   const toast = useToast()
 
   // A step of an add-on that's off was skipped. Rust says so once per automation.
@@ -46,8 +48,12 @@ export function useAutomationRunner(): void {
     if (!paused.value) announceNotice(text)
   })
 
+  // Automations that run when Stop everything turns on: their chatbox steps still post.
+  const onStop = (id: string): boolean =>
+    automations.value.some((a) => a.id === id && a.when.kind === 'app-event' && a.when.event.type === 'stopped')
+
   api.onAutomationRun((run) => {
-    if (paused.value || run.phase !== 'run') return
+    if ((paused.value && !onStop(run.automationId)) || run.phase !== 'run') return
 
     if (run.action.kind === 'chatbox') announceNotice(run.action.text)
   })

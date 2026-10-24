@@ -24,9 +24,11 @@ pub struct Automation {
     /// What a moment trigger does while the previous run is still going.
     #[serde(default)]
     pub retrigger: Retrigger,
-    /// All of these have to be true for it to start.
+    /// All of these have to be true for it to start, or with `only_if_any` one of them.
     #[serde(default)]
     pub only_if: Vec<Guard>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub only_if_any: bool,
     /// Set while it's an assistant's draft.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_by: Option<crate::types::CreatedBy>
@@ -66,8 +68,13 @@ pub enum Trigger {
     /// (`automation_event`).
     AppEvent { event: AppEvent },
     /// Something happens to the avatar leash. Its add-on reports these.
-    Leash { event: LeashEvent }
+    Leash { event: LeashEvent },
+    /// Every `minutes` while the app is open, counted from when it starts or is saved.
+    Every { minutes: u32 }
 }
+
+/// Longest gap of an `every` trigger: a day.
+pub const MAX_EVERY_MINUTES: u32 = 24 * 60;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -85,7 +92,9 @@ pub enum AppEvent {
     FirstViewer,
     LastViewerLeft,
     /// Stop everything is turned off.
-    Resumed
+    Resumed,
+    /// Stop everything is turned on. Only chatbox steps run on it, right away.
+    Stopped
 }
 
 /// What happens to the avatar leash (see `crate::leash`).
@@ -133,30 +142,78 @@ pub enum Guard {
     /// This profile is active (None: No profile).
     #[serde(rename_all = "camelCase")]
     Profile { profile_id: Option<String> },
-    /// Viewers are on the share page, or none are.
-    Viewers { online: bool }
+    /// At least `at_least` viewers (1 when 0) are on the share page, or, with `online` false, none.
+    #[serde(rename_all = "camelCase")]
+    Viewers {
+        online: bool,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        at_least: u32
+    },
+    /// The local time is within from..to (minutes of the day, across midnight when to < from), on
+    /// these days (0 = Monday; empty = every day).
+    Time {
+        from: u16,
+        to: u16,
+        #[serde(default)]
+        days: Vec<u8>
+    },
+    /// You're wearing this avatar, or with `not`, any other.
+    #[serde(rename_all = "camelCase")]
+    Wearing {
+        avatar_id: String,
+        avatar_name: String,
+        #[serde(default)]
+        not: bool
+    },
+    /// A dice roll: true `percent` times out of 100.
+    Chance { percent: u8 }
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// Most "only if" conditions on one automation.
 pub const MAX_GUARDS: usize = 4;
 
+/// The clock and a dice roll, for time and chance guards.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Now {
+    /// 0 = Monday.
+    pub weekday: u8,
+    /// Minutes since local midnight.
+    pub minute: u16,
+    /// 0–1.
+    pub roll: f64
+}
+
 impl Guard {
     /// `value` looks up a parameter's current value.
-    pub fn holds(&self, context: &Context, value: &dyn Fn(&str) -> Option<f64>) -> bool {
+    pub fn holds(&self, context: &Context, now: Now, value: &dyn Fn(&str) -> Option<f64>) -> bool {
         match self {
             Guard::Parameter { parameter, condition, not, .. } => value(parameter).is_some_and(|v| condition.holds(v)) != *not,
             Guard::Profile { profile_id } => context.profile_id == *profile_id,
-            Guard::Viewers { online } => (context.viewers > 0) == *online
+            Guard::Viewers { online: true, at_least } => context.viewers >= (*at_least).max(1),
+            Guard::Viewers { online: false, .. } => context.viewers == 0,
+            Guard::Time { from, to, days } => {
+                let within = if from <= to { (*from..*to).contains(&now.minute) } else { now.minute >= *from || now.minute < *to };
+                within && (days.is_empty() || days.contains(&now.weekday))
+            }
+            Guard::Wearing { avatar_id, not, .. } => (context.avatar_id.as_deref() == Some(avatar_id.as_str())) != *not,
+            Guard::Chance { percent } => now.roll * 100.0 < f64::from(*percent)
         }
     }
 }
 
-/// What guards need: the active profile (see `setup`) and how many viewers are on (from the webview).
+/// What guards need: the active profile (see `setup`), how many viewers are on (from the webview)
+/// and the avatar you're wearing.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Context {
     pub profile_id: Option<String>,
-    pub viewers: u32
+    pub viewers: u32,
+    #[serde(default)]
+    pub avatar_id: Option<String>
 }
 
 /// Longest "held for" on a state.
@@ -167,7 +224,7 @@ impl Trigger {
     pub fn runs(&self) -> Runs {
         match self {
             Trigger::AvatarParameter { condition, .. } => condition.runs(),
-            Trigger::AvatarChanged { .. } | Trigger::AppEvent { .. } | Trigger::Leash { .. } => Runs::Moment
+            Trigger::AvatarChanged { .. } | Trigger::AppEvent { .. } | Trigger::Leash { .. } | Trigger::Every { .. } => Runs::Moment
         }
     }
 }
@@ -559,6 +616,17 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                 return Err("Pick the avatar, or any avatar.".into());
             }
         }
+        Trigger::Every { minutes } => {
+            if !(1..=MAX_EVERY_MINUTES).contains(minutes) {
+                return Err("It can run every minute up to once a day.".into());
+            }
+        }
+        // Everything else is stopped: only the chatbox can still say so.
+        Trigger::AppEvent { event: AppEvent::Stopped } => {
+            if automation.then.iter().any(|step| !matches!(step.action, Action::Chatbox { .. }) || step.delay_ms > 0) {
+                return Err("When Stop everything turns on, only the chatbox can say something, right away.".into());
+            }
+        }
         Trigger::AppEvent { .. } | Trigger::Leash { .. } => {}
     }
 
@@ -566,13 +634,31 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
         return Err(format!("An automation can have up to {MAX_GUARDS} \"only if\" conditions."));
     }
     for guard in &automation.only_if {
-        if let Guard::Parameter { parameter, value_type, condition, .. } = guard {
-            if parameter.is_empty() {
-                return Err("Pick the parameter each \"only if\" checks.".into());
+        match guard {
+            Guard::Parameter { parameter, value_type, condition, .. } => {
+                if parameter.is_empty() {
+                    return Err("Pick the parameter each \"only if\" checks.".into());
+                }
+                if condition.runs() != Runs::State || !condition.fits(*value_type) {
+                    return Err("An \"only if\" checks a state, like \"is on\".".into());
+                }
             }
-            if condition.runs() != Runs::State || !condition.fits(*value_type) {
-                return Err("An \"only if\" checks a state, like \"is on\".".into());
+            Guard::Time { from, to, days } => {
+                if *from >= 24 * 60 || *to >= 24 * 60 || from == to || days.iter().any(|day| *day > 6) {
+                    return Err("Pick a start and an end time that aren't the same.".into());
+                }
             }
+            Guard::Wearing { avatar_id, .. } => {
+                if avatar_id.is_empty() {
+                    return Err("Pick the avatar.".into());
+                }
+            }
+            Guard::Chance { percent } => {
+                if !(1..=99).contains(percent) {
+                    return Err("A chance goes from 1 to 99 %.".into());
+                }
+            }
+            Guard::Profile { .. } | Guard::Viewers { .. } => {}
         }
     }
     let runs = automation.when.runs();
@@ -819,6 +905,7 @@ mod tests {
             cooldown_ms: 0,
             retrigger: Retrigger::Restart,
             only_if: Vec::new(),
+            only_if_any: false,
             created_by: None
         }
     }

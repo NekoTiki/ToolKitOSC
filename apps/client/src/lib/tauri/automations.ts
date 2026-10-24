@@ -47,6 +47,8 @@ export type AppEvent =
   | { type: 'last-viewer-left' }
   // Stop everything is turned off.
   | { type: 'resumed' }
+  // Stop everything is turned on: only chatbox steps run, right away.
+  | { type: 'stopped' }
 
 export type AppEventTrigger = { kind: 'app-event'; event: AppEvent }
 
@@ -54,7 +56,10 @@ export type AppEventTrigger = { kind: 'app-event'; event: AppEvent }
 export type LeashEvent = 'grabbed' | 'running' | 'released'
 export type LeashTrigger = { kind: 'leash'; event: LeashEvent }
 
-export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger | AppEventTrigger | LeashTrigger
+// Every `minutes` while the app is open, counted from when it starts or is saved.
+export type EveryTrigger = { kind: 'every'; minutes: number }
+
+export type AutomationTrigger = AvatarParameterTrigger | AvatarChangedTrigger | AppEventTrigger | LeashTrigger | EveryTrigger
 
 // Has to be true for an automation to start; checked when it starts, not while it runs.
 export type AutomationGuard =
@@ -67,7 +72,14 @@ export type AutomationGuard =
     }
   // profileId null: No profile.
   | { kind: 'profile'; profileId: string | null }
-  | { kind: 'viewers'; online: boolean }
+  // At least `atLeast` viewers (1 when left out), or with `online` false, nobody.
+  | { kind: 'viewers'; online: boolean; atLeast?: number }
+  // Local time from..to in minutes of the day (across midnight when to < from), on these days
+  // (0 = Monday; empty = every day).
+  | { kind: 'time'; from: number; to: number; days: number[] }
+  | { kind: 'wearing'; avatarId: string; avatarName: string; not: boolean }
+  // True `percent` times out of 100.
+  | { kind: 'chance'; percent: number }
 
 // What "only if" needs from the app.
 // How many viewers are on, for "only if". Rust knows the active profile itself.
@@ -185,8 +197,9 @@ export interface Automation {
   cooldownMs: number
   // What a moment does while the previous run is still going.
   retrigger: 'restart' | 'ignore'
-  // All of these have to be true for it to start.
+  // All of these have to be true for it to start, or with `onlyIfAny` one of them.
   onlyIf: AutomationGuard[]
+  onlyIfAny?: boolean
   // Set while it's an AI assistant's draft. Rust drops it when you save the automation.
   createdBy?: CreatedBy
 }

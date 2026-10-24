@@ -28,7 +28,7 @@ const { avatarDetails } = useAvatarDetails()
 // Whose an automation is, or null when it runs on any avatar.
 const avatarOf = (automation: Automation): { id: string; name: string } | null => {
   const { when } = automation
-  if (when.kind === 'app-event' || when.kind === 'leash') return null
+  if (when.kind === 'app-event' || when.kind === 'leash' || when.kind === 'every') return null
   if (when.kind === 'avatar-changed') return when.avatarId ? { id: when.avatarId, name: when.avatarName ?? 'Avatar' } : null
   return when.anyAvatar ? null : { id: when.avatarId, name: when.avatarName }
 }

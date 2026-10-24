@@ -9,7 +9,7 @@ import type {
   ParameterValueType
 } from '@renderer/lib/tauri-bridge'
 import type { DescribeContext } from '@renderer/utils/automations'
-import { CONDITIONS, parameterName, toysLabel, triggerCondition } from '@renderer/utils/automations'
+import { CONDITIONS, formatClock, formatMinutes, parameterName, toysLabel, triggerCondition, WEEKDAYS } from '@renderer/utils/automations'
 import { builtinGuardText, builtinWhenText } from '@renderer/utils/builtinParameters'
 import type { ControlType } from '@toolkitosc/shared-ui'
 import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
@@ -77,6 +77,8 @@ const describeEvent = (event: AppEvent, context?: DescribeContext): Rich => {
       return rich`the last viewer leaves`
     case 'resumed':
       return rich`you turn ${strong('Stop everything')} off`
+    case 'stopped':
+      return rich`${strong('Stop everything')} turns on`
   }
 }
 
@@ -92,6 +94,8 @@ export const sentenceWhen = (when: AutomationTrigger, context?: DescribeContext)
           : rich`your leash is let go`
     case 'avatar-changed':
       return when.avatarId ? rich`you put on ${strong(when.avatarName ?? 'an avatar')}` : rich`you switch avatar`
+    case 'every':
+      return rich`${strong(formatMinutes(when.minutes))} have passed`
     case 'avatar-parameter': {
       if (!when.parameter) return rich`something on your avatar changes`
       // A gesture or what you're doing: the same on every avatar.
@@ -264,7 +268,16 @@ export const stepMissing = (step: AutomationStep): boolean => {
 const sentenceGuard = (guard: AutomationGuard, context?: DescribeContext): Rich => {
   switch (guard.kind) {
     case 'viewers':
-      return guard.online ? rich`someone is watching` : rich`nobody is watching`
+      if (!guard.online) return rich`nobody is watching`
+      return (guard.atLeast ?? 0) > 1 ? rich`at least ${strong(`${guard.atLeast} viewers`)} are watching` : rich`someone is watching`
+    case 'time': {
+      const days = guard.days.length ? rich` on ${strong(guard.days.map((d) => WEEKDAYS[d]).join(', '))}` : []
+      return [...rich`it's between ${strong(formatClock(guard.from))} and ${strong(formatClock(guard.to))}`, ...days]
+    }
+    case 'wearing':
+      return guard.not ? rich`you're not wearing ${strong(guard.avatarName)}` : rich`you're wearing ${strong(guard.avatarName)}`
+    case 'chance':
+      return rich`a ${strong(`${guard.percent}%`)} chance says yes`
     case 'profile':
       return guard.profileId ? rich`the ${strong(context?.profileName?.(guard.profileId) ?? 'a')} profile is on` : rich`no profile is on`
     case 'parameter': {
@@ -280,8 +293,8 @@ const sentenceGuard = (guard: AutomationGuard, context?: DescribeContext): Rich 
   }
 }
 
-export const sentenceOnly = (guards: AutomationGuard[], context?: DescribeContext): Rich | null =>
-  guards.length ? [{ text: 'only when ' }, ...guards.flatMap((guard, i) => [...(i ? [{ text: ' and ' }] : []), ...sentenceGuard(guard, context)])] : null
+export const sentenceOnly = (guards: AutomationGuard[], context?: DescribeContext, any = false): Rich | null =>
+  guards.length ? [{ text: 'only when ' }, ...guards.flatMap((guard, i) => [...(i ? [{ text: any ? ' or ' : ' and ' }] : []), ...sentenceGuard(guard, context)])] : null
 
 export const sentenceOften = (cooldownMs: number): Rich => (cooldownMs ? rich`at most every ${strong(seconds(cooldownMs))}` : [strong('every time')])
 
@@ -291,7 +304,7 @@ export const sentence = (automation: Automation, context?: DescribeContext): Sen
     lead: !CONDITIONS[condition].moment && condition !== 'any' ? 'While' : 'When',
     when: sentenceWhen(automation.when, context),
     steps: automation.then.map((step) => ({ delayMs: step.delayMs, text: sentenceStep(step, context), missing: stepMissing(step) })),
-    only: sentenceOnly(automation.onlyIf, context),
+    only: sentenceOnly(automation.onlyIf, context, automation.onlyIfAny),
     often: sentenceOften(automation.cooldownMs)
   }
 }

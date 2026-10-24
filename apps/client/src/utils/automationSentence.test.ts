@@ -63,6 +63,24 @@ describe('sentence', () => {
     expect(plainSentence(s)).toBe("While you're AFK, stop your toys, only when you're on desktop, every time.")
   })
 
+  it('words timers, time, chance and "any of these"', () => {
+    const s = sentence(
+      automation({
+        when: { kind: 'every', minutes: 30 },
+        then: [{ kind: 'chatbox', text: 'Drink water', delayMs: 0 }],
+        onlyIf: [
+          { kind: 'time', from: 22 * 60, to: 2 * 60, days: [5, 6] },
+          { kind: 'chance', percent: 25 }
+        ],
+        onlyIfAny: true
+      }),
+      context
+    )
+    expect(plainSentence(s)).toBe(
+      'When 30 min have passed, say “Drink water” in the chatbox, only when it\'s between 22:00 and 02:00 on Sat, Sun or a 25% chance says yes, every time.'
+    )
+  })
+
   it('uses "While" for a state and words a hold', () => {
     const s = sentence(
       automation({

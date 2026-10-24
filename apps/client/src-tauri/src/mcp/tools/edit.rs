@@ -29,7 +29,10 @@ pub struct AutomationRequest {
     retrigger: Retrigger,
     /// Up to 4 conditions that all have to be true for it to start.
     #[serde(default)]
-    only_if: Vec<Guard>
+    only_if: Vec<Guard>,
+    /// One of the onlyIf conditions is enough, instead of all of them.
+    #[serde(default)]
+    only_if_any: bool
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -157,6 +160,7 @@ impl Session {
             cooldown_ms: request.cooldown_ms,
             retrigger: request.retrigger,
             only_if: request.only_if,
+            only_if_any: request.only_if_any,
             created_by: Some(self.created_by())
         };
         crate::automations::save(&self.app, automation)?;

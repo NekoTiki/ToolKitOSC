@@ -74,9 +74,7 @@ fn set_paused(app: &AppHandle, paused: bool) {
     crate::automations::set_paused(app, paused);
     let _ = app.emit("paused-changed", paused);
     send_to_server(app);
-    if !paused {
-        crate::automations::event(app, &AppEvent::Resumed);
-    }
+    crate::automations::event(app, &if paused { AppEvent::Stopped } else { AppEvent::Resumed });
 }
 
 /// Tells the share page, which says so to viewers. Dropped while signed out.

@@ -51,6 +51,16 @@ impl Env for AppEnv<'_> {
     fn live(&self, action: &Action) -> bool {
         addon_off(self.0, action).is_none()
     }
+
+    fn now(&self) -> model::Now {
+        use chrono::{Datelike, Timelike};
+        let now = chrono::Local::now();
+        model::Now {
+            weekday: now.weekday().num_days_from_monday() as u8,
+            minute: (now.hour() * 60 + now.minute()) as u16,
+            roll: rand::random::<f64>()
+        }
+    }
 }
 
 /// The name of the add-on this step needs, when it's off.
@@ -364,7 +374,7 @@ pub fn event(app: &AppHandle, event: &model::AppEvent) {
 /// How many viewers are on, from the webview. The profile comes from `set_profile`.
 pub fn set_context(app: &AppHandle, context: model::Context) {
     let mut state = automations(app).state.lock().unwrap();
-    state.context = model::Context { profile_id: state.context.profile_id.take(), ..context };
+    state.context = model::Context { profile_id: state.context.profile_id.take(), avatar_id: state.context.avatar_id.take(), ..context };
 }
 
 /// The worn avatar's active profile, for "only if".
@@ -401,7 +411,11 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage, previous: Option<&Osc
 
 /// The new avatar is loaded (details and saved values): its "avatar changed" automations run.
 pub fn avatar_worn(app: &AppHandle, avatar_id: &str) {
-    let effects = automations(app).state.lock().unwrap().on_avatar_worn(avatar_id, &AppEnv(app));
+    let effects = {
+        let mut state = automations(app).state.lock().unwrap();
+        state.context.avatar_id = Some(avatar_id.to_owned());
+        state.on_avatar_worn(avatar_id, &AppEnv(app))
+    };
     apply(app, effects);
 }
 
