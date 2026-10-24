@@ -75,7 +75,20 @@ export const aiAccess = sqliteTable('ai_access', {
   canSelectModel: integer('can_select_model', { mode: 'boolean' }).notNull().default(false),
   grantedBy: text('granted_by').notNull(),
   grantedAt: integer('granted_at', { mode: 'timestamp' }).notNull(),
-  note: text('note')
+  note: text('note'),
+  // This account's daily credit pool instead of the server-wide setting. Null: the setting.
+  dailyCredits: integer('daily_credits')
+})
+
+// "Request access" from the app's AI page, listed for admins on the Users page. Granting access
+// removes the row; declining keeps it, so the same account can't ask again right away.
+export const aiAccessRequests = sqliteTable('ai_access_requests', {
+  discordId: text('discord_id')
+    .primaryKey()
+    .references(() => users.discordId),
+  message: text('message'),
+  status: text('status', { enum: ['pending', 'declined'] }).notNull(),
+  requestedAt: integer('requested_at', { mode: 'timestamp' }).notNull()
 })
 
 // Day-partitioned (UTC calendar day, 'YYYY-MM-DD') rather than a rolling 24h window - a new day

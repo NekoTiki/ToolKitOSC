@@ -11,7 +11,9 @@ export interface AccessEntry {
   grantedBy: string | null
   grantedAt: string | null
   note: string | null
-  credits: { remaining: number } | null
+  // Their own daily pool; null uses the server setting.
+  dailyCredits: number | null
+  credits: { remaining: number; daily: number } | null
 }
 
 export const accessEntryName = (entry: Pick<AccessEntry, 'displayName' | 'username'>): string => entry.displayName || entry.username || 'Unknown'
@@ -22,6 +24,7 @@ export function useAdminUserAccess(reload: () => Promise<unknown>): {
   setCanSelectModel: (discordId: string, canSelectModel: boolean) => Promise<void>
   saveNote: (entry: AccessEntry, note: string) => Promise<void>
   addCredits: (discordId: string, amount: number) => Promise<void>
+  setDailyCredits: (discordId: string, dailyCredits: number | null) => Promise<void>
 } {
   const { adminFetch } = useAdminApi()
   const toast = useToast()
@@ -62,5 +65,11 @@ export function useAdminUserAccess(reload: () => Promise<unknown>): {
     await reload()
   }
 
-  return { grant, revoke, setCanSelectModel, saveNote, addCredits }
+  const setDailyCredits = async (discordId: string, dailyCredits: number | null): Promise<void> => {
+    await adminFetch(`/api/admin/users/${discordId}/daily-credits`, { method: 'POST', body: { dailyCredits } })
+    toast.add({ title: dailyCredits === null ? 'Back to the server setting' : `${dailyCredits} credits a day`, icon: 'i-lucide-credit-card', color: 'success' })
+    await reload()
+  }
+
+  return { grant, revoke, setCanSelectModel, saveNote, addCredits, setDailyCredits }
 }
