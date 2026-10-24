@@ -51,7 +51,7 @@ const description = computed(() => {
   const info = shareInfo.value
   const who = info?.hostName ? `${info.hostName} is` : 'This host is'
 
-  if (!info?.online) return `${who} currently offline.`
+  if (!info?.online) return `${who} currently offline.${info?.offlineMessage ? ` ${info.offlineMessage}` : ''}`
   if (info.controlCount === 0) return `${who} online, but hasn't shared any controls yet.`
 
   return `${who} sharing ${info.controlCount} live ${info.controlCount === 1 ? 'control' : 'controls'} - open the link to view and use them.`
@@ -406,7 +406,13 @@ const pageState = computed<'refused' | 'banned' | 'signin' | 'connecting' | 'dis
             name="i-lucide-wifi-off"
             class="size-5 shrink-0 text-warning"
           />
-          <span>{{ hostName }} is offline. Controls are paused and come back by themselves.</span>
+          <span class="grid gap-0.5">
+            <span>{{ hostName }} is offline. Controls are paused and come back by themselves.</span>
+            <b
+              v-if="shareInfo?.offlineMessage"
+              class="font-medium"
+            >“{{ shareInfo.offlineMessage }}”</b>
+          </span>
         </div>
 
         <div
@@ -563,7 +569,23 @@ const pageState = computed<'refused' | 'banned' | 'signin' | 'connecting' | 'dis
           icon="i-lucide-wifi-off"
           :title="`${hostName} is offline`"
           description="Their controls show up here by themselves when they open the desktop app."
-        />
+        >
+          <p
+            v-if="shareInfo?.offlineMessage"
+            class="rounded-field well px-3.5 py-2.5 text-sm text-default"
+          >
+            “{{ shareInfo.offlineMessage }}”
+          </p>
+          <p
+            v-if="shareInfo?.lastOnlineAt"
+            class="text-sm text-muted"
+          >
+            Last live <NuxtTime
+              :datetime="shareInfo.lastOnlineAt"
+              relative
+            />
+          </p>
+        </ShareStateCard>
         <ShareStateCard
           v-else
           icon="i-lucide-inbox"

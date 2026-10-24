@@ -7,6 +7,8 @@ import { computed, ref, watch } from 'vue'
 interface ShareLinks {
   main: string
   custom: string | null
+  // Shown on the share page while you're offline. Missing from older servers.
+  offlineMessage?: string | null
 }
 
 const { user } = useAuth()
@@ -51,11 +53,13 @@ export function useShareLink(): {
   shareUrl: typeof shareUrl
   reset: () => Promise<void>
   setName: (name: string | null) => Promise<void>
+  setOfflineMessage: (message: string | null) => Promise<void>
 } {
   return {
     links,
     shareUrl,
     reset: () => send('POST', '/api/share-link/reset'),
-    setName: (name) => send('PUT', '/api/share-link/name', { name })
+    setName: (name) => send('PUT', '/api/share-link/name', { name }),
+    setOfflineMessage: (message) => send('PUT', '/api/share-link/away', { message })
   }
 }

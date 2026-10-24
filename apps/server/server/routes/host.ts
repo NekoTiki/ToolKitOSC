@@ -1,4 +1,5 @@
 import type { Peer } from 'crossws'
+import { eq } from 'drizzle-orm'
 import jwt from 'jsonwebtoken'
 
 import type { User } from '#auth-utils'
@@ -15,7 +16,9 @@ import {
   MIN_SUPPORTED_PROTOCOL_VERSION,
   PROTOCOL_VERSION
 } from '#shared/types/protocol'
+import { getDb } from '~~/server/db'
 import { accountProblem } from '~~/server/db/accounts'
+import { users } from '~~/server/db/schema'
 import { recordAppVersion, upsertUserFromAuth } from '~~/server/db/users'
 import {
   broadcastPresence,
@@ -347,6 +350,11 @@ export default defineWebSocketHandler({
     // Share settings are kept: viewers who stay on the page while the host is away must not suddenly
     // see each other because the host's choice was forgotten.
     hostLastAction.delete(roomId)
+    void getDb()
+      .update(users)
+      .set({ lastOnlineAt: new Date() })
+      .where(eq(users.discordId, roomId))
+      .catch((error) => console.error('[host] failed to save last online time:', error))
     sendToEveryoneInRoom(roomId, { type: 'host-status', message: 'offline' })
     roomsChanged()
   },

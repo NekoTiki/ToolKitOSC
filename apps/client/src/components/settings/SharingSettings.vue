@@ -17,13 +17,30 @@ const { clientType, setClient } = useClientType()
 const { showViewers, setShowViewers } = useShareSettings()
 const toast = useToast()
 
-const { links, shareUrl, reset, setName } = useShareLink()
+const { links, shareUrl, reset, setName, setOfflineMessage } = useShareLink()
 const { openModal: confirm } = useAreYouSureModal()
 
 const nameDraft = ref('')
 const nameError = ref<string | null>(null)
 
 watch(() => links.value?.custom, (custom) => (nameDraft.value = custom ?? ''), { immediate: true })
+
+const awayDraft = ref('')
+
+watch(() => links.value?.offlineMessage, (message) => (awayDraft.value = message ?? ''), { immediate: true })
+
+const saveAway = async (): Promise<void> => {
+  const message = awayDraft.value.trim() || null
+
+  if (message === (links.value?.offlineMessage ?? null)) return
+
+  try {
+    await setOfflineMessage(message)
+    toast.add({ title: message ? 'Away message saved' : 'Away message cleared', icon: 'i-lucide-check', color: 'success' })
+  } catch (error) {
+    toast.add({ title: 'Could not save the away message', description: (error as Error).message, color: 'error' })
+  }
+}
 
 const saveName = async (): Promise<void> => {
   const name = nameDraft.value.trim().toLowerCase() || null
@@ -131,6 +148,24 @@ const OPTIONS: { value: ClientType; label: string; description: string; icon: st
           :ui="{ base: 'h-12 font-mono text-[13px]' }"
           @keyup.enter="saveName"
           @blur="saveName"
+        />
+      </UFormField>
+
+      <UFormField
+        v-if="links.offlineMessage !== undefined"
+        label="Away message"
+        description="Shown on your share page while the app is closed, with when you were last live."
+      >
+        <UInput
+          v-model="awayDraft"
+          icon="i-lucide-moon"
+          size="xl"
+          placeholder="Back Friday at 9 pm"
+          class="w-full"
+          :maxlength="200"
+          :ui="{ base: 'h-12' }"
+          @keyup.enter="saveAway"
+          @blur="saveAway"
         />
       </UFormField>
 
