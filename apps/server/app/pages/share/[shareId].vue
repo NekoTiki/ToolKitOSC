@@ -78,7 +78,7 @@ useSeoMeta({
 // groups in a sidebar - or a row of chips on a phone - and the selected group's tiles filling the
 // page, in the host's theme. Sign-in, banned, offline and disconnected are full-page states
 // rather than modals.
-const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, notice, refused, status, hostStatus, open, close, sendMessage } =
+const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, notice, refused, waiting, declined, status, hostStatus, open, close, sendMessage } =
   useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
@@ -253,8 +253,10 @@ const submitUsername = (): void => {
 
 // Which full-page state replaces the tiles, if any. Offline with controls still shows them, dimmed
 // under a banner, so viewers see what will come back. Paused hides them: nothing would work.
-const pageState = computed<'refused' | 'banned' | 'signin' | 'connecting' | 'disconnected' | 'paused' | 'offline-empty' | 'empty' | null>(() => {
+const pageState = computed<'refused' | 'declined' | 'waiting' | 'banned' | 'signin' | 'connecting' | 'disconnected' | 'paused' | 'offline-empty' | 'empty' | null>(() => {
   if (refused.value) return 'refused'
+  if (declined.value) return 'declined'
+  if (waiting.value) return 'waiting'
   if (banned.value) return 'banned'
   if (authRequired.value) return 'signin'
   if (!connectedOnce.value) return 'connecting'
@@ -537,6 +539,19 @@ const pageState = computed<'refused' | 'banned' | 'signin' | 'connecting' | 'dis
             </form>
           </template>
         </ShareStateCard>
+        <ShareStateCard
+          v-else-if="pageState === 'waiting'"
+          icon="i-lucide-hourglass"
+          :title="`Waiting for ${hostName}`"
+          :description="`${hostName} lets people in one by one. This page opens by itself when they do.`"
+        />
+        <ShareStateCard
+          v-else-if="pageState === 'declined'"
+          icon="i-lucide-door-closed"
+          tone="error"
+          :title="`${hostName} didn't let you in`"
+          description="You can't use these controls this time."
+        />
         <ShareStateCard
           v-else-if="pageState === 'refused'"
           icon="i-lucide-users"

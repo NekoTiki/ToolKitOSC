@@ -102,7 +102,9 @@ pub fn handle(app: &AppHandle, envelope: &Value) {
         super::send_message(app, "client-banned", json!({ "peerId": peer_id, "scope": ban.scope, "reason": ban.reason }));
         return;
     }
-    if !viewer::passes_client_check(&policy.client_type, &viewer) {
+    // The server keeps everyone else waiting; this holds if it didn't (an older server).
+    let not_let_in = policy.client_type == "approved" && !viewer.discord_id.as_deref().is_some_and(|id| crate::setup::viewers::is_approved(app, id));
+    if !viewer::passes_client_check(&policy.client_type, &viewer) || not_let_in {
         super::send_message(
             app,
             "client-invalid",

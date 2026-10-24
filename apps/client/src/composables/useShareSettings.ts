@@ -1,3 +1,5 @@
+import { useClientType } from '@renderer/composables/useClientType'
+import { viewersSetup } from '@renderer/composables/useSetup'
 import type { ShareSettingsMessage } from '@toolkitosc/shared-ui'
 import { computed, ref } from 'vue'
 
@@ -8,7 +10,14 @@ const STORAGE_KEY = 'showViewersToViewers'
 const showViewers = ref(localStorage.getItem(STORAGE_KEY) !== 'false')
 
 // What the server enforces on the share page (see useWebsocketHost.ts, which sends it).
-const shareSettings = computed<ShareSettingsMessage>(() => ({ showViewers: showViewers.value }))
+const { clientType } = useClientType()
+
+const shareSettings = computed<ShareSettingsMessage>(() => ({
+  showViewers: showViewers.value,
+  // "Only people you let in": the server keeps everyone else waiting on the share page.
+  approval: clientType.value === 'approved',
+  approved: viewersSetup.value.approved ?? []
+}))
 
 export function useShareSettings(): {
   showViewers: typeof showViewers

@@ -106,10 +106,11 @@ pub fn describe(client: &Value) -> Option<Viewer> {
     })
 }
 
-/// The host's "Who can use your controls" setting (useClientType.ts).
+/// The host's "Who can use your controls" setting (useClientType.ts). For `approved`, only the
+/// sign-in part: the caller checks they were let in.
 pub fn passes_client_check(client_type: &str, viewer: &Viewer) -> bool {
     match client_type {
-        "discord" => viewer.discord_id.is_some(),
+        "discord" | "approved" => viewer.discord_id.is_some(),
         "username" => viewer.has_name,
         _ => true
     }

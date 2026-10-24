@@ -26,7 +26,10 @@ export const users = sqliteTable('users', {
   // Shown on the share page while the host is offline ("Back Friday 9 pm"), set in Settings > Sharing.
   offlineMessage: text('offline_message'),
   // When the host's app last disconnected, for "last live 2 h ago".
-  lastOnlineAt: integer('last_online_at', { mode: 'timestamp' })
+  lastOnlineAt: integer('last_online_at', { mode: 'timestamp' }),
+  // The host's "Only people you let in", kept so it still holds after a server restart until
+  // their app is back and sends who they let in.
+  shareApproval: integer('share_approval', { mode: 'boolean' }).notNull().default(false)
 })
 
 // Settings admins change from the dashboard (see utils/serverSettings.ts), one row per key, the

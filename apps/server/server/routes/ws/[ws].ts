@@ -1,12 +1,15 @@
 import { createHmac } from 'node:crypto'
 
 import type { Peer } from 'crossws'
+import { eq } from 'drizzle-orm'
 
 import type { User } from '#auth-utils'
 import type { ControlGroup, ControlType, PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
 import { resolveControlForViewer } from '#shared/utils/controlLimits'
 import { guestName } from '#shared/utils/guestName'
+import { getDb } from '~~/server/db'
 import { isSuspended } from '~~/server/db/accounts'
+import { users } from '~~/server/db/schema'
 import { resolveShareCode } from '~~/server/db/shareLinks'
 import {
   hostArgs,
@@ -25,12 +28,17 @@ import { roomsChanged } from '~~/server/utils/liveRooms'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { currentNotice } from '~~/server/utils/serverNotice'
 import { getSettings } from '~~/server/utils/serverSettings'
+import { accessDecision } from '~~/server/utils/shareAccess'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
 type PeerId = string
 
 export const clientList = new Map<RoomId, Map<PeerId, Client>>()
+
+// Viewers the host hasn't let in yet ("Only people you let in", see shareAccess.ts), or guests asked
+// to sign in first. They get no controls, values or viewer list, and can't send anything.
+const waitingList = new Map<RoomId, Map<PeerId, Client>>()
 
 interface Client {
   // Every open tab of this session, by crossws peer id. The client stays listed until the last one
@@ -173,6 +181,59 @@ export const demoteViewerAccount = (discordId: string) => {
   }
 }
 
+const socketsFromIp = (ip: string): number =>
+  [...clientList.values(), ...waitingList.values()]
+    .flatMap((room) => [...room.values()])
+    .filter((client) => client.ip === ip)
+    .reduce((sum, client) => sum + client.peers.size, 0)
+
+// The host's approval settings, or after a server restart (before the host is back) what they last
+// chose, with nobody let in yet.
+const roomAccess = async (roomId: RoomId): Promise<{ approval?: boolean; approved?: string[] } | undefined> => {
+  const settings = hostShareSettings.get(roomId)
+
+  if (settings) return settings
+
+  const [host] = await getDb().select({ approval: users.shareApproval }).from(users).where(eq(users.discordId, roomId)).limit(1)
+
+  return host?.approval ? { approval: true, approved: [] } : undefined
+}
+
+// The signed-in viewers waiting for the host, for the app's Viewers page.
+export const sendWaitingToHost = (roomId: RoomId) => {
+  const waiting = [...(waitingList.get(roomId)?.values() ?? [])]
+    .filter((client) => client.user?.discord?.id)
+    .map((client) => ({ peerId: client.sessionId, name: displayNameOf(client), avatar: client.user?.discord?.avatar, discordId: client.user!.discord!.id }))
+
+  sendMessageToHost(roomId, 'viewers-waiting', waiting)
+}
+
+// The host changed who gets in: anyone on the wrong side reconnects, and lands where they belong now.
+export const recheckAccess = (roomId: RoomId) => {
+  const settings = hostShareSettings.get(roomId)
+  const misplaced = [
+    ...[...(waitingList.get(roomId)?.values() ?? [])].filter((client) => accessDecision(settings, client.user?.discord?.id) === 'admit'),
+    ...[...(clientList.get(roomId)?.values() ?? [])].filter((client) => accessDecision(settings, client.user?.discord?.id) !== 'admit')
+  ]
+
+  for (const client of misplaced) {
+    for (const peer of client.peers.values()) {
+      peer.send({ type: 'access-changed', message: null })
+      peer.close(4409, 'Access changed')
+    }
+  }
+
+  sendWaitingToHost(roomId)
+}
+
+// The host said no: the page says so and doesn't try again.
+export const declineWaiting = (roomId: RoomId, sessionId: string) => {
+  for (const peer of waitingList.get(roomId)?.get(sessionId)?.peers.values() ?? []) {
+    peer.send({ type: 'access-declined', message: null })
+    peer.close(4403, 'Declined')
+  }
+}
+
 export const sendToClient = (roomId: RoomId, peerId: PeerId, data: unknown) => {
   for (const peer of clientList.get(roomId)?.get(peerId)?.peers.values() ?? []) peer.send(data)
 }
@@ -221,7 +282,7 @@ export default defineWebSocketHandler({
     // A suspended account watches as a guest.
     const user = sessionUser?.discord?.id && (await isSuspended(sessionUser.discord.id)) ? null : sessionUser
     const refusal = connectionRefusal({
-      socketsFromIp: [...clientList.values()].flatMap((room) => [...room.values()]).filter((client) => client.ip === userIp).reduce((sum, client) => sum + client.peers.size, 0),
+      socketsFromIp: socketsFromIp(userIp),
       viewersInRoom: clientList.get(roomId)?.size ?? 0,
       alreadyInRoom: !!clientList.get(roomId)?.has(sessionId)
     }, { perIp: getSettings().maxSocketsPerIp, perRoom: getSettings().maxViewersPerRoom })
@@ -229,6 +290,23 @@ export default defineWebSocketHandler({
     if (refusal) {
       peer.send({ type: 'connection-refused', message: { reason: refusal } })
       peer.close(4429, refusal)
+      return
+    }
+
+    const access = accessDecision(await roomAccess(roomId), user?.discord?.id)
+
+    if (access !== 'admit') {
+      if (!waitingList.has(roomId)) waitingList.set(roomId, new Map())
+
+      const room = waitingList.get(roomId)!
+      const waiting = room.get(sessionId)
+
+      if (waiting) waiting.peers.set(peer.id, peer)
+      else room.set(sessionId, { sessionId, user: user ?? null, ip: userIp, peers: new Map([[peer.id, peer]]) })
+
+      peer.send({ type: 'access-waiting', message: { signedIn: access === 'wait' } })
+      peer.send({ type: 'host-status', message: hostList.has(roomId) ? 'online' : 'offline' })
+      sendWaitingToHost(roomId)
       return
     }
 
@@ -279,6 +357,9 @@ export default defineWebSocketHandler({
     if (!roomId) return
 
     const { id: sessionId, user } = await getUserSession(peer)
+
+    // Waiting to be let in: nothing reaches the host.
+    if (!clientList.get(roomId)?.has(sessionId)) return
 
     const data = JSON.parse(message.text()) as ViewerToServerMessage
 
@@ -336,6 +417,17 @@ export default defineWebSocketHandler({
 
     removeClient(roomId, sessionId, peer)
     clearRateLimit(`${roomId}:${sessionId}`)
+
+    const waiting = waitingList.get(roomId)?.get(sessionId)
+
+    if (waiting) {
+      waiting.peers.delete(peer.id)
+
+      if (!waiting.peers.size) {
+        waitingList.get(roomId)!.delete(sessionId)
+        sendWaitingToHost(roomId)
+      }
+    }
   },
   error(peer, error) {
     console.error('[ws] error', peer, error)

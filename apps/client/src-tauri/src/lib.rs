@@ -161,6 +161,7 @@ pub fn run() {
             setup::commands::setup_remove_from_group,
             setup::commands::setup_ban,
             setup::commands::setup_unban,
+            setup::commands::setup_set_approved,
             setup::commands::setup_migrate_viewers,
             setup::commands::stop_paused,
             setup::commands::stop_resume,

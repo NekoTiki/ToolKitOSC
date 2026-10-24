@@ -23,10 +23,13 @@ import { recordAppVersion, upsertUserFromAuth } from '~~/server/db/users'
 import {
   broadcastPresence,
   clientList,
+  declineWaiting,
   presenceOf,
+  recheckAccess,
   sendControlsToRoom,
   sendToClient,
   sendToEveryoneInRoom,
+  sendWaitingToHost,
   showViewers
 } from '~~/server/routes/ws/[ws]'
 import { getAiAccess } from '~~/server/utils/ai/access'
@@ -223,6 +226,7 @@ export default defineWebSocketHandler({
         addClient(roomId!, peer.id, { peer, user, ip: userIp, connectedAt: Date.now() })
 
         sendClientListToHost(roomId!)
+        sendWaitingToHost(roomId!)
 
         const notice = currentNotice()
 
@@ -294,8 +298,22 @@ export default defineWebSocketHandler({
       hostTheme.set(roomId!, data.message)
       sendToEveryoneInRoom(roomId!, message.text())
     } else if (data.type === 'share-settings') {
-      hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false })
+      const approval = data.message.approval === true
+      const approved = Array.isArray(data.message.approved) ? data.message.approved.filter((id): id is string => typeof id === 'string') : []
+
+      if (approval !== !!hostShareSettings.get(roomId)?.approval) {
+        void getDb()
+          .update(users)
+          .set({ shareApproval: approval })
+          .where(eq(users.discordId, roomId))
+          .catch((error) => console.error('[host] failed to save share approval:', error))
+      }
+
+      hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false, approval, approved })
       broadcastPresence(roomId)
+      recheckAccess(roomId)
+    } else if (data.type === 'viewer-declined') {
+      if (typeof data.message?.peerId === 'string') declineWaiting(roomId, data.message.peerId)
     } else if (data.type === 'pause-state') {
       const paused = data.message.paused === true
 
