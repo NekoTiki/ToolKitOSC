@@ -78,7 +78,7 @@ useSeoMeta({
 // groups in a sidebar - or a row of chips on a phone - and the selected group's tiles filling the
 // page, in the host's theme. Sign-in, banned, offline and disconnected are full-page states
 // rather than modals.
-const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, notice, status, hostStatus, open, close, sendMessage } =
+const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, notice, refused, status, hostStatus, open, close, sendMessage } =
   useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
@@ -253,7 +253,8 @@ const submitUsername = (): void => {
 
 // Which full-page state replaces the tiles, if any. Offline with controls still shows them, dimmed
 // under a banner, so viewers see what will come back. Paused hides them: nothing would work.
-const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' | 'paused' | 'offline-empty' | 'empty' | null>(() => {
+const pageState = computed<'refused' | 'banned' | 'signin' | 'connecting' | 'disconnected' | 'paused' | 'offline-empty' | 'empty' | null>(() => {
+  if (refused.value) return 'refused'
   if (banned.value) return 'banned'
   if (authRequired.value) return 'signin'
   if (!connectedOnce.value) return 'connecting'
@@ -530,6 +531,13 @@ const pageState = computed<'banned' | 'signin' | 'connecting' | 'disconnected' |
             </form>
           </template>
         </ShareStateCard>
+        <ShareStateCard
+          v-else-if="pageState === 'refused'"
+          icon="i-lucide-users"
+          tone="error"
+          :title="refused === 'room-full' ? 'This share page is full' : 'Too many pages open'"
+          :description="refused === 'room-full' ? `${hostName} has as many viewers as this server allows. Try again in a while.` : 'Too many share pages are open from your network. Close some tabs, then reload this page.'"
+        />
         <ShareStateCard
           v-else-if="pageState === 'banned'"
           icon="i-lucide-ban"
