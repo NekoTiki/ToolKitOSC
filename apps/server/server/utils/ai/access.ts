@@ -3,6 +3,7 @@ import { desc, eq } from 'drizzle-orm'
 import { getDb } from '~~/server/db'
 import { aiAccess, users } from '~~/server/db/schema'
 import { ensureUserExists } from '~~/server/db/users'
+import { getSettings } from '~~/server/utils/serverSettings'
 
 export interface AiAccess {
   hasAccess: boolean
@@ -14,6 +15,8 @@ export interface AiAccess {
 // needs an ai_access row exactly like anyone else (they can grant it to themselves from their own
 // dashboard), so the allowlist stays the single source of truth for who can actually generate.
 export async function getAiAccess(discordId: string): Promise<AiAccess> {
+  if (!getSettings().aiEnabled) return { hasAccess: false, canSelectModel: false }
+
   const [row] = await getDb().select().from(aiAccess).where(eq(aiAccess.discordId, discordId)).limit(1)
 
   if (!row) return { hasAccess: false, canSelectModel: false }

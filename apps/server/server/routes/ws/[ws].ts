@@ -24,6 +24,7 @@ import { connectionRefusal } from '~~/server/utils/connectionCaps'
 import { roomsChanged } from '~~/server/utils/liveRooms'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { currentNotice } from '~~/server/utils/serverNotice'
+import { getSettings } from '~~/server/utils/serverSettings'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -223,7 +224,7 @@ export default defineWebSocketHandler({
       socketsFromIp: [...clientList.values()].flatMap((room) => [...room.values()]).filter((client) => client.ip === userIp).reduce((sum, client) => sum + client.peers.size, 0),
       viewersInRoom: clientList.get(roomId)?.size ?? 0,
       alreadyInRoom: !!clientList.get(roomId)?.has(sessionId)
-    })
+    }, { perIp: getSettings().maxSocketsPerIp, perRoom: getSettings().maxViewersPerRoom })
 
     if (refusal) {
       peer.send({ type: 'connection-refused', message: { reason: refusal } })

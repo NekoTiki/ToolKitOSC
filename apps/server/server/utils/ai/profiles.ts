@@ -1,5 +1,7 @@
 import type { ControlTypes } from '@toolkitosc/shared-ui'
 
+import { getSettings } from '~~/server/utils/serverSettings'
+
 import type { AiProviderId } from './types'
 
 export type PromptProfileId = 'light' | 'balanced' | 'heavy'
@@ -17,7 +19,7 @@ export interface PromptProfile {
   // actually allows those types and wants to be assertive about finding them.
   useClusterHints: boolean
   // What one generation at this profile spends from the shared per-(account, provider) daily
-  // credit pool (see rateLimit.ts / ACCOUNT_DAILY_CREDITS) - a real cost model, not a per-profile
+  // credit pool (see rateLimit.ts / the dailyCredits setting in serverSettings.ts) - a real cost model, not a per-profile
   // request cap: credits are fungible, so 20 Light generations, 10 Balanced ones, 5 Heavy ones, or
   // any mix that adds up to the same pool, all cost the same account the same budget.
   creditCost: number
@@ -56,12 +58,6 @@ export const PROMPT_PROFILES: Record<PromptProfileId, PromptProfile> = {
   }
 }
 
-// The shared pool every profile spends from, per (discord account, provider) per day - matches
-// the old per-profile limits' implied ratio (20/10/5, i.e. cost ratio 1:2:4) so nothing about the
-// total daily budget actually changed, just how it's allocated (fungibly, across profiles,
-// instead of siloed per profile).
-export const ACCOUNT_DAILY_CREDITS = 20
-
 export function getPromptProfile(id: unknown): PromptProfile | undefined {
   return typeof id === 'string' && id in PROMPT_PROFILES
     ? PROMPT_PROFILES[id as PromptProfileId]
@@ -71,7 +67,7 @@ export function getPromptProfile(id: unknown): PromptProfile | undefined {
 // Used for accounts without model-select permission (see utils/ai/access.ts) - NUXT_AI_DEFAULT_PROFILE
 // falls back to 'balanced' if unset or misconfigured, rather than failing a generation over it.
 export function resolveDefaultProfile(): PromptProfile {
-  return getPromptProfile(useRuntimeConfig().aiDefaultProfile) ?? PROMPT_PROFILES.balanced
+  return getPromptProfile(getSettings().defaultProfile) ?? PROMPT_PROFILES.balanced
 }
 
 // The model choice is entirely server-decided (never a client-supplied string) - each provider's

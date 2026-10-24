@@ -25,6 +25,13 @@ export const users = sqliteTable('users', {
   os: text('os')
 })
 
+// Settings admins change from the dashboard (see utils/serverSettings.ts), one row per key, the
+// value as JSON. A key with no row uses its default.
+export const serverSettings = sqliteTable('server_settings', {
+  key: text('key').primaryKey(),
+  value: text('value', { mode: 'json' }).notNull()
+})
+
 // What admins did from the dashboard, for the user page and the Log page. Never pruned: it's the
 // record of who changed what, and stays small. `detail` is JSON (the reason, amount, text...).
 export const adminLog = sqliteTable(
@@ -86,7 +93,7 @@ export const aiCreditUsage = sqliteTable(
 )
 
 // Admin "increase credits for today" top-ups (see api/admin/users/[discordId]/credits.post.ts) -
-// additive on top of ACCOUNT_DAILY_CREDITS for that (discordId, day), not a replacement.
+// additive on top of the dailyCredits setting for that (discordId, day), not a replacement.
 export const aiCreditBonus = sqliteTable(
   'ai_credit_bonus',
   {

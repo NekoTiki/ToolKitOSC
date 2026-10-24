@@ -10,11 +10,12 @@ import { endLiveGeneration, startLiveGeneration } from '~~/server/utils/ai/liveG
 import { recordProviderFailure, recordProviderSuccess } from '~~/server/utils/ai/loadBalancer'
 import { normalizeSuggestion } from '~~/server/utils/ai/normalize'
 import type { PromptProfile } from '~~/server/utils/ai/profiles'
-import { ACCOUNT_DAILY_CREDITS, PROMPT_PROFILES, resolveDefaultProfile } from '~~/server/utils/ai/profiles'
+import { PROMPT_PROFILES, resolveDefaultProfile } from '~~/server/utils/ai/profiles'
 import { AiRefundableError } from '~~/server/utils/ai/providerError'
 import { consumeAccountCredits, refundAccountCredits } from '~~/server/utils/ai/rateLimit'
 import { suggestControlsBodySchema } from '~~/server/utils/ai/schemas'
 import type { AiParameterInput, AiProvider } from '~~/server/utils/ai/types'
+import { getSettings } from '~~/server/utils/serverSettings'
 
 // Purely cosmetic flavor text, pushed over the host WS on a timer while a generation is still in
 // flight (see runGeneration below) - there's no real progress to report mid-request (it's one
@@ -116,11 +117,11 @@ async function runGeneration(ctx: GenerationContext): Promise<void> {
     const refunded = error instanceof AiRefundableError
 
     if (refunded) {
-      const remainingAfterRefund = await refundAccountCredits(discordId, profile.creditCost, ACCOUNT_DAILY_CREDITS)
+      const remainingAfterRefund = await refundAccountCredits(discordId, profile.creditCost, getSettings().dailyCredits)
 
       sendMessageToHost(discordId, 'ai-credits-update', {
         remainingCredits: remainingAfterRefund,
-        dailyCredits: ACCOUNT_DAILY_CREDITS
+        dailyCredits: getSettings().dailyCredits
       })
     }
 
@@ -239,7 +240,7 @@ export default defineEventHandler(async (event): Promise<{ requestId: string }> 
   // Checked, and consumed, before spending a request on the provider itself - consumeAccountCredits
   // returns the fresh remaining count on success, so there's no need for a separate
   // remainingAccountCredits lookup just to build the WS push below.
-  const creditsRemaining = await consumeAccountCredits(discordId, profile.creditCost, ACCOUNT_DAILY_CREDITS)
+  const creditsRemaining = await consumeAccountCredits(discordId, profile.creditCost, getSettings().dailyCredits)
 
   if (creditsRemaining === null) {
     return logFailure(
@@ -256,7 +257,7 @@ export default defineEventHandler(async (event): Promise<{ requestId: string }> 
   // connection right now (sendMessageToHost already handles that - see routes/host.ts).
   sendMessageToHost(discordId, 'ai-credits-update', {
     remainingCredits: creditsRemaining,
-    dailyCredits: ACCOUNT_DAILY_CREDITS
+    dailyCredits: getSettings().dailyCredits
   })
 
   const requestId = randomUUID()
