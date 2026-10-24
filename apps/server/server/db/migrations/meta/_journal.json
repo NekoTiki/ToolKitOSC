@@ -43,6 +43,13 @@
       "when": 1792875210910,
       "tag": "0005_clear_rattler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792878858164,
+      "tag": "0006_illegal_apocalypse",
+      "breakpoints": true
     }
   ]
 }

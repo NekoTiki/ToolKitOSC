@@ -6,6 +6,7 @@ import type { User } from '#auth-utils'
 import type { ControlGroup, ControlType, PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
 import { resolveControlForViewer } from '#shared/utils/controlLimits'
 import { guestName } from '#shared/utils/guestName'
+import { isSuspended } from '~~/server/db/accounts'
 import { resolveShareCode } from '~~/server/db/shareLinks'
 import {
   hostArgs,
@@ -157,6 +158,19 @@ export const sendToEveryoneInRoom = (roomId: RoomId, data: unknown) => {
   }
 }
 
+// A suspended account's open share pages carry on as a guest, like their next visit will.
+export const demoteViewerAccount = (discordId: string) => {
+  for (const [roomId, room] of clientList) {
+    const clients = [...room.values()].filter((client) => client.user?.discord?.id === discordId)
+
+    if (!clients.length) continue
+
+    for (const client of clients) client.user = null
+    sendClientListToHost(roomId)
+    broadcastPresence(roomId)
+  }
+}
+
 export const sendToClient = (roomId: RoomId, peerId: PeerId, data: unknown) => {
   for (const peer of clientList.get(roomId)?.get(peerId)?.peers.values() ?? []) peer.send(data)
 }
@@ -200,8 +214,10 @@ export default defineWebSocketHandler({
       return
     }
 
-    const { id: sessionId, user, secure } = await getUserSession(peer)
+    const { id: sessionId, user: sessionUser, secure } = await getUserSession(peer)
     const userIp = useWsIp(peer)
+    // A suspended account watches as a guest.
+    const user = sessionUser?.discord?.id && (await isSuspended(sessionUser.discord.id)) ? null : sessionUser
 
     addClient(roomId, sessionId, peer, { sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
 

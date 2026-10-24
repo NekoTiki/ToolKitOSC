@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 
+import { tokenVersionOf } from '~~/server/db/accounts'
 import { sendTokenToPeer } from '~~/server/routes/auth/desktop/ws'
 
 export default defineEventHandler(async (event) => {
@@ -10,7 +11,7 @@ export default defineEventHandler(async (event) => {
 
   if (!user.discord) return { success: false }
 
-  const token = jwt.sign({ sub: user.discord.id, user }, runtimeConfig.session.password, {
+  const token = jwt.sign({ sub: user.discord.id, user, tv: await tokenVersionOf(user.discord.id) }, runtimeConfig.session.password, {
     expiresIn: '4 Weeks'
   })
 

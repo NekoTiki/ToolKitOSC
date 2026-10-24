@@ -7,7 +7,7 @@ import { remainingAccountCredits } from '~~/server/utils/ai/rateLimit'
 // configured on this server, or show remaining credits) without hardcoding either list or
 // guessing at availability client-side.
 export default defineEventHandler(async (event) => {
-  const user = verifyDesktopToken(event)
+  const user = await verifyDesktopToken(event)
   const discordId = user.discord?.id
 
   if (!discordId) throw createError({ statusCode: 401, statusMessage: 'No Discord identity on token' })

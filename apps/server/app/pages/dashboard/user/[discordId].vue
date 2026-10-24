@@ -8,6 +8,8 @@ interface UserRow {
   displayName: string | null
   avatarUrl: string | null
   lastSeenAt: string
+  suspendedUntil: string | null
+  suspendReason: string | null
 }
 
 interface UserStatsResponse {
@@ -82,6 +84,14 @@ useHead({ title: () => `${name.value} · Dashboard` })
           </p>
         </div>
       </div>
+
+      <AdminAccountPanel
+        v-if="userStats"
+        :discord-id="discordId"
+        :suspended-until="userStats.user.suspendedUntil"
+        :suspend-reason="userStats.user.suspendReason"
+        @changed="refresh()"
+      />
 
       <AdminUserAccessPanel :discord-id="discordId" />
 

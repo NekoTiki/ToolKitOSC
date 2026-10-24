@@ -15,6 +15,7 @@ import {
   MIN_SUPPORTED_PROTOCOL_VERSION,
   PROTOCOL_VERSION
 } from '#shared/types/protocol'
+import { accountProblem } from '~~/server/db/accounts'
 import { upsertUserFromAuth } from '~~/server/db/users'
 import {
   broadcastPresence,
@@ -109,6 +110,17 @@ export const sendClientListToHost = (roomId: RoomId) => {
   })
 }
 
+// Signs the host's app out with a reason (a suspension, sign out everywhere): it forgets its token
+// on auth-error and shows the reason.
+export const signOutHost = (roomId: RoomId, reason: string) => {
+  const host = hostList.get(roomId)
+
+  if (!host) return
+
+  host.peer.send({ type: 'auth-error', message: reason })
+  host.peer.close()
+}
+
 export const sendMessageToHost = (
   roomId: RoomId,
   type: string,
@@ -170,12 +182,20 @@ export default defineWebSocketHandler({
       const runtimeConfig = useRuntimeConfig()
 
       try {
-        const { user } = jwt.verify(
+        const { user, tv } = jwt.verify(
           data.message.token,
           runtimeConfig.session.password
-        ) as jwt.JwtPayload & { sub: string; user: User }
+        ) as jwt.JwtPayload & { sub: string; user: User; tv?: number }
 
         const roomId = user.discord?.id
+        const problem = roomId ? await accountProblem(roomId, tv ?? 0) : null
+
+        // The app forgets its token on auth-error and shows why.
+        if (problem) {
+          peer.send({ type: 'auth-error', message: problem })
+          peer.close()
+          return
+        }
 
         await upsertUserFromAuth(user)
         const aiAccess = await getAiAccess(roomId!)
