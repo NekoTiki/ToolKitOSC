@@ -16,6 +16,12 @@ export type ParameterCondition =
   | { type: 'rises-above'; value: number }
   | { type: 'is-above'; value: number }
   | { type: 'any' }
+  | { type: 'falls-below'; value: number }
+  | { type: 'is-between'; min: number; max: number }
+  // A Bool turns on `count` times within `withinMs`.
+  | { type: 'taps'; count: number; withinMs: number }
+  // A Float hasn't changed for `ms`.
+  | { type: 'stops-changing'; ms: number }
 
 export type AvatarParameterTrigger = {
   kind: 'avatar-parameter'
@@ -29,6 +35,8 @@ export type AvatarParameterTrigger = {
   anyAvatar: boolean
   // A state only counts once it has held this long, 0 = at once.
   heldMs: number
+  // More parameters of the same type that start it too. Moments only.
+  also?: string[]
 }
 
 // You start wearing an avatar: this one, or any (null). Also when the app first sees it.

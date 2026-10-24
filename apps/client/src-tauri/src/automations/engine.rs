@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use super::model::{
-    Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, LeashEvent, Now, OutputAction, ParameterAction, Retrigger, Runs, ToyRun,
-    Trigger, ValueType
+    Action, AppEvent, Automation, BoardNote, Condition, Context, ControlRun, Edge, LeashEvent, Now, OutputAction, ParameterAction, Retrigger, Runs,
+    ToyRun, Trigger, ValueType
 };
 use crate::boards::protocol::OutputMessage;
 
@@ -154,6 +154,10 @@ pub struct State {
     reported: HashSet<String>,
     /// When each `every` automation runs next.
     timers: HashMap<String, Instant>,
+    /// Recent taps of each `taps` automation.
+    taps: HashMap<String, Vec<Instant>>,
+    /// When each `stops-changing` automation fires, unless its parameter changes again first.
+    quiet: HashMap<String, Instant>,
     /// What the frontend last said about the profile and viewers, for guards.
     pub context: Context
 }
@@ -185,10 +189,10 @@ impl State {
             .iter()
             .filter(|a| a.enabled)
             .filter(|a| {
-                let Trigger::AvatarParameter { avatar_id: id, parameter, any_avatar, .. } = &a.when else {
+                let Trigger::AvatarParameter { avatar_id: id, parameter, any_avatar, also, .. } = &a.when else {
                     return false;
                 };
-                (*any_avatar || id == avatar_id) && parameter == address
+                (*any_avatar || id == avatar_id) && (parameter == address || also.iter().any(|a| a == address))
             })
             .cloned()
             .collect();
@@ -197,6 +201,26 @@ impl State {
             let Trigger::AvatarParameter { condition, held_ms, .. } = &automation.when else {
                 continue;
             };
+            match condition {
+                Condition::Taps { count, within_ms } => {
+                    if current >= 0.5 && previous.map_or(true, |p| p < 0.5) {
+                        let taps = self.taps.entry(automation.id.clone()).or_default();
+                        taps.retain(|at| now.duration_since(*at) < Duration::from_millis(u64::from(*within_ms)));
+                        taps.push(now);
+                        if taps.len() >= *count as usize {
+                            taps.clear();
+                            self.fire(&automation, now, env, &mut effects);
+                        }
+                    }
+                    continue;
+                }
+                // Every change starts the quiet time over; `tick` fires once it has passed.
+                Condition::StopsChanging { ms } => {
+                    self.quiet.insert(automation.id.clone(), after(now, *ms));
+                    continue;
+                }
+                _ => {}
+            }
             match condition.evaluate(previous, current) {
                 Edge::Fire => self.fire(&automation, now, env, &mut effects),
                 Edge::Enter if !self.guards_hold(&automation, env) => {}
@@ -588,6 +612,14 @@ impl State {
             }
         }
 
+        let quiet: Vec<String> = self.quiet.iter().filter(|(_, due)| **due <= now).map(|(id, _)| id.clone()).collect();
+        for id in quiet {
+            self.quiet.remove(&id);
+            if let Some(automation) = self.automations.iter().find(|a| a.id == id && a.enabled).cloned() {
+                self.fire(&automation, now, env, &mut effects);
+            }
+        }
+
         let (due, waiting): (Vec<Pending>, Vec<Pending>) = std::mem::take(&mut self.pending).into_iter().partition(|p| p.due <= now);
         self.pending = waiting;
         for pending in due {
@@ -672,6 +704,8 @@ impl State {
         let mut effects = Vec::new();
         self.pending.retain(|p| p.automation_id != automation_id);
         self.timers.remove(automation_id);
+        self.taps.remove(automation_id);
+        self.quiet.remove(automation_id);
         self.unclaim(automation_id, None, now, &mut effects);
         self.runtime.remove(automation_id);
         self.report(now, &mut effects);
@@ -777,7 +811,8 @@ mod tests {
                 value_type,
                 condition,
                 any_avatar: false,
-                held_ms: 0
+                held_ms: 0,
+                also: Vec::new()
             },
             then,
             cooldown_ms: 0,
@@ -1413,6 +1448,37 @@ mod tests {
             .collect();
         // TestEnv rolls 0.5: the second of two.
         assert_eq!(texts, vec!["two".to_string()]);
+    }
+
+    #[test]
+    fn taps_fire_on_the_last_tap_in_time() {
+        let mut state = State::default();
+        state.automations.push(automation("a", Condition::Taps { count: 3, within_ms: 2000 }, ValueType::Bool, OutputAction::Toggle));
+        assert!(change(&mut state, 0.0, 1.0).is_empty());
+        change(&mut state, 1.0, 0.0);
+        assert!(change(&mut state, 0.0, 1.0).is_empty());
+        change(&mut state, 1.0, 0.0);
+        assert_eq!(change(&mut state, 0.0, 1.0).len(), 1, "third tap");
+        assert!(change(&mut state, 0.0, 1.0).is_empty(), "starts counting again");
+    }
+
+    #[test]
+    fn also_listens_to_more_parameters_and_stops_changing_waits() {
+        let mut state = State::default();
+        let mut a = automation("a", Condition::TurnsOn, ValueType::Bool, OutputAction::Toggle);
+        if let Trigger::AvatarParameter { also, .. } = &mut a.when {
+            also.push("/avatar/parameters/Q".into());
+        }
+        state.automations.push(a);
+        assert_eq!(ran(&state.on_parameter("avtr_1", "/avatar/parameters/Q", Some(0.0), 1.0, &TestEnv)), 1);
+
+        let mut state = State::default();
+        state.automations.push(automation_with("b", Condition::StopsChanging { ms: 500 }, ValueType::Float, vec![]));
+        state.on_parameter("avtr_1", "/avatar/parameters/P", Some(0.1), 0.2, &TestEnv);
+        assert_eq!(ran(&state.tick(&TestEnv)), 0, "still within the quiet time");
+        state.quiet.insert("b".into(), Instant::now());
+        assert_eq!(ran(&state.tick(&TestEnv)), 1);
+        assert_eq!(ran(&state.tick(&TestEnv)), 0, "once");
     }
 
     #[test]

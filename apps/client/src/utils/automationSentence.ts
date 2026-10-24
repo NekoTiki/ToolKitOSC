@@ -108,16 +108,37 @@ export const sentenceWhen = (when: AutomationTrigger, context?: DescribeContext)
       const name = strong(parameterLabel(when.parameter, context))
       const { condition } = when
       const value = 'value' in condition ? strong(parameterValue(when.parameter, when.valueType, condition.value, context)) : ''
-      const text = {
-        'turns-on': rich`${name} turns on`,
-        'turns-off': rich`${name} turns off`,
-        'is-on': rich`${name} is on`,
-        becomes: rich`${name} becomes ${value}`,
-        is: rich`${name} is ${value}`,
-        'rises-above': rich`${name} goes past ${value}`,
-        'is-above': rich`${name} is above ${value}`,
-        any: rich`${name} changes`
-      }[condition.type]
+      const others = (when.also ?? []).map((address) => strong(parameterLabel(address, context)))
+      const names: Rich = [name, ...others.flatMap((other, i) => [{ text: i === others.length - 1 ? ' or ' : ', ' }, other])]
+      const subject = (verb: Rich): Rich => [...names, ...verb]
+      const text: Rich = (() => {
+        switch (condition.type) {
+          case 'turns-on':
+            return subject(rich` turns on`)
+          case 'turns-off':
+            return subject(rich` turns off`)
+          case 'is-on':
+            return subject(rich` is on`)
+          case 'becomes':
+            return subject(rich` becomes ${value}`)
+          case 'is':
+            return subject(rich` is ${value}`)
+          case 'rises-above':
+            return subject(rich` goes past ${value}`)
+          case 'is-above':
+            return subject(rich` is above ${value}`)
+          case 'any':
+            return subject(rich` changes`)
+          case 'falls-below':
+            return subject(rich` drops under ${value}`)
+          case 'is-between':
+            return subject(rich` is between ${strong(pct(condition.min))} and ${strong(pct(condition.max))}`)
+          case 'taps':
+            return subject(rich` is tapped ${strong(`${condition.count} times`)} within ${strong(seconds(condition.withinMs))}`)
+          case 'stops-changing':
+            return subject(rich` stops changing for ${strong(seconds(condition.ms))}`)
+        }
+      })()
       if (when.heldMs) text.push(...rich` for at least ${strong(seconds(when.heldMs))}`)
       if (when.anyAvatar) text.push(...rich` on any avatar`)
       return text
@@ -306,6 +327,9 @@ const sentenceGuard = (guard: AutomationGuard, context?: DescribeContext): Rich 
       const name = strong(guard.parameter ? parameterLabel(guard.parameter, context) : 'a parameter')
       const { condition } = guard
       if (condition.type === 'is-on') return rich`${name} is ${strong(guard.not ? 'off' : 'on')}`
+      if (condition.type === 'is-between') {
+        return rich`${name} ${guard.not ? 'is not' : 'is'} between ${strong(pct(condition.min))} and ${strong(pct(condition.max))}`
+      }
       const value = strong('value' in condition ? parameterValue(guard.parameter, guard.valueType, condition.value, context) : '')
       const verb = condition.type === 'is-above' ? (guard.not ? 'is not above' : 'is above') : guard.not ? 'is not' : 'is'
       return rich`${name} ${verb} ${value}`
@@ -344,6 +368,7 @@ export const easyExtras = (automation: Automation): string[] => {
   const { when } = automation
   if (when.kind === 'avatar-parameter') {
     if (when.anyAvatar) extras.push('Runs on any avatar with this parameter')
+    if (when.also?.length) extras.push(`Also starts from ${when.also.length} more parameter${when.also.length > 1 ? 's' : ''}`)
     if (!EASY_HELD.includes(when.heldMs)) extras.push(`Has to last ${seconds(when.heldMs)} first`)
   }
   automation.then.forEach((step, i) => {

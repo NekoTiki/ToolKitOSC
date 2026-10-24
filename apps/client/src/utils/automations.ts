@@ -43,8 +43,17 @@ export const CONDITIONS: Record<
   is: { label: 'Is', valueType: 'Int', moment: false, needsValue: true },
   'rises-above': { label: 'Rises above', valueType: 'Float', moment: true, needsValue: true },
   'is-above': { label: 'Is above', valueType: 'Float', moment: false, needsValue: true },
-  any: { label: 'Any change', valueType: 'Float', moment: false, needsValue: false }
+  any: { label: 'Any change', valueType: 'Float', moment: false, needsValue: false },
+  'falls-below': { label: 'Falls below', valueType: 'Float', moment: true, needsValue: true },
+  'is-between': { label: 'Is between', valueType: 'Float', moment: false, needsValue: false },
+  taps: { label: 'Taps', valueType: 'Bool', moment: true, needsValue: false },
+  'stops-changing': { label: 'Stops changing', valueType: 'Float', moment: true, needsValue: false }
 }
+
+// model.rs MAX_TAPS, MAX_TAP_WINDOW_MS, MAX_ALSO.
+export const MAX_TAPS = 10
+export const MAX_TAP_WINDOW_MS = 10_000
+export const MAX_ALSO = 8
 
 export const OUTPUT_ACTIONS: Record<
   OutputActionType,
@@ -487,7 +496,14 @@ export const defaultCondition = (type: ConditionType): ParameterCondition => {
       return { type, value: 1 }
     case 'rises-above':
     case 'is-above':
+    case 'falls-below':
       return { type, value: 0.5 }
+    case 'is-between':
+      return { type, min: 0.25, max: 0.75 }
+    case 'taps':
+      return { type, count: 2, withinMs: 1000 }
+    case 'stops-changing':
+      return { type, ms: 1000 }
     default:
       return { type }
   }
@@ -671,7 +687,10 @@ export const setTriggerParameter = (automation: Automation, address: string, val
   if (CONDITIONS[when.condition.type].valueType !== valueType) {
     when.condition = defaultCondition(conditionsFor(valueType)[0]!)
     when.heldMs = 0
+    when.also = undefined
   }
+  // It can't also listen to itself.
+  if (when.also?.includes(address)) when.also = when.also.filter((a) => a !== address)
   if (!automation.name) automation.name = parameterName(address)
   fitStepsToTrigger(automation)
 }
@@ -708,6 +727,8 @@ export const conditionHolds = (condition: ParameterCondition, value: number): bo
       return Math.round(value) === Math.round(condition.value)
     case 'is-above':
       return value > condition.value
+    case 'is-between':
+      return value >= condition.min && value <= condition.max
     default:
       return null
   }
@@ -763,7 +784,17 @@ export const describeWhen = (when: AutomationTrigger, context?: DescribeContext)
   if (when.kind === 'avatar-changed')
     return when.avatarId ? `you wear ${when.avatarName ?? 'an avatar'}` : 'you change avatar'
   const condition = CONDITIONS[when.condition.type]
-  const value = 'value' in when.condition ? ` ${when.condition.value}` : ''
+  const c = when.condition
+  const value =
+    'value' in c
+      ? ` ${c.value}`
+      : c.type === 'is-between'
+        ? ` ${c.min}–${c.max}`
+        : c.type === 'taps'
+          ? ` ${c.count}× in ${formatMs(c.withinMs)}`
+          : c.type === 'stops-changing'
+            ? ` for ${formatMs(c.ms)}`
+            : ''
   const held = when.heldMs ? ` for ${formatSeconds(when.heldMs)}` : ''
   return `${parameterName(when.parameter)} ${condition.label.toLowerCase()}${value}${held}`
 }
@@ -918,7 +949,7 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
 }
 
 // Conditions an "only if" can check: states only.
-export const GUARD_CONDITIONS: ConditionType[] = ['is-on', 'is', 'is-above']
+export const GUARD_CONDITIONS: ConditionType[] = ['is-on', 'is', 'is-above', 'is-between']
 
 export const MAX_GUARDS = 4
 

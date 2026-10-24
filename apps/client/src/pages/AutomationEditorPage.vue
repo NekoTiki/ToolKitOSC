@@ -2,6 +2,7 @@
 import AutomationGuardRow from '@renderer/components/automations/AutomationGuardRow.vue'
 import AutomationStepCard from '@renderer/components/automations/AutomationStepCard.vue'
 import AutomationTimeline from '@renderer/components/automations/AutomationTimeline.vue'
+import ConditionExtraFields from '@renderer/components/automations/ConditionExtraFields.vue'
 import AutomationEasyEditor from '@renderer/components/automations/easy/AutomationEasyEditor.vue'
 import DraftNotice from '@renderer/components/DraftNotice.vue'
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
@@ -30,6 +31,7 @@ import {
   fitStepsToTrigger,
   formatMs,
   LEASH_EVENTS,
+  MAX_ALSO,
   MAX_EVERY_MINUTES,
   MAX_GUARDS,
   MAX_HELD_MS,
@@ -253,6 +255,21 @@ const fitSteps = (): void => {
   if (draft.value) fitStepsToTrigger(draft.value)
 }
 
+// More parameters of the same type that start it too (moments only).
+const alsoItems = computed(() =>
+  paramWhen.value ? parameterItems.value.filter((p) => p.valueType === paramWhen.value!.valueType && p.value !== paramWhen.value!.parameter) : []
+)
+const also = computed({
+  get: () => paramWhen.value?.also ?? [],
+  set: (addresses: string[]) => {
+    if (paramWhen.value) paramWhen.value.also = addresses.length ? addresses.slice(0, MAX_ALSO) : undefined
+  }
+})
+// Listen adds what it hears to the list.
+const listenAlso = (address: string): void => {
+  if (alsoItems.value.some((p) => p.value === address) && !also.value.includes(address)) also.value = [...also.value, address]
+}
+
 const parameter = computed({
   get: () => paramWhen.value?.parameter || undefined,
   set: (address: string | undefined) => {
@@ -270,6 +287,8 @@ const conditionType = computed({
     paramWhen.value.condition = defaultCondition(type)
     // Only a state waits to be held.
     if (CONDITIONS[type].moment || type === 'any') paramWhen.value.heldMs = 0
+    // More parameters only start moments.
+    if (!CONDITIONS[type].moment) paramWhen.value.also = undefined
     fitSteps()
   }
 })
@@ -670,6 +689,29 @@ onBeforeRouteLeave(async () => {
                     @update:model-value="fromSlider($event, (value) => (conditionValue = value))"
                   />
                 </div>
+                <ConditionExtraFields v-model="paramWhen.condition" />
+              </div>
+            </UFormField>
+
+            <UFormField
+              v-if="paramWhen.parameter && CONDITIONS[conditionType].moment && !otherAvatar"
+              label="Or any of these"
+              :description="`Up to ${MAX_ALSO} more ${paramWhen.valueType} parameters that start it the same way.`"
+            >
+              <div class="grid gap-2">
+                <USelectMenu
+                  v-model="also"
+                  :items="alsoItems"
+                  value-key="value"
+                  multiple
+                  placeholder="None"
+                  class="w-full"
+                  virtualize
+                />
+                <ParameterListen
+                  :can-pick="(address) => alsoItems.some((p) => p.value === address)"
+                  @pick="listenAlso"
+                />
               </div>
             </UFormField>
 

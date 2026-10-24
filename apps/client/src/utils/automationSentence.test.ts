@@ -81,6 +81,17 @@ describe('sentence', () => {
     )
   })
 
+  it('words taps and more parameters', () => {
+    const s = sentence(
+      automation({
+        when: { ...boop, condition: { type: 'taps', count: 2, withinMs: 1000 }, also: ['/avatar/parameters/Pat'] },
+        then: [{ kind: 'stop-toys', delayMs: 0 }]
+      }),
+      context
+    )
+    expect(plainSentence(s)).toBe('When Boop or Pat is tapped 2 times within 1 s, stop your toys, any time, every time.')
+  })
+
   it('uses "While" for a state and words a hold', () => {
     const s = sentence(
       automation({

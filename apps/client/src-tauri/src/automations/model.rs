@@ -59,7 +59,10 @@ pub enum Trigger {
         any_avatar: bool,
         /// A state only counts once it has held this long, 0 = at once.
         #[serde(default)]
-        held_ms: u32
+        held_ms: u32,
+        /// More parameters of the same type that start it too. Moments only.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        also: Vec<String>
     },
     /// You start wearing an avatar: this one, or any (None). Also when the app first sees it.
     #[serde(rename_all = "camelCase")]
@@ -247,8 +250,23 @@ pub enum Condition {
     RisesAbove { value: f64 },
     IsAbove { value: f64 },
     /// Every change of a Float. Only with `follow`.
-    Any
+    Any,
+    /// A Float drops under `value`.
+    FallsBelow { value: f64 },
+    /// A Float is within min..=max.
+    IsBetween { min: f64, max: f64 },
+    /// A Bool turns on `count` times within `within_ms` (see `engine`, which keeps the taps).
+    #[serde(rename_all = "camelCase")]
+    Taps { count: u32, within_ms: u32 },
+    /// A Float has stopped changing for `ms` (see `engine`, which keeps the clock).
+    StopsChanging { ms: u32 }
 }
+
+/// Most taps, and the longest window or quiet time.
+pub const MAX_TAPS: u32 = 10;
+pub const MAX_TAP_WINDOW_MS: u32 = 10_000;
+/// Most extra parameters an avatar parameter trigger also listens to.
+pub const MAX_ALSO: usize = 8;
 
 /// One thing an automation does: an action, plus how long after the trigger it starts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -513,7 +531,16 @@ fn same_int(a: f64, b: f64) -> bool {
 impl Condition {
     /// A moment (an edge) rather than a state (a level).
     pub fn is_moment(&self) -> bool {
-        matches!(self, Condition::TurnsOn | Condition::TurnsOff | Condition::Becomes { .. } | Condition::RisesAbove { .. })
+        matches!(
+            self,
+            Condition::TurnsOn
+                | Condition::TurnsOff
+                | Condition::Becomes { .. }
+                | Condition::RisesAbove { .. }
+                | Condition::FallsBelow { .. }
+                | Condition::Taps { .. }
+                | Condition::StopsChanging { .. }
+        )
     }
 
     pub fn runs(&self) -> Runs {
@@ -526,9 +553,14 @@ impl Condition {
 
     pub fn fits(&self, value_type: ValueType) -> bool {
         match self {
-            Condition::TurnsOn | Condition::TurnsOff | Condition::IsOn => value_type == ValueType::Bool,
+            Condition::TurnsOn | Condition::TurnsOff | Condition::IsOn | Condition::Taps { .. } => value_type == ValueType::Bool,
             Condition::Becomes { .. } | Condition::Is { .. } => value_type == ValueType::Int,
-            Condition::RisesAbove { .. } | Condition::IsAbove { .. } | Condition::Any => value_type == ValueType::Float
+            Condition::RisesAbove { .. }
+            | Condition::IsAbove { .. }
+            | Condition::Any
+            | Condition::FallsBelow { .. }
+            | Condition::IsBetween { .. }
+            | Condition::StopsChanging { .. } => value_type == ValueType::Float
         }
     }
 
@@ -538,6 +570,7 @@ impl Condition {
             Condition::IsOn => value >= ON,
             Condition::Is { value: target } => same_int(value, *target),
             Condition::IsAbove { value: threshold } => value > *threshold,
+            Condition::IsBetween { min, max } => (*min..=*max).contains(&value),
             _ => false
         }
     }
@@ -549,6 +582,9 @@ impl Condition {
             Condition::TurnsOff => edge(current < ON && previous.is_some_and(|p| p >= ON)),
             Condition::Becomes { value } => edge(same_int(current, *value) && previous.map_or(true, |p| !same_int(p, *value))),
             Condition::RisesAbove { value } => edge(current > *value && previous.map_or(true, |p| p <= *value)),
+            Condition::FallsBelow { value } => edge(current < *value && previous.is_some_and(|p| p >= *value)),
+            // Kept by the engine, which counts taps and quiet time.
+            Condition::Taps { .. } | Condition::StopsChanging { .. } => Edge::None,
             Condition::Any => Edge::Follow(current.clamp(0.0, 1.0) as f32),
             state => match (previous.is_some_and(|p| state.holds(p)), state.holds(current)) {
                 (false, true) => Edge::Enter,
@@ -625,7 +661,7 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
     // A step can't set the parameter that triggers it, or it would set itself off.
     let mut trigger = None;
     match &automation.when {
-        Trigger::AvatarParameter { parameter, value_type, condition, avatar_id, held_ms, .. } => {
+        Trigger::AvatarParameter { parameter, value_type, condition, avatar_id, held_ms, also, .. } => {
             if avatar_id.is_empty() || parameter.is_empty() {
                 return Err("Pick the avatar parameter that triggers it.".into());
             }
@@ -637,6 +673,19 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
             }
             if *held_ms > MAX_HELD_MS {
                 return Err(format!("It can wait up to {} s to be held.", MAX_HELD_MS / 1000));
+            }
+            if !also.is_empty() && (!condition.is_moment() || also.len() > MAX_ALSO || also.iter().any(|a| a.is_empty() || a == parameter)) {
+                return Err(format!("Up to {MAX_ALSO} more parameters, each different, and only for a moment like \"turns on\"."));
+            }
+            match condition {
+                Condition::Taps { count, within_ms } if !(2..=MAX_TAPS).contains(count) || !(1..=MAX_TAP_WINDOW_MS).contains(within_ms) => {
+                    return Err(format!("Taps count 2 to {MAX_TAPS} times, within up to {} s.", MAX_TAP_WINDOW_MS / 1000));
+                }
+                Condition::StopsChanging { ms } if !(100..=MAX_HELD_MS).contains(ms) => {
+                    return Err(format!("It can wait from 0.1 to {} s for it to stop changing.", MAX_HELD_MS / 1000));
+                }
+                Condition::IsBetween { min, max } if min >= max => return Err("The low end has to be under the high end.".into()),
+                _ => {}
             }
             trigger = Some(parameter.as_str());
         }
@@ -973,7 +1022,8 @@ mod tests {
                 value_type,
                 condition,
                 any_avatar: false,
-                held_ms: 0
+                held_ms: 0,
+                also: Vec::new()
             },
             then: vec![Step { action: Action::BoardOutput { board_id: "a1b2c3".into(), pin: 4, output, chatbox: false }, delay_ms: 0 }],
             cooldown_ms: 0,
@@ -1000,6 +1050,17 @@ mod tests {
         assert_eq!(Condition::IsOn.evaluate(Some(1.0), 1.0), Edge::None);
         assert_eq!(Condition::Is { value: 3.0 }.evaluate(Some(2.0), 3.0), Edge::Enter);
         assert_eq!(Condition::IsAbove { value: 0.8 }.evaluate(Some(0.9), 0.5), Edge::Exit);
+    }
+
+    #[test]
+    fn falls_below_and_between() {
+        assert_eq!(Condition::FallsBelow { value: 0.3 }.evaluate(Some(0.5), 0.2), Edge::Fire);
+        assert_eq!(Condition::FallsBelow { value: 0.3 }.evaluate(None, 0.2), Edge::None, "not on first sight");
+        assert_eq!(Condition::IsBetween { min: 0.2, max: 0.6 }.evaluate(Some(0.1), 0.4), Edge::Enter);
+        assert_eq!(Condition::IsBetween { min: 0.2, max: 0.6 }.evaluate(Some(0.4), 0.7), Edge::Exit);
+        assert!(validate(&sample(Condition::IsBetween { min: 0.6, max: 0.2 }, ValueType::Float, OutputAction::Hold)).is_err());
+        assert!(validate(&sample(Condition::Taps { count: 1, within_ms: 1000 }, ValueType::Bool, OutputAction::Toggle)).is_err());
+        assert!(validate(&sample(Condition::Taps { count: 3, within_ms: 1000 }, ValueType::Bool, OutputAction::Toggle)).is_ok());
     }
 
     #[test]
