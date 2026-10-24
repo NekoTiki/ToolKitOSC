@@ -11,14 +11,15 @@ export interface ShareInfo {
   theme: { primary: string | null; secondary: string | null } | null
 }
 
-export function getShareInfo(shareId: string): ShareInfo {
-  const host = hostList.get(shareId)
+// Takes the room (the host's Discord id), not the code in the link: see db/shareLinks.ts.
+export function getShareInfo(roomId: string): ShareInfo {
+  const host = hostList.get(roomId)
 
   if (!host) {
     return { online: false, hostName: null, controlCount: 0, theme: null }
   }
 
-  const controlCount = (hostControls.get(shareId) ?? []).reduce(
+  const controlCount = (hostControls.get(roomId) ?? []).reduce(
     (sum, group) => sum + group.controls.length,
     0
   )
@@ -29,6 +30,6 @@ export function getShareInfo(shareId: string): ShareInfo {
     // (`global_name` can be unset) - see apps/client's useWebsocketHost.ts.
     hostName: host.user.discord?.name || host.user.username,
     controlCount,
-    theme: hostTheme.get(shareId) ?? null
+    theme: hostTheme.get(roomId) ?? null
   }
 }

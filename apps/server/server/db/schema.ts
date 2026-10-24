@@ -1,4 +1,5 @@
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // General-purpose Discord identity cache, not AI-specific - upserted on every successful host WS
 // auth (see routes/host.ts) and on every authenticated AI REST call (see api/ai/suggest-controls),
@@ -9,8 +10,30 @@ export const users = sqliteTable('users', {
   username: text('username'),
   displayName: text('display_name'),
   avatarUrl: text('avatar_url'),
-  lastSeenAt: integer('last_seen_at', { mode: 'timestamp' }).notNull()
+  lastSeenAt: integer('last_seen_at', { mode: 'timestamp' }).notNull(),
+  // Whether the old share links built from the Discord id itself (/share/<id>, /s/<base62 of id>)
+  // still open the page. Turned off for good when the host resets their link.
+  legacyShareLink: integer('legacy_share_link', { mode: 'boolean' }).notNull().default(true)
 })
+
+// Codes that open a host's share page (see db/shareLinks.ts). `main` is the random link everyone
+// gets, `custom` the name the host picked (at most one each), `invite` a link that can expire.
+export const shareLinks = sqliteTable(
+  'share_links',
+  {
+    code: text('code').primaryKey(),
+    discordId: text('discord_id')
+      .notNull()
+      .references(() => users.discordId),
+    kind: text('kind', { enum: ['main', 'custom', 'invite'] }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+  },
+  (table) => [
+    index('share_links_discord_id_idx').on(table.discordId),
+    uniqueIndex('share_links_one_main_and_custom').on(table.discordId, table.kind).where(sql`${table.kind} != 'invite'`)
+  ]
+)
 
 // Row presence = has AI access - the allowlist for every account, admins included (see
 // utils/isAdmin.ts's separate, unrelated dashboard-management gate).
