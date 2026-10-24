@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 
 import type { Peer } from 'crossws'
 
@@ -38,9 +38,10 @@ interface Client {
 }
 
 // Opaque id other viewers see instead of the session id (see PresenceEntry). One per Discord
-// account, so someone signed in on two devices is one viewer; one per session for a guest.
+// account, so someone signed in on two devices is one viewer; one per session for a guest. Keyed,
+// because a Discord id is mostly a timestamp: a plain hash of it can be brute-forced back.
 const publicIdOf = (client: Client): string =>
-  createHash('sha256')
+  createHmac('sha256', useRuntimeConfig().session.password)
     .update(client.user?.discord?.id ? `discord:${client.user.discord.id}` : client.sessionId)
     .digest('hex')
     .slice(0, 16)
@@ -52,13 +53,25 @@ const displayNameOf = (client: Client): string =>
 
 export const showViewers = (roomId: RoomId): boolean => hostShareSettings.get(roomId)?.showViewers ?? true
 
-export const presenceOf = (client: Client): PresenceEntry => ({
-  id: publicIdOf(client),
-  name: displayNameOf(client),
-  avatar: client.user?.discord?.avatar,
-  discord: !!client.user?.discord?.id,
-  lastActiveAt: client.lastActiveAt
-})
+// Discord avatar URLs by public id, served by routes/avatar/[id].get.ts: the URL itself contains
+// the Discord id, so viewers only ever see /avatar/<public id>.
+// shortcut: never pruned, one short string per signed-in viewer seen since start; prune on leave if it grows.
+export const viewerAvatars = new Map<string, string>()
+
+export const presenceOf = (client: Client): PresenceEntry => {
+  const id = publicIdOf(client)
+  const avatar = client.user?.discord?.avatar
+
+  if (avatar) viewerAvatars.set(id, avatar)
+
+  return {
+    id,
+    name: displayNameOf(client),
+    avatar: avatar ? `/avatar/${id}` : undefined,
+    discord: !!client.user?.discord?.id,
+    lastActiveAt: client.lastActiveAt
+  }
+}
 
 // One entry per viewer: a Discord account's sessions are merged, keeping its latest activity.
 const roomPresence = (roomId: RoomId): PresenceEntry[] | null => {
@@ -205,7 +218,7 @@ export default defineWebSocketHandler({
 
     peer.send({
       type: 'welcome',
-      message: `Welcome ${user?.discord?.name || 'Anonymous'}! Your peer ID is ${sessionId} to the room ${roomId}`
+      message: `Welcome ${user?.discord?.name || 'Anonymous'}! Your peer ID is ${sessionId}`
     })
 
     const lastAction = hostLastAction.get(roomId!)
