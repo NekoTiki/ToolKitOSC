@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Suspending an account and signing it out of every app.
 const props = defineProps<{ discordId: string; suspendedUntil: string | null; suspendReason: string | null }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{ changed: []; deleted: [] }>()
 
 const { adminFetch } = useAdminApi()
 const toast = useToast()
@@ -18,7 +18,7 @@ const durationItems = [
   { label: 'Until lifted', value: 0 }
 ]
 
-const confirming = ref<'suspend' | 'sign-out' | null>(null)
+const confirming = ref<'suspend' | 'sign-out' | 'delete' | null>(null)
 const days = ref(7)
 const reason = ref('')
 const busy = ref(false)
@@ -43,6 +43,19 @@ const suspend = () =>
   )
 const lift = () => run(() => adminFetch(`/api/admin/users/${props.discordId}/suspend`, { method: 'DELETE' }), 'Suspension lifted')
 const signOut = () => run(() => adminFetch(`/api/admin/users/${props.discordId}/sign-out`, { method: 'POST' }), 'Signed out everywhere')
+
+const deleteData = async (): Promise<void> => {
+  busy.value = true
+
+  try {
+    await adminFetch(`/api/admin/users/${props.discordId}/data`, { method: 'DELETE' })
+    toast.add({ title: 'Their data was deleted', icon: 'i-lucide-trash-2' })
+    emit('deleted')
+  } finally {
+    busy.value = false
+    confirming.value = null
+  }
+}
 </script>
 
 <template>
@@ -140,6 +153,27 @@ const signOut = () => run(() => adminFetch(`/api/admin/users/${props.discordId}/
     </div>
 
     <div
+      v-else-if="confirming === 'delete'"
+      class="flex flex-wrap items-center gap-2 rounded-field border border-error/40 bg-error/10 p-3 text-sm"
+    >
+      <span class="flex-1">Delete everything this server keeps about them? Their share links stop working and their app is signed out. Your admin log stays.</span>
+      <UButton
+        color="neutral"
+        variant="subtle"
+        @click="confirming = null"
+      >
+        Cancel
+      </UButton>
+      <UButton
+        color="error"
+        :loading="busy"
+        @click="deleteData"
+      >
+        Delete data
+      </UButton>
+    </div>
+
+    <div
       v-else
       class="flex flex-wrap gap-2"
     >
@@ -169,6 +203,14 @@ const signOut = () => run(() => adminFetch(`/api/admin/users/${props.discordId}/
         @click="confirming = 'sign-out'"
       >
         Sign out everywhere
+      </UButton>
+      <UButton
+        icon="i-lucide-trash-2"
+        color="error"
+        variant="ghost"
+        @click="confirming = 'delete'"
+      >
+        Delete their data
       </UButton>
     </div>
   </UCard>

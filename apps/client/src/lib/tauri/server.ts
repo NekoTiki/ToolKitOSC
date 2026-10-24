@@ -66,7 +66,7 @@ export const serverApi = {
     invoke('server_connect', { url, protocolVersion }),
   // A request to the server's HTTP API, signed with that server's token. Rejects when signed out
   // or unreachable; an error status comes back as is.
-  serverRequest: (url: string, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<ServerResponse> =>
+  serverRequest: (url: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<ServerResponse> =>
     invoke('server_request', { url, method, path, body: body ?? null }),
   authState: (): Promise<AuthState> => invoke('auth_state'),
   // Once, from the tokens the webview used to keep in localStorage (server URL -> JWT).
