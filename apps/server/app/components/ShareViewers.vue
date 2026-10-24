@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import type { PresenceEntry } from '@toolkitosc/shared-ui'
+import type { PresenceEntry, TopViewer } from '@toolkitosc/shared-ui'
 
 // "Here now": everyone on the share page, you first, then whoever did something most recently.
+// Above it, the most actions this stream when the host shows them.
 const props = defineProps<{
   viewers: PresenceEntry[]
   you: string | null
+  top?: TopViewer[] | null
 }>()
 
 const now = useNow({ interval: 15_000 })
@@ -32,6 +34,30 @@ const activity = (viewer: PresenceEntry): string => {
 
 <template>
   <div class="grid gap-1">
+    <template v-if="top?.length">
+      <div class="px-2.5 pt-2 pb-0.5 font-mono text-[10.5px] tracking-widest text-muted uppercase">
+        Top this stream
+      </div>
+      <ol class="grid gap-1">
+        <li
+          v-for="(viewer, index) in top"
+          :key="viewer.id"
+          class="flex h-10 min-w-0 items-center gap-2.5 rounded-field px-2 text-[13.5px]"
+        >
+          <span class="w-4 shrink-0 text-center font-mono text-[11px] text-muted">{{ index + 1 }}</span>
+          <ViewerAvatar
+            :id="viewer.id"
+            :name="viewer.name"
+            :avatar="viewer.avatar"
+          />
+          <span
+            class="min-w-0 flex-1 truncate"
+            :title="viewer.name"
+          >{{ viewer.name }}</span>
+          <span class="shrink-0 font-mono text-[10px] text-muted">{{ viewer.count }}</span>
+        </li>
+      </ol>
+    </template>
     <div class="flex justify-between px-2.5 pt-2 pb-0.5 font-mono text-[10.5px] tracking-widest text-muted uppercase">
       <span>Here now</span>
       <span>{{ viewers.length }}</span>

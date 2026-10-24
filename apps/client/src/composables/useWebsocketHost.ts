@@ -14,7 +14,7 @@ import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { assistantName } from '@renderer/utils/viewers'
-import type { ClientListEntry, ControlTypes, ServerNotice, WaitingViewer } from '@toolkitosc/shared-ui'
+import type { ClientListEntry, ControlTypes, RoomStatsMessage, ServerNotice, WaitingViewer } from '@toolkitosc/shared-ui'
 import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import type { ComputedRef } from 'vue'
@@ -29,6 +29,9 @@ export const clients = ref<Client[]>([])
 // more than once - this counts people instead, keyed the same way the Viewers page groups them.
 // Signed-in viewers waiting on the share page for you to let them in ("Only people you let in").
 export const waitingViewers = ref<WaitingViewer[]>([])
+
+// This stream so far, as the server counts it: when it started and the most viewers at once.
+export const roomStats = ref<RoomStatsMessage | null>(null)
 
 // Letting one in is adding them to the approved list (useShareSettings.ts sends it).
 export const declineWaitingViewer = (peerId: string): void => void api.serverSend(JSON.stringify({ type: 'viewer-declined', message: { peerId } }))
@@ -271,6 +274,8 @@ export function useWebsocketHost(): {
       useAiGenerationStatus().applyResult(data.message)
     } else if (data.type === 'ai-generate-error') {
       useAiGenerationStatus().applyError(data.message)
+    } else if (data.type === 'room-stats') {
+      roomStats.value = data.message
     } else if (data.type === 'viewers-waiting') {
       waitingViewers.value = data.message
     } else if (data.type === 'server-notice') {

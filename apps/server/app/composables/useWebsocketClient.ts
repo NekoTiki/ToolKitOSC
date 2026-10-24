@@ -1,4 +1,4 @@
-import type { ControlGroup, PresenceEntry, ServerNotice, ServerToViewerMessage, ViewerActionMessage } from '@toolkitosc/shared-ui'
+import type { ControlGroup, PresenceEntry, ServerNotice, ServerToViewerMessage, TopViewer, ViewerActionMessage } from '@toolkitosc/shared-ui'
 
 import { useBhapticsControl } from '~/composables/useBhapticsControl'
 import { useClientTheme } from '~/composables/useClientTheme'
@@ -44,6 +44,8 @@ export function useWebsocketClient(roomId: string) {
   const refused = ref<'room-full' | 'too-many-connections' | null>(null)
   // "Only people you let in": waiting for the host, or turned away by them.
   const waiting = ref(false)
+  // Most actions this stream, when the host shows it.
+  const topViewers = ref<TopViewer[] | null>(null)
   const declined = ref(false)
 
   const { status, data, send, open, close } = useWebSocket(`/ws/${roomId}`, {
@@ -111,6 +113,8 @@ export function useWebsocketClient(roomId: string) {
         // A guest is asked to sign in first; approval is by Discord account.
         if (data.message.signedIn) waiting.value = true
         else authRequired.value = 'discord'
+      } else if (data.type === 'top-viewers') {
+        topViewers.value = data.message
       } else if (data.type === 'access-declined') {
         declined.value = true
       } else if (data.type === 'access-changed') {
@@ -142,6 +146,7 @@ export function useWebsocketClient(roomId: string) {
     refused,
     waiting,
     declined,
+    topViewers,
     status,
     hostStatus,
     data,

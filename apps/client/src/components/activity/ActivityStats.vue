@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ThisStreamCard from '@renderer/components/activity/ThisStreamCard.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAuth } from '@renderer/composables/useAuth'
@@ -79,6 +80,8 @@ const maxDay = computed(() => Math.max(1, ...daily.value.map((row) => row.count)
     v-else
     class="grid content-start gap-4"
   >
+    <ThisStreamCard />
+
     <div class="flex flex-wrap items-center gap-3">
       <p class="flex-1 text-sm text-muted">
         <b class="text-2xl font-semibold text-highlighted tabular-nums">{{ stats?.totalActivations ?? 0 }}</b>

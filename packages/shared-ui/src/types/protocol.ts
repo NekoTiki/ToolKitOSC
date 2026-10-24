@@ -254,6 +254,21 @@ export interface ShareSettingsMessage {
   // Discord id is in `approved`.
   approval?: boolean
   approved?: string[]
+  // The viewers with the most actions this stream, on the share page. Needs showViewers.
+  showTopViewers?: boolean
+}
+
+export interface TopViewer {
+  id: string
+  name: string
+  avatar?: string
+  count: number
+}
+
+// This stream so far (from the app connecting, see the server's streamRecap.ts).
+export interface RoomStatsMessage {
+  startedAt: number
+  peakViewers: number
 }
 
 // A signed-in viewer waiting to be let in (ShareSettingsMessage.approval), for the Viewers page.
@@ -366,6 +381,7 @@ export type ServerToHostMessage =
   | WsEnvelope<'admin-stop', null>
   | WsEnvelope<'server-notice', ServerNotice | null>
   | WsEnvelope<'viewers-waiting', WaitingViewer[]>
+  | WsEnvelope<'room-stats', RoomStatsMessage>
 
 // Server -> browser viewer, over /ws/[roomId].
 export type ServerToViewerMessage =
@@ -394,6 +410,8 @@ export type ServerToViewerMessage =
   // Let in, or no longer: the page connects again. Declined: it stops there.
   | WsEnvelope<'access-changed', null>
   | WsEnvelope<'access-declined', null>
+  // null: hidden (the host turned it off).
+  | WsEnvelope<'top-viewers', TopViewer[] | null>
 
 // Browser viewer -> server, over /ws/[roomId].
 export type ViewerToServerMessage =

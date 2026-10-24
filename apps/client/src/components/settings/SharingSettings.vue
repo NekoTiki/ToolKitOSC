@@ -14,7 +14,7 @@ import { ref, watch } from 'vue'
 
 const { loggedIn } = useAuth()
 const { clientType, setClient } = useClientType()
-const { showViewers, setShowViewers } = useShareSettings()
+const { showViewers, setShowViewers, showTopViewers, setShowTopViewers } = useShareSettings()
 const toast = useToast()
 
 const { links, shareUrl, reset, setName, setOfflineMessage } = useShareLink()
@@ -209,6 +209,13 @@ const OPTIONS: { value: ClientType; label: string; description: string; icon: st
       label="Show viewers to each other"
       description="Viewers see who else is on your share page, and who pressed what. Turn it off to keep names private; actions still show, without a name."
       @update:model-value="setShowViewers(!!$event)"
+    />
+    <USwitch
+      :model-value="showTopViewers && showViewers"
+      :disabled="!showViewers"
+      label="Show top viewers"
+      description="Lists the 5 viewers with the most actions this stream on your share page. Needs viewers to see each other."
+      @update:model-value="setShowTopViewers(!!$event)"
     />
   </FormSection>
 </template>
