@@ -315,7 +315,8 @@ export interface ViewerActionMessage {
 // (server/routes/host.ts) but the current client never sends it (it only ever sends per-address
 // `args-update`) — kept here to match what the server actually handles, not just what's used today.
 export type HostToServerMessage =
-  | WsEnvelope<'auth-token', { token: string; protocolVersion: number }>
+  // appVersion/os: for the admin dashboard; older apps leave them out.
+  | WsEnvelope<'auth-token', { token: string; protocolVersion: number; appVersion?: string; os?: string }>
   | WsEnvelope<'controls-update', ControlsUpdateMessage>
   | WsEnvelope<'args-initial', Record<string, OSCArg[]>>
   | WsEnvelope<'args-update', ArgUpdateMessage>

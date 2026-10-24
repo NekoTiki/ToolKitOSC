@@ -16,7 +16,7 @@ import {
   PROTOCOL_VERSION
 } from '#shared/types/protocol'
 import { accountProblem } from '~~/server/db/accounts'
-import { upsertUserFromAuth } from '~~/server/db/users'
+import { recordAppVersion, upsertUserFromAuth } from '~~/server/db/users'
 import {
   broadcastPresence,
   clientList,
@@ -198,6 +198,11 @@ export default defineWebSocketHandler({
         }
 
         await upsertUserFromAuth(user)
+
+        if (typeof data.message.appVersion === 'string') {
+          await recordAppVersion(roomId!, data.message.appVersion, typeof data.message.os === 'string' ? data.message.os : null)
+        }
+
         const aiAccess = await getAiAccess(roomId!)
 
         peer.send({

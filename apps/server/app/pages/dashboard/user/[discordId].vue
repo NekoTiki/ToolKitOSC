@@ -10,6 +10,8 @@ interface UserRow {
   lastSeenAt: string
   suspendedUntil: string | null
   suspendReason: string | null
+  appVersion: string | null
+  os: string | null
 }
 
 interface UserStatsResponse {
@@ -88,6 +90,9 @@ const refreshAll = (): void => {
                 :datetime="userStats.user.lastSeenAt"
                 relative
               />
+              <template v-if="userStats.user.appVersion">
+                · app {{ userStats.user.appVersion }}{{ userStats.user.os ? ` on ${userStats.user.os}` : '' }}
+              </template>
             </template>
           </p>
         </div>
