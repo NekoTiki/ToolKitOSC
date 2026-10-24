@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import type { ControlType, IntifacePatternControl } from '@toolkitosc/shared-ui'
 import {
+  COLOR_FAMILIES,
   Control,
   controlTileSpan,
   INTIFACE_PATTERN_OFF_ID,
+  NEUTRAL_COLOR_FAMILIES,
   randomGuestName,
+  SHADES,
   useIntifacePatternControl,
   VIEWER_LIVE_ID,
   VIEWER_PATTERN_ID
@@ -85,6 +88,25 @@ watch(status, (newStatus) => {
 onMounted(open)
 onBeforeUnmount(close)
 onBeforeUnmount(removeTheme)
+
+// The host's theme as CSS during SSR (same vars applyThemeColor sets), so the page doesn't flash
+// the default colors until the WS theme-update lands. Only known color names: it's host input
+// going into a <style>.
+const themeCss = computed(() => {
+  const families: readonly string[] = [...COLOR_FAMILIES, ...NEUTRAL_COLOR_FAMILIES]
+  const theme = shareInfo.value?.theme
+
+  return (['primary', 'secondary'] as const)
+    .filter((target) => families.includes(theme?.[target] ?? ''))
+    .map((target) => {
+      const color = theme![target]
+
+      return [`--ui-color-${target}:var(--color-${color}-500)`, ...SHADES.map((shade) => `--ui-color-${target}-${shade}:var(--color-${color}-${shade})`)].join(';')
+    })
+    .join(';')
+})
+
+useHead({ style: [{ key: 'share-theme', textContent: () => (themeCss.value ? `:root{${themeCss.value}}` : '') }] })
 
 const hostName = computed(() => shareInfo.value?.hostName ?? 'This host')
 

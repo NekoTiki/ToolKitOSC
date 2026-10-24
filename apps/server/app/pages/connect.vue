@@ -21,7 +21,7 @@ const shareUrl = computed(() => (discordId.value ? `${requestUrl.origin}/s/${enc
 
 // Whether this user's desktop app is connected right now - the same room lookup the share page's
 // link preview uses, so no dedicated endpoint is needed.
-const { data: hostInfo } = useFetch<ShareInfo>(() => `/api/share/${discordId.value}`, { immediate: !!discordId.value, watch: [discordId], server: false })
+const { data: hostInfo } = useFetch<ShareInfo>(() => `/api/share/${discordId.value}`, { immediate: !!discordId.value, watch: [discordId] })
 
 const toast = useToast()
 
