@@ -26,6 +26,7 @@ import {
 import { connectionRefusal } from '~~/server/utils/connectionCaps'
 import { roomsChanged } from '~~/server/utils/liveRooms'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
+import { noteJoin, noteViewers } from '~~/server/utils/relayStats'
 import { currentNotice } from '~~/server/utils/serverNotice'
 import { getSettings } from '~~/server/utils/serverSettings'
 import { accessDecision } from '~~/server/utils/shareAccess'
@@ -146,6 +147,8 @@ const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client
   broadcastPresence(roomId)
   roomsChanged()
   noteViewerCount(roomId, viewerCount(roomId))
+  noteJoin()
+  noteViewers([...clientList.values()].reduce((sum, clients) => sum + clients.size, 0))
 }
 
 const removeClient = (roomId: RoomId, peerId: PeerId, peer: Pick<Peer, 'id'>) => {

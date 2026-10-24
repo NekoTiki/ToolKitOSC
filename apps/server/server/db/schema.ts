@@ -39,6 +39,15 @@ export const serverSettings = sqliteTable('server_settings', {
   value: text('value', { mode: 'json' }).notNull()
 })
 
+// How busy the relay was each UTC day (see utils/relayStats.ts). Pruned with the other stats.
+export const relayDaily = sqliteTable('relay_daily', {
+  day: text('day').primaryKey(),
+  peakHosts: integer('peak_hosts').notNull().default(0),
+  peakViewers: integer('peak_viewers').notNull().default(0),
+  joins: integer('joins').notNull().default(0),
+  rateLimited: integer('rate_limited').notNull().default(0)
+})
+
 // What admins did from the dashboard, for the user page and the Log page. Never pruned: it's the
 // record of who changed what, and stays small. `detail` is JSON (the reason, amount, text...).
 export const adminLog = sqliteTable(

@@ -36,6 +36,7 @@ import {
 import { getAiAccess } from '~~/server/utils/ai/access'
 import { recordControlInventory, scheduleControlActivation } from '~~/server/utils/controlStats'
 import { roomsChanged } from '~~/server/utils/liveRooms'
+import { noteHosts } from '~~/server/utils/relayStats'
 import { currentNotice } from '~~/server/utils/serverNotice'
 import { noteAction, sendTopViewers, streamEnded, streamStarted } from '~~/server/utils/streamRecap'
 import { useWsIp } from '~~/server/utils/useWsIp'
@@ -230,6 +231,7 @@ export default defineWebSocketHandler({
         sendClientListToHost(roomId!)
         sendWaitingToHost(roomId!)
         streamStarted(roomId!, viewerCount(roomId!))
+        noteHosts(hostList.size)
 
         const notice = currentNotice()
 
