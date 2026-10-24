@@ -13,6 +13,8 @@ import { isNoisyAddress } from '@renderer/utils/addressFilter'
 import type { AppEventType, ConditionType } from '@renderer/utils/automations'
 import { CONDITIONS, defaultCondition, fitStepsToTrigger, newAutomation, parameterFamily, parameterName, setTriggerParameter } from '@renderer/utils/automations'
 import { EASY_HELD, seconds } from '@renderer/utils/automationSentence'
+import type { Hand } from '@renderer/utils/builtinParameters'
+import { GESTURES, gestureTrigger, HAND_ADDRESS, handOf, YOU_STATES, youState, youTrigger } from '@renderer/utils/builtinParameters'
 import { computed, ref } from 'vue'
 
 // Easy mode, "what starts it": what kind of thing, then which one and how it should react, in
@@ -26,10 +28,12 @@ const { controls } = useControls()
 const { isOn, offAddonForAutomationKind, offAddonForControlType } = useAddons()
 const { args } = useOscMessages()
 
-type Choice = 'avatar' | 'viewer' | 'switch' | 'leash' | 'resume'
+type Choice = 'avatar' | 'gesture' | 'you' | 'viewer' | 'switch' | 'leash' | 'resume'
 
 const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; description: string; icon: string }[] = [
   { value: 'avatar', kind: 'avatar-parameter', title: 'Something on your avatar', description: 'A boop, a headpat, a grab, a toggle in your menu.', icon: 'i-lucide-person-standing' },
+  { value: 'gesture', kind: 'avatar-parameter', title: 'A hand gesture', description: 'A fist, a point, a thumbs up, on either hand.', icon: 'i-lucide-hand' },
+  { value: 'you', kind: 'avatar-parameter', title: 'What you do', description: 'You go AFK, sit down, mute yourself, get in a station.', icon: 'i-lucide-user-round' },
   { value: 'viewer', kind: 'app-event', title: 'A viewer does something', description: 'Joins your share page, leaves, or uses a control.', icon: 'i-lucide-users' },
   { value: 'switch', kind: 'avatar-changed', title: 'You put on an avatar', description: 'Also when the app starts while you wear it.', icon: 'i-lucide-repeat' },
   { value: 'leash', kind: 'leash', title: 'Your leash', description: 'Someone grabs it, pulls you to running or lets go.', icon: 'i-tkosc-collar' },
@@ -40,7 +44,7 @@ const when = computed(() => automation.value.when)
 
 const choice = computed((): Choice => {
   const w = when.value
-  if (w.kind === 'avatar-parameter') return 'avatar'
+  if (w.kind === 'avatar-parameter') return handOf(w.parameter) ? 'gesture' : youState(w.parameter) ? 'you' : 'avatar'
   if (w.kind === 'avatar-changed') return 'switch'
   if (w.kind === 'leash') return 'leash'
   return w.event.type === 'resumed' ? 'resume' : 'viewer'
@@ -55,17 +59,21 @@ const choose = (value: Choice): void => {
   automation.value.when =
     value === 'avatar'
       ? newAutomation(id, name).when
-      : value === 'switch'
-        ? { kind: 'avatar-changed', avatarId: id, avatarName: name }
-        : value === 'leash'
-          ? { kind: 'leash', event: 'grabbed' }
-          : { kind: 'app-event', event: value === 'resume' ? { type: 'resumed' } : { type: 'viewer-joined' } }
+      : value === 'gesture'
+        ? gestureTrigger(id, name, 'right', 1)
+        : value === 'you'
+          ? youTrigger(id, name, YOU_STATES[0]!)
+          : value === 'switch'
+            ? { kind: 'avatar-changed', avatarId: id, avatarName: name }
+            : value === 'leash'
+              ? { kind: 'leash', event: 'grabbed' }
+              : { kind: 'app-event', event: value === 'resume' ? { type: 'resumed' } : { type: 'viewer-joined' } }
   fitStepsToTrigger(automation.value)
 }
 
 // ---- Something on your avatar
 
-const paramWhen = computed(() => (when.value.kind === 'avatar-parameter' ? when.value : null))
+const paramWhen = computed(() => (when.value.kind === 'avatar-parameter' && choice.value === 'avatar' ? when.value : null))
 const search = ref('')
 
 const parameters = computed(() =>
@@ -157,6 +165,67 @@ const heldItems = EASY_HELD.map((ms) => ({ value: String(ms), label: ms ? second
 const fromSlider = (value: number | number[] | undefined): void => {
   if (typeof value === 'number') conditionValue.value = value
 }
+
+// ---- A hand gesture, what you do: VRChat's own parameters
+
+const builtinWhen = computed(() => (when.value.kind === 'avatar-parameter' && choice.value !== 'avatar' ? when.value : null))
+
+const hand = computed({
+  get: (): Hand => (builtinWhen.value && handOf(builtinWhen.value.parameter)) || 'right',
+  set: (value: Hand) => {
+    if (builtinWhen.value) builtinWhen.value.parameter = HAND_ADDRESS[value]
+  }
+})
+const gesture = computed({
+  get: () => String(builtinWhen.value && 'value' in builtinWhen.value.condition ? builtinWhen.value.condition.value : 1),
+  set: (value: string) => {
+    if (builtinWhen.value && 'value' in builtinWhen.value.condition) builtinWhen.value.condition.value = Number(value)
+  }
+})
+// Neutral is left out: it's what every other gesture goes back to.
+const gestureItems = GESTURES.map((label, value) => ({ value: String(value), label })).slice(1)
+
+const youAddress = computed({
+  get: () => builtinWhen.value?.parameter ?? YOU_STATES[0]!.address,
+  set: (address: string) => {
+    if (builtinWhen.value) builtinWhen.value.parameter = address
+  }
+})
+const youItems = YOU_STATES.map((s) => ({ value: s.address, label: s.label }))
+
+const builtinHow = computed((): { value: ConditionType; title: string; description: string }[] => {
+  if (choice.value === 'gesture') {
+    return [
+      { value: 'becomes', title: 'The moment you make it', description: 'Runs once each time.' },
+      { value: 'is', title: 'For as long as you hold it', description: 'What happens can last until you let go.' }
+    ]
+  }
+  const state = builtinWhen.value ? youState(builtinWhen.value.parameter) : undefined
+  return state
+    ? [
+        { value: 'turns-on', title: `You ${state.on}`, description: 'Runs once, the moment it happens.' },
+        { value: 'turns-off', title: `You ${state.off}`, description: 'Runs once, the moment it happens.' },
+        { value: 'is-on', title: `While you're ${state.is}`, description: 'What happens can last until it ends.' }
+      ]
+    : []
+})
+
+const setBuiltinHow = (type: ConditionType): void => {
+  if (!builtinWhen.value) return
+  const value = 'value' in builtinWhen.value.condition ? builtinWhen.value.condition.value : undefined
+  builtinWhen.value.condition = defaultCondition(type)
+  // The gesture stays when switching between a moment and holding it.
+  if (value !== undefined && 'value' in builtinWhen.value.condition) builtinWhen.value.condition.value = value
+  if (CONDITIONS[type].moment) builtinWhen.value.heldMs = 0
+  fitStepsToTrigger(automation.value)
+}
+
+const builtinHeld = computed({
+  get: () => String(builtinWhen.value?.heldMs ?? 0),
+  set: (value: string) => {
+    if (builtinWhen.value) builtinWhen.value.heldMs = Number(value)
+  }
+})
 
 // ---- A viewer does something
 
@@ -350,6 +419,68 @@ const LEASH_ITEMS: { value: LeashEvent; label: string }[] = [
           />
         </UFormField>
       </template>
+    </template>
+
+    <template v-else-if="builtinWhen">
+      <template v-if="choice === 'gesture'">
+        <UFormField label="Which hand?">
+          <SegmentedControl
+            v-model="hand"
+            :items="[
+              { value: 'left', label: 'Left' },
+              { value: 'right', label: 'Right' }
+            ]"
+            class="w-fit"
+            accent
+            aria-label="Which hand?"
+          />
+        </UFormField>
+        <UFormField label="Which gesture?">
+          <SegmentedControl
+            v-model="gesture"
+            :items="gestureItems"
+            class="w-fit max-w-full flex-wrap"
+            accent
+            aria-label="Which gesture?"
+          />
+        </UFormField>
+      </template>
+      <UFormField
+        v-else
+        label="What?"
+      >
+        <SegmentedControl
+          v-model="youAddress"
+          :items="youItems"
+          class="w-fit max-w-full flex-wrap"
+          accent
+          aria-label="What you do"
+        />
+      </UFormField>
+      <UFormField label="When should it react?">
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-2.5">
+          <ChoiceCard
+            v-for="how in builtinHow"
+            :key="how.value"
+            :title="how.title"
+            :description="how.description"
+            :selected="builtinWhen.condition.type === how.value"
+            @click="setBuiltinHow(how.value)"
+          />
+        </div>
+      </UFormField>
+      <UFormField
+        v-if="!CONDITIONS[builtinWhen.condition.type].moment"
+        label="Ignore quick ones"
+        description="How long it has to last before anything happens."
+      >
+        <SegmentedControl
+          v-model="builtinHeld"
+          :items="heldItems"
+          class="w-fit max-w-full flex-wrap"
+          aria-label="Ignore quick ones"
+        />
+      </UFormField>
     </template>
 
     <template v-else-if="eventWhen">

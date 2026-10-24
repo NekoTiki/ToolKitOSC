@@ -10,6 +10,7 @@ import type {
 } from '@renderer/lib/tauri-bridge'
 import type { DescribeContext } from '@renderer/utils/automations'
 import { CONDITIONS, parameterName, toysLabel, triggerCondition } from '@renderer/utils/automations'
+import { builtinGuardText, builtinWhenText } from '@renderer/utils/builtinParameters'
 import type { ControlType } from '@toolkitosc/shared-ui'
 import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
 
@@ -93,6 +94,13 @@ export const sentenceWhen = (when: AutomationTrigger, context?: DescribeContext)
       return when.avatarId ? rich`you put on ${strong(when.avatarName ?? 'an avatar')}` : rich`you switch avatar`
     case 'avatar-parameter': {
       if (!when.parameter) return rich`something on your avatar changes`
+      // A gesture or what you're doing: the same on every avatar.
+      const builtin = builtinWhenText(when)
+      if (builtin) {
+        const text = rich`${builtin.before}${strong(builtin.name)}`
+        if (when.heldMs) text.push(...rich` for at least ${strong(seconds(when.heldMs))}`)
+        return text
+      }
       const name = strong(parameterLabel(when.parameter, context))
       const { condition } = when
       const value = 'value' in condition ? strong(parameterValue(when.parameter, when.valueType, condition.value, context)) : ''
@@ -260,6 +268,8 @@ const sentenceGuard = (guard: AutomationGuard, context?: DescribeContext): Rich 
     case 'profile':
       return guard.profileId ? rich`the ${strong(context?.profileName?.(guard.profileId) ?? 'a')} profile is on` : rich`no profile is on`
     case 'parameter': {
+      const builtin = builtinGuardText(guard)
+      if (builtin) return rich`you're ${strong(builtin)}`
       const name = strong(guard.parameter ? parameterLabel(guard.parameter, context) : 'a parameter')
       const { condition } = guard
       if (condition.type === 'is-on') return rich`${name} is ${strong(guard.not ? 'off' : 'on')}`
