@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import AutomationSentence from '@renderer/components/automations/AutomationSentence.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAutomations } from '@renderer/composables/useAutomations'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import type { Automation } from '@renderer/lib/tauri-bridge'
-import { describe } from '@renderer/utils/automations'
+import { easyExtras, sentence } from '@renderer/utils/automationSentence'
 import { timeAgo } from '@renderer/utils/time'
 import { useNow } from '@vueuse/core'
 import { computed } from 'vue'
@@ -159,7 +160,13 @@ const groups = computed(() => [
                     class="shrink-0 rounded-full bg-secondary/15 px-2 py-0.5 text-xs font-medium text-secondary"
                   >Running</span>
                 </span>
-                <small class="truncate text-xs text-muted">{{ describe(automation, describeContext) }}</small>
+                <small class="text-sm text-muted">
+                  <AutomationSentence :sentence="sentence(automation, describeContext)" />
+                  <span
+                    v-if="easyExtras(automation).length"
+                    class="ml-1 text-warning"
+                  >· {{ easyExtras(automation).length }} advanced</span>
+                </small>
                 <small class="text-xs text-dimmed">{{ lastRan(automation.id) }}</small>
               </div>
               <USwitch

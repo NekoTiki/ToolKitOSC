@@ -653,6 +653,10 @@ export interface DescribeContext {
   boards: Board[]
   controlName?: (controlId: string) => string | undefined
   profileName?: (id: string) => string | undefined
+  // For the sentence (automationSentence.ts): a control by id, and the control that drives a
+  // parameter, which names it and its options.
+  control?: (controlId: string) => ControlType | undefined
+  controlForParameter?: (address: string) => ControlType | undefined
 }
 
 const describeControlRun = (run: ControlRun): string => {
