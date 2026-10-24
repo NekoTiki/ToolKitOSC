@@ -283,9 +283,6 @@ export const easyExtras = (automation: Automation): string[] => {
     if (when.anyAvatar) extras.push('Runs on any avatar with this parameter')
     if (!EASY_HELD.includes(when.heldMs)) extras.push(`Has to last ${seconds(when.heldMs)} first`)
   }
-  automation.onlyIf.forEach((guard) => {
-    if (guard.kind === 'parameter' && guard.valueType !== 'Bool') extras.push(`Checks ${parameterName(guard.parameter)}`)
-  })
   automation.then.forEach((step, i) => {
     const n = i + 1
     if (!EASY_DELAYS.includes(step.delayMs)) extras.push(`Step ${n} waits ${seconds(step.delayMs)}`)
