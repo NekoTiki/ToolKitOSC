@@ -13,7 +13,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use super::model::{
-    Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, LeashEvent, OutputAction, ParameterAction, Retrigger, Runs, Trigger, ValueType
+    Action, AppEvent, Automation, BoardNote, Context, ControlRun, Edge, LeashEvent, OutputAction, ParameterAction, Retrigger, Runs, ToyRun, Trigger,
+    ValueType
 };
 use crate::boards::protocol::OutputMessage;
 
@@ -369,7 +370,13 @@ impl State {
             Action::LeashEnabled { enabled } => effects.push(Effect::Leash(*enabled)),
             Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => effects.push(Effect::Bhaptics(action.clone())),
             Action::OwoSensation { .. } => effects.push(Effect::Owo(action.clone())),
-            Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => {}
+            Action::Control { .. }
+            | Action::Profile { .. }
+            | Action::Chatbox { .. }
+            | Action::StopEverything
+            | Action::Toy { .. }
+            | Action::ToyPattern { .. }
+            | Action::StopToys => {}
         }
     }
 
@@ -401,7 +408,7 @@ impl State {
                     let target = min + f64::from(value) * (max - min);
                     self.set_parameter(parameter, *value_type, target, effects);
                 }
-                Action::Control { run: ControlRun::Follow { .. }, .. } => {
+                Action::Control { run: ControlRun::Follow { .. }, .. } | Action::Toy { run: ToyRun::Follow { .. }, .. } => {
                     effects.push(app(automation, index, &step.action, Phase::Follow { value }));
                 }
                 _ => {}
@@ -1121,6 +1128,24 @@ mod tests {
             vec![control(ControlRun::Follow { min: 0.0, max: 1.0 }, "intiface-toy")]
         ));
         assert_eq!(app_phases(&change_effects(&mut state, 0.0, 0.25)), vec![(0, Phase::Follow { value: 0.25 })]);
+    }
+
+    #[test]
+    fn toy_steps_hold_follow_and_stop_with_stop_everything() {
+        let toy = |run: ToyRun| Step { action: Action::Toy { toys: vec![], run }, delay_ms: 0 };
+        let mut state = State::default();
+        state.automations.push(automation_with("a", Condition::IsOn, ValueType::Bool, vec![toy(ToyRun::Hold { level: 0.7 })]));
+        assert_eq!(app_phases(&change_effects(&mut state, 0.0, 1.0)), vec![(0, Phase::Start)]);
+        assert_eq!(app_phases(&state.set_paused(true)), vec![(0, Phase::Stop)]);
+
+        let mut state = State::default();
+        state.automations.push(automation_with("b", Condition::Any, ValueType::Float, vec![toy(ToyRun::Follow { min: 0.0, max: 1.0 })]));
+        assert_eq!(app_phases(&change_effects(&mut state, 0.0, 0.5)), vec![(0, Phase::Follow { value: 0.5 })]);
+
+        let mut state = State::default();
+        state.automations.push(automation_with("c", Condition::TurnsOn, ValueType::Bool, vec![toy(ToyRun::Ramp { from: 0.0, to: 1.0, ms: 3000 })]));
+        assert_eq!(app_phases(&change_effects(&mut state, 0.0, 1.0)), vec![(0, Phase::Run)]);
+        assert!(state.is_running("c", Instant::now()), "busy while it ramps");
     }
 
     #[test]

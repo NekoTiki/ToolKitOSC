@@ -10,6 +10,7 @@
 mod app_steps;
 mod control_runs;
 mod engine;
+mod toy_steps;
 pub mod model;
 mod store;
 pub mod commands;
@@ -61,6 +62,9 @@ fn addon_off(app: &AppHandle, action: &Action) -> Option<&'static str> {
         Action::BhapticsEffect { .. } => crate::addons::owner_of_automation_kind("bhaptics-effect"),
         Action::OwoSensation { .. } => crate::addons::owner_of_automation_kind("owo-sensation"),
         Action::Control { control_type, .. } => crate::addons::owner_of_control_type(control_type),
+        Action::Toy { .. } => crate::addons::owner_of_automation_kind("toy"),
+        Action::ToyPattern { .. } => crate::addons::owner_of_automation_kind("toy-pattern"),
+        Action::StopToys => crate::addons::owner_of_automation_kind("stop-toys"),
         _ => None
     };
     owner.filter(|owner| !crate::addons::is_on(app, owner.id)).map(|owner| owner.name)
@@ -74,6 +78,15 @@ static SKIP_NOTED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 struct Skipped {
     automation_id: String,
     message: String
+}
+
+/// Says once per session that an automation skipped a step, and why.
+fn note_skip(app: &AppHandle, automation_id: String, message: String) {
+    if !SKIP_NOTED.lock().unwrap().get_or_insert_with(HashSet::new).insert(automation_id.clone()) {
+        return;
+    }
+    tracing::info!("Automation {automation_id}: {message}");
+    let _ = app.emit("automation-skipped", Skipped { automation_id, message });
 }
 
 pub fn start(app: AppHandle) {
@@ -123,8 +136,8 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 }
             }
             Effect::App(run) => {
-                // Control, profile and Stop everything steps run here; the chatbox in the webview.
-                if !control_runs::run(app, &run) && !app_steps::run(app, &run) {
+                // Control, toy, profile and Stop everything steps run here; the chatbox in the webview.
+                if !control_runs::run(app, &run) && !toy_steps::run(app, &run) && !app_steps::run(app, &run) {
                     let _ = app.emit("automation-run", run);
                 }
             }
@@ -141,19 +154,18 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                 let Some(addon) = addon_off(app, &action) else {
                     continue;
                 };
-                if !SKIP_NOTED.lock().unwrap().get_or_insert_with(HashSet::new).insert(automation_id.clone()) {
-                    continue;
-                }
                 let step = match action {
                     Action::BoardOutput { .. } => "ESP32 output",
                     Action::LeashEnabled { .. } => "Leash on or off",
                     Action::BhapticsPulse { .. } => "bHaptics pulse",
                     Action::BhapticsEffect { .. } => "bHaptics effect",
                     Action::OwoSensation { .. } => "OWO sensation",
+                    Action::Toy { .. } => "Toy",
+                    Action::ToyPattern { .. } => "Play pattern",
+                    Action::StopToys => "Stop toys",
                     _ => "Control"
                 };
-                tracing::info!("Automation {automation_id} skipped a step: {addon} is off");
-                let _ = app.emit("automation-skipped", Skipped { automation_id, message: format!("Skipped {step}: {addon} is off") });
+                note_skip(app, automation_id, format!("Skipped {step}: {addon} is off"));
             }
             Effect::Chatbox { board_id, pin, note } => {
                 if let Some(info) = boards::output_info(app, &board_id, pin) {
@@ -279,7 +291,13 @@ fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result
         Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => Ok((Effect::Bhaptics(action.clone()), None)),
         Action::OwoSensation { .. } => Ok((Effect::Owo(action.clone()), None)),
         // App actions are handled above.
-        Action::Control { .. } | Action::Profile { .. } | Action::Chatbox { .. } | Action::StopEverything => Ok((run(Phase::Run), None))
+        Action::Control { .. }
+        | Action::Profile { .. }
+        | Action::Chatbox { .. }
+        | Action::StopEverything
+        | Action::Toy { .. }
+        | Action::ToyPattern { .. }
+        | Action::StopToys => Ok((run(Phase::Run), None))
     }
 }
 

@@ -3,7 +3,13 @@ import type { IntifaceDevice } from '@renderer/composables/useIntiface'
 import type { IntifaceToyControl } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
-const props = defineProps<{ devices: Map<number, IntifaceDevice>; knownDevices: IntifaceDevice[] }>()
+const props = defineProps<{
+  devices: Map<number, IntifaceDevice>
+  knownDevices: IntifaceDevice[]
+  // For pickers that aren't a toy control's (automation steps).
+  required?: boolean
+  description?: string
+}>()
 
 const actuators = defineModel<IntifaceToyControl['actuators']>('actuators', { required: true })
 
@@ -74,8 +80,8 @@ const toggle = (
 <template>
   <UFormField
     label="Toys"
-    required
-    description="Pick which actuators this slider controls. Toys with more than one motor (vibrate, rotate, oscillate, ...) list each one separately."
+    :required="required ?? true"
+    :description="description ?? 'Pick which actuators this slider controls. Toys with more than one motor (vibrate, rotate, oscillate, ...) list each one separately.'"
   >
     <div
       v-if="deviceList.length === 0"

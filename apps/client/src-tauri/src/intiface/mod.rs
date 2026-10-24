@@ -312,6 +312,22 @@ pub fn has_device(app: &AppHandle, index: u32) -> bool {
     intiface(app).inner.lock().unwrap().devices.contains_key(&index)
 }
 
+/// Every motor of every toy Intiface has now, for automation steps on all toys.
+pub fn actuators(app: &AppHandle) -> Vec<crate::toys::ActuatorRef> {
+    let inner = intiface(app).inner.lock().unwrap();
+    inner
+        .devices
+        .values()
+        .flat_map(|device| {
+            device.actuators.iter().map(|actuator| crate::toys::ActuatorRef {
+                device_index: device.index,
+                actuator_index: actuator.index,
+                actuator_type: actuator.actuator_type.clone()
+            })
+        })
+        .collect()
+}
+
 /// Sends Buttplug messages when connected. Dropped otherwise, as the webview's socket did.
 pub fn send(app: &AppHandle, messages: Vec<Value>) {
     let inner = intiface(app).inner.lock().unwrap();
@@ -468,7 +484,7 @@ impl crate::addons::Addon for Addon {
             needs: &[],
             needs_any: &[],
             control_types: &["intiface-toy", "intiface-pattern"],
-            automation_kinds: &[],
+            automation_kinds: &["toy", "toy-pattern", "stop-toys"],
             pages: &["patterns"]
         }
     }

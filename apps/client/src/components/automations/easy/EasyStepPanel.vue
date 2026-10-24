@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BhapticsStepFields from '@renderer/components/automations/BhapticsStepFields.vue'
 import OwoStepFields from '@renderer/components/automations/OwoStepFields.vue'
+import ToyStepFields from '@renderer/components/automations/ToyStepFields.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
@@ -60,7 +61,10 @@ const EASY_KINDS: Record<AutomationStep['kind'], string> = {
   'leash-enabled': 'Turn the leash on or off',
   'bhaptics-pulse': 'Buzz bHaptics motors',
   'bhaptics-effect': 'Play a bHaptics effect',
-  'owo-sensation': 'Feel it on your OWO Skin'
+  'owo-sensation': 'Feel it on your OWO Skin',
+  toy: 'Run your toys',
+  'toy-pattern': 'Play a pattern on your toys',
+  'stop-toys': 'Stop your toys'
 }
 
 // The kinds that can run on this trigger, plus the current one so it still shows what it is.
@@ -395,6 +399,7 @@ const leashOn = computed({
 })
 const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
 const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value : null))
+const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind === 'toy-pattern' ? step.value : null))
 </script>
 
 <template>
@@ -649,6 +654,20 @@ const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value
       v-else-if="owoStep"
       :model-value="owoStep"
     />
+
+    <ToyStepFields
+      v-else-if="toyStep"
+      :key="step.kind"
+      :model-value="toyStep"
+      :condition="condition"
+    />
+
+    <p
+      v-else-if="step.kind === 'stop-toys'"
+      class="text-sm text-muted"
+    >
+      Stops every toy and pattern. Controls, boards and shockers keep going.
+    </p>
 
     <UFormField
       v-if="stepCanWait(step) && (index > 0 || step.delayMs > 0)"

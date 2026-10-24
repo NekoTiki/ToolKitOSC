@@ -13,7 +13,8 @@ import type {
   OutputAction,
   ParameterAction,
   ParameterCondition,
-  ParameterValueType
+  ParameterValueType,
+  ToyRun
 } from '@renderer/lib/tauri-bridge'
 import type { ControlType, ControlTypes } from '@toolkitosc/shared-ui'
 import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
@@ -130,6 +131,34 @@ export const MAX_DELAY_MS = 10_000
 // model.rs CHATBOX_MAX, MAX_TOY_PULSE_MS.
 export const CHATBOX_MAX = 144
 export const MAX_TOY_PULSE_MS = 60_000
+// model.rs MAX_TOY_PATTERN_MS: a pattern step that isn't held.
+export const MAX_TOY_PATTERN_MS = 600_000
+
+export type ToyRunType = ToyRun['type']
+
+// How a Toy step drives its toys (model.rs ToyRun).
+export const TOY_RUNS: Record<ToyRunType, { label: string; description: string; runs: Runs }> = {
+  pulse: { label: 'Pulse', description: 'At this level for a moment, then off.', runs: 'moment' },
+  ramp: { label: 'Ramp', description: 'Fades from one level to another, and stays there.', runs: 'moment' },
+  hold: { label: 'Hold', description: 'At this level while the condition is true, then off.', runs: 'state' },
+  follow: { label: 'Follow', description: 'Follows the value, mapped onto a range.', runs: 'follow' }
+}
+
+export const toyRunsFor = (condition: ConditionType): ToyRunType[] =>
+  (Object.keys(TOY_RUNS) as ToyRunType[]).filter((type) => TOY_RUNS[type].runs === runsFor(condition))
+
+export const defaultToyRun = (type: ToyRunType): ToyRun => {
+  switch (type) {
+    case 'pulse':
+      return { type, level: 0.6, ms: 2000 }
+    case 'ramp':
+      return { type, from: 0, to: 1, ms: 5000 }
+    case 'hold':
+      return { type, level: 0.6 }
+    case 'follow':
+      return { type, min: 0, max: 1 }
+  }
+}
 
 // model.rs format_duration: 0.5s, 2s, 1m 30s.
 const chatboxDuration = (ms: number): string => {
@@ -265,7 +294,10 @@ export const stepRuns = (step: AutomationAction): Runs => {
     case 'control':
       return CONTROL_RUNS[step.run.type].runs
     case 'profile':
+    case 'toy-pattern':
       return step.whileHeld ? 'state' : 'moment'
+    case 'toy':
+      return TOY_RUNS[step.run.type].runs
     default:
       return 'moment'
   }
@@ -347,6 +379,24 @@ export const STEP_KINDS: Record<
     label: 'OWO sensation',
     description: 'Fire muscles of your OWO Skin with a tap, pulse, punch or heartbeat.',
     icon: 'i-lucide-zap',
+    runs: ['moment']
+  },
+  toy: {
+    label: 'Toy',
+    description: 'Run your toys straight from Intiface, on any avatar, no control needed.',
+    icon: 'i-lucide-vibrate',
+    runs: ['moment', 'state', 'follow']
+  },
+  'toy-pattern': {
+    label: 'Play pattern',
+    description: 'Play a built-in or saved pattern on your toys.',
+    icon: 'i-lucide-audio-lines',
+    runs: ['moment', 'state']
+  },
+  'stop-toys': {
+    label: 'Stop toys',
+    description: 'Stop every toy and pattern, without pausing anything else.',
+    icon: 'i-lucide-circle-stop',
     runs: ['moment']
   }
 }
@@ -489,6 +539,10 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
       return { kind, effect: 'heartbeat', positions: ['VestFront', 'VestBack'], intensity: 0.6, delayMs: 0 }
     case 'owo-sensation':
       return { kind, sensation: 'tap', muscles: ['PectoralR', 'PectoralL'], intensity: 0.3, delayMs: 0 }
+    case 'toy':
+      return { kind, toys: [], run: defaultToyRun(toyRunsFor(condition)[0] ?? 'pulse'), delayMs: 0 }
+    case 'toy-pattern':
+      return { kind, toys: [], patternId: 'wave', ms: 10_000, whileHeld: runsFor(condition) === 'state', delayMs: 0 }
     default:
       return { kind, delayMs: 0 }
   }
@@ -521,9 +575,12 @@ export const fitStep = (
       return types.length ? { ...step, run: defaultControlRun(types[0]!, control), delayMs } : step
     }
     case 'profile':
+    case 'toy-pattern':
       return runsFor(condition) === 'follow'
         ? step
         : { ...step, whileHeld: runsFor(condition) === 'state', delayMs }
+    case 'toy':
+      return { ...step, run: defaultToyRun(toyRunsFor(condition)[0]!), delayMs }
     default:
       return step
   }
@@ -692,6 +749,8 @@ export interface DescribeContext {
   // parameter, which names it and its options.
   control?: (controlId: string) => ControlType | undefined
   controlForParameter?: (address: string) => ControlType | undefined
+  // A built-in or saved toy pattern's name.
+  patternName?: (id: string) => string | undefined
 }
 
 const describeControlRun = (run: ControlRun): string => {
@@ -702,6 +761,24 @@ const describeControlRun = (run: ControlRun): string => {
       return `follow ${Math.round(run.min * 100)}–${Math.round(run.max * 100)} %`
     default:
       return CONTROL_RUNS[run.type].label.toLowerCase()
+  }
+}
+
+// The toys a step drives, by name; none picked means every toy connected.
+export const toysLabel = (toys: { deviceName: string }[]): string =>
+  toys.length ? [...new Set(toys.map((toy) => toy.deviceName))].join(', ') : 'all toys'
+
+const describeToyRun = (run: ToyRun): string => {
+  const pct = (level: number): string => `${Math.round(level * 100)} %`
+  switch (run.type) {
+    case 'pulse':
+      return `pulse ${pct(run.level)} for ${formatMs(run.ms)}`
+    case 'hold':
+      return `hold ${pct(run.level)}`
+    case 'follow':
+      return `follow ${pct(run.min)}–${pct(run.max)}`
+    case 'ramp':
+      return `ramp ${pct(run.from)}–${pct(run.to)} over ${formatMs(run.ms)}`
   }
 }
 
@@ -738,6 +815,15 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
       break
     case 'owo-sensation':
       what = `OWO ${OWO_SENSATIONS.find((s) => s.id === step.sensation)?.label.toLowerCase() ?? 'sensation'} at ${Math.round(step.intensity * 100)}%`
+      break
+    case 'toy':
+      what = `${toysLabel(step.toys)}: ${describeToyRun(step.run)}`
+      break
+    case 'toy-pattern':
+      what = `${toysLabel(step.toys)}: pattern ${context.patternName?.(step.patternId) ?? step.patternId}${step.whileHeld ? ' while held' : ` for ${formatMs(step.ms)}`}`
+      break
+    case 'stop-toys':
+      what = 'stop toys'
       break
     default:
       what = 'stop everything'

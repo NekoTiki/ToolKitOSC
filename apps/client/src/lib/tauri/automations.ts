@@ -1,7 +1,7 @@
 // Automations - src-tauri/src/automations/.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { BhapticsPosition, CreatedBy, OwoMuscle } from '@toolkitosc/shared-ui'
+import type { BhapticsPosition, CreatedBy, IntifaceActuatorRef, OwoMuscle } from '@toolkitosc/shared-ui'
 
 // Automations - mirrors src-tauri/src/automations/model.rs. "When" and "do" are tagged on `kind`
 // so other kinds (app events, chatbox...) can be added next to these.
@@ -138,6 +138,18 @@ export type BhapticsPulseAction = { kind: 'bhaptics-pulse'; position: BhapticsPo
 export type BhapticsEffectAction = { kind: 'bhaptics-effect'; effect: string; positions: BhapticsPosition[]; intensity: number }
 // The OWO add-on: a built-in sensation (OWO_SENSATIONS id) on some muscles. `intensity` is 0-1.
 export type OwoSensationAction = { kind: 'owo-sensation'; sensation: string; muscles: OwoMuscle[]; intensity: number }
+// The Intiface add-on: toys driven without a control, on any avatar. `toys` empty = every toy
+// connected. Levels are 0-1.
+export type ToyRun =
+  | { type: 'pulse'; level: number; ms: number }
+  | { type: 'hold'; level: number }
+  | { type: 'follow'; min: number; max: number }
+  // Fades from one level to the other, and stays there.
+  | { type: 'ramp'; from: number; to: number; ms: number }
+export type ToyAction = { kind: 'toy'; toys: IntifaceActuatorRef[]; run: ToyRun }
+// A built-in or saved pattern, for `ms` or while the condition holds.
+export type ToyPatternAction = { kind: 'toy-pattern'; toys: IntifaceActuatorRef[]; patternId: string; ms: number; whileHeld: boolean }
+export type StopToysAction = { kind: 'stop-toys' }
 
 export type AutomationAction =
   | BoardOutputAction
@@ -150,6 +162,9 @@ export type AutomationAction =
   | BhapticsPulseAction
   | BhapticsEffectAction
   | OwoSensationAction
+  | ToyAction
+  | ToyPatternAction
+  | StopToysAction
 
 // The backend asking the app to carry out a step (see useAutomationRunner.ts). `start` and `stop`
 // bracket a hold; `follow` carries the trigger's value, 0-1.
