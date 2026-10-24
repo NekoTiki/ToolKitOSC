@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { suspend } from '~~/server/db/accounts'
+import { logAdminAction } from '~~/server/db/adminLog'
 import { signOutHost } from '~~/server/routes/host'
 import { demoteViewerAccount } from '~~/server/routes/ws/[ws]'
 
@@ -12,7 +13,7 @@ const bodySchema = z.object({
 
 // The app is signed out and can't sign in again until it ends; share pages treat them as a guest.
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const { discordId: adminId } = await requireAdmin(event)
 
   const discordId = getRouterParam(event, 'discordId')
 
@@ -23,6 +24,8 @@ export default defineEventHandler(async (event) => {
 
   signOutHost(discordId, message)
   demoteViewerAccount(discordId)
+
+  await logAdminAction(adminId, 'suspend', discordId, { days, reason })
 
   return { success: true }
 })

@@ -1,3 +1,4 @@
+import { logAdminAction } from '~~/server/db/adminLog'
 import { sendMessageToHost } from '~~/server/routes/host'
 import { ACCOUNT_DAILY_CREDITS } from '~~/server/utils/ai/profiles'
 import { addCreditBonus, remainingAccountCredits } from '~~/server/utils/ai/rateLimit'
@@ -6,7 +7,7 @@ import { creditBonusBodySchema } from '~~/server/utils/ai/schemas'
 // Admin "increase credits for today" top-up (see rateLimit.ts's addCreditBonus) - additive on top
 // of the account's one overall daily pool, only for today.
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const { discordId: adminId } = await requireAdmin(event)
 
   const discordId = getRouterParam(event, 'discordId')
 
@@ -24,6 +25,8 @@ export default defineEventHandler(async (event) => {
     remainingCredits: remaining,
     dailyCredits: ACCOUNT_DAILY_CREDITS
   })
+
+  await logAdminAction(adminId, 'add-credits', discordId, { amount })
 
   return { remaining }
 })
