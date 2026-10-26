@@ -227,7 +227,9 @@ pub struct AddonView {
     #[serde(flatten)]
     manifest: Manifest,
     enabled: bool,
-    status: Status
+    status: Status,
+    /// How its step in the welcome setup ended, if it had one.
+    setup: Option<store::Setup>
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -241,10 +243,8 @@ pub struct AddonsView {
 }
 
 pub fn view(app: &AppHandle) -> AddonsView {
-    let (enabled, setup_done, kept) = {
-        let file = addons(app).file.lock().unwrap();
-        (file.enabled_ids(), file.setup_done, file.kept.clone())
-    };
+    let file = addons(app).file.lock().unwrap().clone();
+    let enabled = file.enabled_ids();
     AddonsView {
         addons: available()
             .map(|addon| {
@@ -253,12 +253,13 @@ pub fn view(app: &AppHandle) -> AddonsView {
                 AddonView {
                     status: if on { addon.status(app) } else { Status::new(State::Off, "Off") },
                     enabled: on,
+                    setup: file.setup(manifest.id),
                     manifest
                 }
             })
             .collect(),
-        setup_done,
-        kept
+        setup_done: file.setup_done,
+        kept: file.kept
     }
 }
 
@@ -332,6 +333,17 @@ fn adopt_switch(app: &AppHandle, id: &str) -> bool {
     };
     store::save(app, &file);
     true
+}
+
+/// A step of the welcome setup was finished or left for later.
+pub fn set_setup(app: &AppHandle, id: &str, setup: Option<store::Setup>) {
+    let file = {
+        let mut file = addons(app).file.lock().unwrap();
+        file.addons.entry(id.to_owned()).or_default().setup = setup;
+        file.clone()
+    };
+    store::save(app, &file);
+    changed(app);
 }
 
 /// "What do you use?" was answered or skipped, or the notice about what was kept was dismissed.

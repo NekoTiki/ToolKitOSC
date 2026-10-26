@@ -1,9 +1,9 @@
-import type { Addon, AddonsState } from '@renderer/lib/tauri-bridge'
+import type { Addon, AddonSetup, AddonsState } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref } from 'vue'
 
-export type { Addon, AddonState } from '@renderer/lib/tauri-bridge'
+export type { Addon, AddonSetup, AddonState } from '@renderer/lib/tauri-bridge'
 
 // Add-ons run in Rust (src-tauri/src/addons): OpenShock, Intiface toys and ESP32 boards each stay
 // off until you turn them on here. Everything they bring to the app (settings sections, control
@@ -53,7 +53,10 @@ export function useAddons(): {
   // The add-on that owns this control type or automation step kind, when it's off.
   offAddonForControlType: (type: string) => Addon | undefined
   offAddonForAutomationKind: (kind: string) => Addon | undefined
+  // Left for later in the welcome setup, and still not working.
+  needsSetup: (addon: Addon) => boolean
   setEnabled: (id: string, enabled: boolean) => Promise<void>
+  setSetup: (id: string, setup: AddonSetup | null) => Promise<void>
   finishSetup: (dismissKept: boolean) => Promise<void>
 } {
   return {
@@ -75,7 +78,9 @@ export function useAddons(): {
 
       return addon && !addon.enabled ? addon : undefined
     },
+    needsSetup: (addon) => addon.enabled && addon.setup === 'later' && addon.status.state !== 'ok',
     setEnabled: api.addonsSetEnabled,
+    setSetup: api.addonsSetSetup,
     finishSetup: api.addonsFinishSetup
   }
 }

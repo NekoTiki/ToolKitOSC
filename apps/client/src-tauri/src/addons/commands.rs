@@ -13,6 +13,12 @@ pub fn addons_set_enabled(app: AppHandle, id: String, enabled: bool) -> Result<(
     super::set_enabled(&app, &id, enabled)
 }
 
+/// A step of the welcome setup was finished ("done") or left for later ("later").
+#[tauri::command]
+pub fn addons_set_setup(app: AppHandle, id: String, setup: Option<super::store::Setup>) {
+    super::set_setup(&app, &id, setup);
+}
+
 /// "What do you use?" was answered or skipped; `dismiss_kept` also hides the notice about what the
 /// update kept on.
 #[tauri::command]

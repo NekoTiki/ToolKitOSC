@@ -25,7 +25,7 @@ const route = useRoute()
 const router = useRouter()
 const { access: aiAccess } = useAiAccess()
 const { generating: aiGenerating, unseen: aiUnseen } = useAiSession()
-const { isOn } = useAddons()
+const { isOn, addons, needsSetup } = useAddons()
 
 // Expanded shows each page's name next to its icon; collapsed is icons only.
 const collapsed = useLocalStorage('railCollapsed', false)
@@ -77,6 +77,8 @@ const menu = computed(() => [
 ])
 
 const settings: RailItem = { key: 'settings', label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }
+// Add-ons left for later in the welcome setup that still don't work.
+const needingSetup = computed(() => addons.value.filter(needsSetup).length)
 
 const isActive = (item: RailItem): boolean => route.path.startsWith(item.to)
 
@@ -125,6 +127,7 @@ const select = (item: RailItem): void => {
         :icon="settings.icon"
         :label="settings.label"
         :active="isActive(settings)"
+        :badge="needingSetup"
         :collapsed="collapsed"
         @click="select(settings)"
       />

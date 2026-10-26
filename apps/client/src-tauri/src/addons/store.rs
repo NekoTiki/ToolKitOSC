@@ -10,7 +10,17 @@ const FILE: &str = "addons.json";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Switch {
-    pub enabled: bool
+    pub enabled: bool,
+    /// How its step in the welcome setup ended. None for add-ons turned on outside it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup: Option<Setup>
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Setup {
+    Done,
+    Later
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -31,7 +41,7 @@ impl AddonsFile {
     /// Someone who used none of them gets "What do you use?".
     pub fn migrated(kept: &[String]) -> Self {
         Self {
-            addons: kept.iter().map(|id| (id.clone(), Switch { enabled: true })).collect(),
+            addons: kept.iter().map(|id| (id.clone(), Switch { enabled: true, setup: None })).collect(),
             setup_done: !kept.is_empty(),
             kept: kept.to_vec()
         }
@@ -43,6 +53,10 @@ impl AddonsFile {
 
     pub fn set_enabled(&mut self, id: &str, enabled: bool) {
         self.addons.entry(id.to_owned()).or_default().enabled = enabled;
+    }
+
+    pub fn setup(&self, id: &str) -> Option<Setup> {
+        self.addons.get(id).and_then(|switch| switch.setup)
     }
 
     pub fn enabled_ids(&self) -> HashSet<String> {
@@ -93,6 +107,19 @@ mod tests {
         assert!(!file.is_enabled("intiface"));
         assert!(file.setup_done);
         assert_eq!(file.kept, ["openshock", "boards"]);
+    }
+
+    #[test]
+    fn setup_state_round_trips_and_old_files_have_none() {
+        let old: AddonsFile = serde_json::from_str(r#"{"addons":{"openshock":{"enabled":true}}}"#).unwrap();
+        assert_eq!(old.setup("openshock"), None);
+
+        let mut file = old;
+        file.addons.get_mut("openshock").unwrap().setup = Some(Setup::Later);
+        let json = serde_json::to_string(&file).unwrap();
+        assert!(json.contains(r#""setup":"later""#));
+        let back: AddonsFile = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.setup("openshock"), Some(Setup::Later));
     }
 
     #[test]
