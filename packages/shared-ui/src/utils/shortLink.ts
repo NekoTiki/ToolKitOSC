@@ -1,10 +1,7 @@
-// Bijective base62 codec for a Discord snowflake id, used to build a short `/s/<code>` link for
-// the share page (see apps/client's AppHeader.vue and apps/server's `server/routes/s/[code].get.ts`)
-// without needing any lookup table/database on the server - the share page's room id has always
-// been the raw Discord id verbatim (see server/routes/host.ts's `getRoomId`), so this is a pure,
-// reversible re-encoding of that same id, not a random code that has to be stored somewhere. A
-// snowflake is a 64-bit integer (~18-19 decimal digits); base62 needs roughly log62(2^64) ≈ 11
-// characters to represent the same range, which is what actually makes the link shorter.
+// Bijective base62 codec for a Discord snowflake id: the old `/s/<code>` share links, from before
+// share links had their own codes (see apps/server's server/db/shareLinks.ts). The server still
+// decodes them for hosts who haven't reset their link; the app only builds one when the server is
+// too old to hand out codes (see apps/client's useShareLink.ts).
 //
 // Deliberately no imports and no DOM/Vue dependency - both `packages/shared-ui`'s package root and
 // `apps/server/shared/utils/shortLink.ts` (its Nitro-server-side re-export) rely on that to stay

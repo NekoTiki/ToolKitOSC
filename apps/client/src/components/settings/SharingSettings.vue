@@ -1,22 +1,64 @@
 <script setup lang="ts">
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
+import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useAuth } from '@renderer/composables/useAuth'
 import type { ClientType } from '@renderer/composables/useClientType'
 import { useClientType } from '@renderer/composables/useClientType'
+import { useShareLink } from '@renderer/composables/useShareLink'
 import { useShareSettings } from '@renderer/composables/useShareSettings'
 import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
-import { encodeShareCode } from '@toolkitosc/shared-ui'
-import { computed } from 'vue'
+import { isValidShareName } from '@toolkitosc/shared-ui'
+import { ref, watch } from 'vue'
 
-const { user, loggedIn } = useAuth()
+const { loggedIn } = useAuth()
 const { clientType, setClient } = useClientType()
 const { showViewers, setShowViewers } = useShareSettings()
 const toast = useToast()
 
-// Keyed by the host's Discord id (see the server's host.ts), as a reversible short code.
-const shareUrl = computed(() => (user.value?.discord?.id ? `${serverHttpUrl.value}/s/${encodeShareCode(user.value.discord.id)}` : null))
+const { links, shareUrl, reset, setName } = useShareLink()
+const { openModal: confirm } = useAreYouSureModal()
+
+const nameDraft = ref('')
+const nameError = ref<string | null>(null)
+
+watch(() => links.value?.custom, (custom) => (nameDraft.value = custom ?? ''), { immediate: true })
+
+const saveName = async (): Promise<void> => {
+  const name = nameDraft.value.trim().toLowerCase() || null
+
+  nameError.value = null
+
+  if (name === (links.value?.custom ?? null)) return
+  if (name && !isValidShareName(name)) {
+    nameError.value = 'Use 3 to 24 lowercase letters, digits or dashes'
+    return
+  }
+
+  try {
+    await setName(name)
+  } catch (error) {
+    nameError.value = (error as Error).message
+  }
+}
+
+const resetLink = async (): Promise<void> => {
+  const ok = await confirm({
+    title: 'Reset your share link?',
+    message: 'You get a new random link. Your current one, and links from older versions of the app, **stop working**. Your custom name keeps working.',
+    confirmText: 'Reset link'
+  })
+
+  if (!ok) return
+
+  try {
+    await reset()
+    toast.add({ title: 'New share link ready', icon: 'i-lucide-check', color: 'success' })
+  } catch (error) {
+    toast.add({ title: 'Could not reset the share link', description: (error as Error).message, color: 'error' })
+  }
+}
 
 const copy = async (): Promise<void> => {
   if (!shareUrl.value) return
@@ -73,6 +115,39 @@ const OPTIONS: { value: ClientType; label: string; description: string; icon: st
       title="Sign in to get a share link"
       description="The link is tied to your Discord account. Sign in under Account & server."
     />
+
+    <template v-if="loggedIn && links">
+      <UFormField
+        label="Custom name"
+        :description="`Optional. Your link becomes ${serverHttpUrl}/s/<name>.`"
+        :error="nameError ?? undefined"
+      >
+        <UInput
+          v-model="nameDraft"
+          icon="i-lucide-at-sign"
+          size="xl"
+          placeholder="your-name"
+          class="w-full"
+          :ui="{ base: 'h-12 font-mono text-[13px]' }"
+          @keyup.enter="saveName"
+          @blur="saveName"
+        />
+      </UFormField>
+
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="text-[13px] text-muted">
+          Link shared somewhere it shouldn't be? Reset it to get a new one.
+        </p>
+        <UButton
+          icon="i-lucide-rotate-ccw"
+          color="error"
+          variant="soft"
+          @click="resetLink"
+        >
+          Reset link
+        </UButton>
+      </div>
+    </template>
   </FormSection>
 
   <FormSection

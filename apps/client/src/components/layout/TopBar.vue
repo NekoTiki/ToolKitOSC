@@ -4,12 +4,11 @@ import { useAuth } from '@renderer/composables/useAuth'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
 import { profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
+import { useShareLink } from '@renderer/composables/useShareLink'
 import { formatHotkey, useStopEverything } from '@renderer/composables/useStopEverything'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import { useWebsocketAuth } from '@renderer/composables/useWebsocketAuth'
-import { serverHttpUrl } from '@renderer/composables/useWebsocketSettings'
 import { api } from '@renderer/lib/tauri-bridge'
-import { encodeShareCode } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -82,12 +81,7 @@ const profileItems = computed<DropdownMenuItem[][]>(() => [
   ]
 ])
 
-// The share page's room is keyed by the host's Discord id (see the server's host.ts `getRoomId`),
-// so there's nothing to share until that's known. `/s/<code>` is a reversible re-encoding of that
-// id (see server/routes/s/[code].get.ts), so it needs no round trip to produce.
-const shareUrl = computed<string | null>(() =>
-  user.value?.discord?.id ? `${serverHttpUrl.value}/s/${encodeShareCode(user.value.discord.id)}` : null
-)
+const { shareUrl } = useShareLink()
 
 const copyShareLink = async (): Promise<void> => {
   if (!shareUrl.value) return
