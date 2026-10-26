@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `share_approval` integer DEFAULT false NOT NULL;

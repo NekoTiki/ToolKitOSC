@@ -60,7 +60,7 @@ if (localStorage.getItem(MIGRATED_KEY) === null) {
 }
 
 // Viewer groups, who is in which and bans, as Rust keeps them (src-tauri/src/setup/viewers.rs).
-export const viewersSetup = ref<ViewersSetup>({ groups: [], memberships: {}, bans: [] })
+export const viewersSetup = ref<ViewersSetup>({ groups: [], memberships: {}, bans: [], approved: [] })
 
 api.onSetupViewers((viewers) => (viewersSetup.value = viewers))
 
@@ -85,7 +85,8 @@ const legacyViewers = async (): Promise<ViewersSetup> => {
   return {
     groups,
     memberships: Object.fromEntries(members.map((client) => [client.key, client.groups!])),
-    bans: bans.map(({ scope, value, reason, createdAt }) => ({ scope, value, reason, createdAt }))
+    bans: bans.map(({ scope, value, reason, createdAt }) => ({ scope, value, reason, createdAt })),
+    approved: []
   }
 }
 

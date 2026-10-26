@@ -57,6 +57,8 @@ export interface ViewersSetup {
   groups: ViewerGroupInfo[]
   memberships: Record<string, GroupMembership[]>
   bans: Ban[]
+  // Discord ids let in, for "Only people you let in".
+  approved: string[]
 }
 
 export const setupApi = {
@@ -81,6 +83,7 @@ export const setupApi = {
   setupRemoveFromGroup: (key: string, groupId: string): Promise<void> => invoke('setup_remove_from_group', { key, groupId }),
   setupBan: (scope: BanScope, value: string, reason?: string): Promise<void> => invoke('setup_ban', { scope, value, reason: reason ?? null }),
   setupUnban: (scope: BanScope, value: string): Promise<void> => invoke('setup_unban', { scope, value }),
+  setupSetApproved: (discordId: string, approved: boolean): Promise<void> => invoke('setup_set_approved', { discordId, approved }),
   setupMigrateViewers: (viewers: ViewersSetup): Promise<void> => invoke('setup_migrate_viewers', { viewers }),
   onSetupViewers: (callback: (viewers: ViewersSetup) => void): void => {
     void listen<ViewersSetup>('setup-viewers', (event) => callback(event.payload))

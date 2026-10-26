@@ -7,12 +7,16 @@ import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
 import { useBannedClientsDb } from '@renderer/composables/useBannedClientsDb'
 import { useBanViewerModal } from '@renderer/composables/useBanViewerModal'
 import { useClientsDb } from '@renderer/composables/useClientsDb'
+import { useClientType } from '@renderer/composables/useClientType'
 import { useLiveQuery } from '@renderer/composables/useLiveQuery'
 import { useMcpClients } from '@renderer/composables/useMcpBridge'
+import { viewersSetup } from '@renderer/composables/useSetup'
 import { MEMBERSHIP_DURATIONS, useViewerGroups } from '@renderer/composables/useViewerGroups'
+import { declineWaitingViewer, waitingViewers } from '@renderer/composables/useWebsocketHost'
 import type { Client } from '@renderer/db/clients.db'
 import { db as clientsDb } from '@renderer/db/clients.db'
 import type { Command } from '@renderer/db/commands.db'
+import { api } from '@renderer/lib/tauri-bridge'
 import { timeAgo } from '@renderer/utils/time'
 import { countViewerCommands, viewerCommands } from '@renderer/utils/viewers'
 import { formatCommandValue } from '@toolkitosc/shared-ui'
@@ -106,6 +110,20 @@ watch(
 )
 
 const banned = computed(() => (selected.value ? isBanned(selected.value.ip, selected.value.discordId) : undefined))
+
+// "Only people you let in" (Settings > Sharing): who may open your share page.
+const { clientType } = useClientType()
+const approvalOn = computed(() => clientType.value === 'approved')
+const isLetIn = (discordId: string | undefined): boolean => !!discordId && viewersSetup.value.approved.includes(discordId)
+
+const setLetIn = async (discordId: string, name: string, letIn: boolean): Promise<void> => {
+  try {
+    await api.setupSetApproved(discordId, letIn)
+    toast.add({ title: letIn ? `${name} can join` : `${name} can't join any more`, icon: letIn ? 'i-lucide-door-open' : 'i-lucide-door-closed' })
+  } catch (error) {
+    toast.add({ title: 'Could not change who can join', description: String(error), color: 'error' })
+  }
+}
 
 const commandsFor = (client: Client | null): Promise<{ count: number; recent: Command[] }> => {
   if (!client) return Promise.resolve({ count: 0, recent: [] })
@@ -305,6 +323,43 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
         aria-label="Viewers"
         class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1.5"
       >
+        <!-- Signed-in viewers waiting on the share page while only people you let in can join. -->
+        <template v-if="waitingViewers.length">
+          <div class="flex justify-between px-2.5 pt-2 font-mono text-[10.5px] tracking-widest text-primary uppercase">
+            <span>Waiting to join</span>
+            <span>{{ waitingViewers.length }}</span>
+          </div>
+          <div
+            v-for="viewer in waitingViewers"
+            :key="viewer.peerId"
+            class="grid min-h-14.5 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-2xl border border-primary/30 bg-primary/8 px-2.5 py-2"
+          >
+            <UAvatar
+              :src="viewer.avatar"
+              :alt="viewer.name"
+              size="md"
+            />
+            <b class="truncate text-[14.5px] font-semibold text-highlighted">{{ viewer.name }}</b>
+            <span class="flex gap-1">
+              <UButton
+                size="md"
+                icon="i-lucide-check"
+                aria-label="Let in"
+                title="Let in"
+                @click="setLetIn(viewer.discordId, viewer.name, true)"
+              />
+              <UButton
+                size="md"
+                icon="i-lucide-x"
+                color="neutral"
+                variant="subtle"
+                aria-label="Decline"
+                title="Decline"
+                @click="declineWaitingViewer(viewer.peerId)"
+              />
+            </span>
+          </div>
+        </template>
         <!-- AI assistants connected now (Settings > Assistants). Not viewers of the share page:
         never counted online, and they can't be put in groups or banned. -->
         <template v-if="assistants.length">
@@ -512,6 +567,22 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
                 Total actions
               </dt>
               <dd>{{ activity.count.toLocaleString() }}</dd>
+              <template v-if="approvalOn && selected.discordId">
+                <dt class="text-muted">
+                  Share page
+                </dt>
+                <dd class="flex flex-wrap items-center gap-2">
+                  {{ isLetIn(selected.discordId) ? 'Let in' : 'Not let in' }}
+                  <UButton
+                    size="sm"
+                    :color="isLetIn(selected.discordId) ? 'error' : 'primary'"
+                    variant="soft"
+                    @click="setLetIn(selected.discordId, selected.displayName, !isLetIn(selected.discordId))"
+                  >
+                    {{ isLetIn(selected.discordId) ? 'Remove access' : 'Let in' }}
+                  </UButton>
+                </dd>
+              </template>
             </dl>
           </FormSection>
 

@@ -1,6 +1,6 @@
 import { onMounted, ref } from 'vue'
 
-export type ClientType = 'everyone' | 'username' | 'discord'
+export type ClientType = 'everyone' | 'username' | 'discord' | 'approved'
 
 const clientType = ref<ClientType>('everyone')
 

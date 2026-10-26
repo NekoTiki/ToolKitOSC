@@ -91,7 +91,8 @@ const copy = async (): Promise<void> => {
 const OPTIONS: { value: ClientType; label: string; description: string; icon: string }[] = [
   { value: 'everyone', label: 'Everyone', description: 'Anyone with the link, no sign-in.', icon: 'i-lucide-lock-open' },
   { value: 'username', label: 'Ask for a name', description: 'Viewers type a display name first.', icon: 'i-lucide-user-round-pen' },
-  { value: 'discord', label: 'Discord only', description: 'Viewers must sign in with Discord. Best for bans.', icon: 'ic:baseline-discord' }
+  { value: 'discord', label: 'Discord only', description: 'Viewers must sign in with Discord. Best for bans.', icon: 'ic:baseline-discord' },
+  { value: 'approved', label: 'Only people you let in', description: 'Viewers sign in with Discord, then wait until you let them in from Viewers.', icon: 'i-lucide-door-open' }
 ]
 </script>
 
@@ -189,7 +190,7 @@ const OPTIONS: { value: ClientType; label: string; description: string; icon: st
     title="Who can use your controls"
     description="Applies to every viewer of your share link."
   >
-    <div class="grid gap-2.5 sm:grid-cols-3">
+    <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
       <ChoiceCard
         v-for="option in OPTIONS"
         :key="option.value"

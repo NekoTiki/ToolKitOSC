@@ -65,6 +65,11 @@ pub fn setup_ban(app: AppHandle, scope: String, value: String, reason: Option<St
 }
 
 #[tauri::command]
+pub fn setup_set_approved(app: AppHandle, discord_id: String, approved: bool) -> Result<(), String> {
+    super::viewers::set_approved(&app, &discord_id, approved)
+}
+
+#[tauri::command]
 pub fn setup_unban(app: AppHandle, scope: String, value: String) -> Result<(), String> {
     super::viewers::unban(&app, &scope, &value)
 }

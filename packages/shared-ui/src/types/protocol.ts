@@ -250,6 +250,18 @@ export interface ClientListEntry {
 export interface ShareSettingsMessage {
   // Viewers see who else is on the share page, and who pressed what.
   showViewers: boolean
+  // "Only people you let in": viewers sign in with Discord and wait on the share page until their
+  // Discord id is in `approved`.
+  approval?: boolean
+  approved?: string[]
+}
+
+// A signed-in viewer waiting to be let in (ShareSettingsMessage.approval), for the Viewers page.
+export interface WaitingViewer {
+  peerId: string
+  name: string
+  avatar?: string
+  discordId: string
 }
 
 // Which viewer groups the people on the share page are in, so the server can send each of them
@@ -333,6 +345,8 @@ export type HostToServerMessage =
   | WsEnvelope<'command-accepted', CommandAcceptedMessage>
   | WsEnvelope<'pause-state', PauseStateMessage>
   | WsEnvelope<'viewer-groups', ViewerGroupsMessage>
+  // Turns a waiting viewer away (letting one in is adding them to ShareSettingsMessage.approved).
+  | WsEnvelope<'viewer-declined', { peerId: string }>
 
 // Server -> desktop client, over /host. `command`/`update-username` are relays of a viewer's
 // message with a `from` (session id) field appended directly onto the envelope, not nested.
@@ -351,6 +365,7 @@ export type ServerToHostMessage =
   // A server admin pressed Stop everything for this host (dashboard Live page).
   | WsEnvelope<'admin-stop', null>
   | WsEnvelope<'server-notice', ServerNotice | null>
+  | WsEnvelope<'viewers-waiting', WaitingViewer[]>
 
 // Server -> browser viewer, over /ws/[roomId].
 export type ServerToViewerMessage =
@@ -374,6 +389,11 @@ export type ServerToViewerMessage =
   | WsEnvelope<'server-notice', ServerNotice | null>
   // Sent right before the server closes a share page it won't take (see connectionCaps.ts).
   | WsEnvelope<'connection-refused', { reason: 'room-full' | 'too-many-connections' }>
+  // "Only people you let in": waiting for the host (signedIn), or asked to sign in first.
+  | WsEnvelope<'access-waiting', { signedIn: boolean }>
+  // Let in, or no longer: the page connects again. Declined: it stops there.
+  | WsEnvelope<'access-changed', null>
+  | WsEnvelope<'access-declined', null>
 
 // Browser viewer -> server, over /ws/[roomId].
 export type ViewerToServerMessage =

@@ -54,7 +54,10 @@ pub struct ViewersFile {
     #[serde(default)]
     pub memberships: BTreeMap<String, Vec<Membership>>,
     #[serde(default)]
-    pub bans: Vec<Ban>
+    pub bans: Vec<Ban>,
+    /// Discord ids you let in, for "Only people you let in" (`approved` client type).
+    #[serde(default)]
+    pub approved: Vec<String>
 }
 
 pub fn now_ms() -> u64 {
@@ -247,6 +250,23 @@ pub fn ban(app: &AppHandle, scope: String, value: String, reason: Option<String>
     })
 }
 
+pub fn is_approved(app: &AppHandle, discord_id: &str) -> bool {
+    read(app, |file| file.approved.iter().any(|id| id == discord_id))
+}
+
+/// Lets a Discord account in, or takes them back out (`approved` false).
+pub fn set_approved(app: &AppHandle, discord_id: &str, approved: bool) -> Result<(), String> {
+    with(app, |file| {
+        let listed = file.approved.iter().any(|id| id == discord_id);
+        if approved && !listed {
+            file.approved.push(discord_id.to_owned());
+        } else if !approved && listed {
+            file.approved.retain(|id| id != discord_id);
+        }
+        ((), approved != listed)
+    })
+}
+
 pub fn unban(app: &AppHandle, scope: &str, value: &str) -> Result<(), String> {
     with(app, |file| {
         let before = file.bans.len();
@@ -308,7 +328,8 @@ mod tests {
         let file = ViewersFile {
             groups: vec![ViewerGroup { id: "a".into(), name: "A".into(), color: String::new() }],
             memberships: BTreeMap::from([("guest:1".to_owned(), vec![m("a", Some(100)), m("gone", None)])]),
-            bans: vec![]
+            bans: vec![],
+            approved: vec![]
         };
         assert_eq!(active_ids(&file, "guest:1", 50), vec!["a".to_owned()]);
         assert!(active_ids(&file, "guest:1", 100).is_empty());

@@ -14,7 +14,7 @@ import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { assistantName } from '@renderer/utils/viewers'
-import type { ClientListEntry, ControlTypes, ServerNotice } from '@toolkitosc/shared-ui'
+import type { ClientListEntry, ControlTypes, ServerNotice, WaitingViewer } from '@toolkitosc/shared-ui'
 import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import type { ComputedRef } from 'vue'
@@ -27,6 +27,12 @@ export const clients = ref<Client[]>([])
 
 // `clients` has one entry per connection, so the same person on several browsers/tabs shows up
 // more than once - this counts people instead, keyed the same way the Viewers page groups them.
+// Signed-in viewers waiting on the share page for you to let them in ("Only people you let in").
+export const waitingViewers = ref<WaitingViewer[]>([])
+
+// Letting one in is adding them to the approved list (useShareSettings.ts sends it).
+export const declineWaitingViewer = (peerId: string): void => void api.serverSend(JSON.stringify({ type: 'viewer-declined', message: { peerId } }))
+
 export const uniqueClientCount = computed(() => new Set(clients.value.map((client) => describeViewer(client).key)).size)
 
 // The socket itself lives in Rust (src-tauri/src/server), so it stays up while this window reloads
@@ -265,6 +271,8 @@ export function useWebsocketHost(): {
       useAiGenerationStatus().applyResult(data.message)
     } else if (data.type === 'ai-generate-error') {
       useAiGenerationStatus().applyError(data.message)
+    } else if (data.type === 'viewers-waiting') {
+      waitingViewers.value = data.message
     } else if (data.type === 'server-notice') {
       showServerNotice(data.message)
     } else if (data.type === 'admin-stop') {

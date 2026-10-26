@@ -7,7 +7,7 @@ use tauri::AppHandle;
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Policy {
-    /// Who may use controls: `everyone`, `username` or `discord`.
+    /// Who may use controls: `everyone`, `username`, `discord` or `approved`.
     #[serde(default)]
     pub client_type: String,
     /// Whether viewers see each other's names (a viewer's pattern says whose it is).

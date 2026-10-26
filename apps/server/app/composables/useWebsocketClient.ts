@@ -42,6 +42,9 @@ export function useWebsocketClient(roomId: string) {
   const notice = ref<ServerNotice | null>(null)
   // The server closed this page: the room is full, or too many pages are open from this network.
   const refused = ref<'room-full' | 'too-many-connections' | null>(null)
+  // "Only people you let in": waiting for the host, or turned away by them.
+  const waiting = ref(false)
+  const declined = ref(false)
 
   const { status, data, send, open, close } = useWebSocket(`/ws/${roomId}`, {
     heartbeat: {
@@ -90,7 +93,7 @@ export function useWebsocketClient(roomId: string) {
         // checkClient() (see apps/client/src/utils/checkClient.ts) never fails validation when
         // the host's policy is 'everyone', so client-invalid.type in practice is always
         // 'username' | 'discord' — the only two the share page's sign-in state has a flow for.
-        authRequired.value = data.message.type as 'username' | 'discord'
+        authRequired.value = data.message.type === 'username' ? 'username' : 'discord'
       } else if (data.type === 'client-banned') {
         banned.value = { scope: data.message.scope, reason: data.message.reason }
       } else if (data.type === 'rate-limited') {
@@ -104,6 +107,16 @@ export function useWebsocketClient(roomId: string) {
         notice.value = data.message
       } else if (data.type === 'connection-refused') {
         refused.value = data.message.reason
+      } else if (data.type === 'access-waiting') {
+        // A guest is asked to sign in first; approval is by Discord account.
+        if (data.message.signedIn) waiting.value = true
+        else authRequired.value = 'discord'
+      } else if (data.type === 'access-declined') {
+        declined.value = true
+      } else if (data.type === 'access-changed') {
+        // Let in (or no longer): the server closes this connection, the next one lands right.
+        waiting.value = false
+        setTimeout(open, 300)
       } else if (data.type === 'presence') {
         you.value = data.message.you
         viewers.value = data.message.viewers
@@ -127,6 +140,8 @@ export function useWebsocketClient(roomId: string) {
     paused,
     notice,
     refused,
+    waiting,
+    declined,
     status,
     hostStatus,
     data,
