@@ -78,7 +78,7 @@ useSeoMeta({
 // groups in a sidebar - or a row of chips on a phone - and the selected group's tiles filling the
 // page, in the host's theme. Sign-in, banned, offline and disconnected are full-page states
 // rather than modals.
-const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, notice, refused, waiting, declined, status, hostStatus, open, close, sendMessage } =
+const { controlGroups, authRequired, banned, viewers, you, lastAction, paused, notice, refused, waiting, declined, topViewers, status, hostStatus, open, close, sendMessage } =
   useWebsocketClient(shareId)
 const { removeTheme } = useClientTheme()
 
@@ -302,6 +302,7 @@ const pageState = computed<'refused' | 'declined' | 'waiting' | 'banned' | 'sign
           <ShareViewers
             :viewers="viewers"
             :you="you"
+            :top="topViewers"
             class="w-72 p-2"
           />
         </template>
@@ -363,6 +364,7 @@ const pageState = computed<'refused' | 'declined' | 'waiting' | 'banned' | 'sign
           v-if="viewers?.length"
           :viewers="viewers"
           :you="you"
+          :top="topViewers"
           class="shrink-0 border-t border-default pt-1"
         />
       </aside>

@@ -29,6 +29,7 @@ import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/
 import { currentNotice } from '~~/server/utils/serverNotice'
 import { getSettings } from '~~/server/utils/serverSettings'
 import { accessDecision } from '~~/server/utils/shareAccess'
+import { noteViewerCount, topViewers } from '~~/server/utils/streamRecap'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -144,6 +145,7 @@ const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client
   sendClientListToHost(roomId)
   broadcastPresence(roomId)
   roomsChanged()
+  noteViewerCount(roomId, viewerCount(roomId))
 }
 
 const removeClient = (roomId: RoomId, peerId: PeerId, peer: Pick<Peer, 'id'>) => {
@@ -180,6 +182,9 @@ export const demoteViewerAccount = (discordId: string) => {
     broadcastPresence(roomId)
   }
 }
+
+// People on the share page: a Discord account on two devices counts once.
+export const viewerCount = (roomId: RoomId): number => new Set([...(clientList.get(roomId)?.values() ?? [])].map(publicIdOf)).size
 
 const socketsFromIp = (ip: string): number =>
   [...clientList.values(), ...waitingList.values()]
@@ -335,6 +340,10 @@ export default defineWebSocketHandler({
       type: 'welcome',
       message: `Welcome ${user?.discord?.name || 'Anonymous'}! Your peer ID is ${sessionId}`
     })
+
+    const top = topViewers(roomId)
+
+    if (top) peer.send({ type: 'top-viewers', message: top })
 
     const notice = currentNotice()
 

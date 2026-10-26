@@ -30,12 +30,14 @@ import {
   sendToClient,
   sendToEveryoneInRoom,
   sendWaitingToHost,
-  showViewers
+  showViewers,
+  viewerCount
 } from '~~/server/routes/ws/[ws]'
 import { getAiAccess } from '~~/server/utils/ai/access'
 import { recordControlInventory, scheduleControlActivation } from '~~/server/utils/controlStats'
 import { roomsChanged } from '~~/server/utils/liveRooms'
 import { currentNotice } from '~~/server/utils/serverNotice'
+import { noteAction, sendTopViewers, streamEnded, streamStarted } from '~~/server/utils/streamRecap'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -227,6 +229,7 @@ export default defineWebSocketHandler({
 
         sendClientListToHost(roomId!)
         sendWaitingToHost(roomId!)
+        streamStarted(roomId!, viewerCount(roomId!))
 
         const notice = currentNotice()
 
@@ -309,9 +312,10 @@ export default defineWebSocketHandler({
           .catch((error) => console.error('[host] failed to save share approval:', error))
       }
 
-      hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false, approval, approved })
+      hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false, approval, approved, showTopViewers: data.message.showTopViewers === true })
       broadcastPresence(roomId)
       recheckAccess(roomId)
+      sendTopViewers(roomId)
     } else if (data.type === 'viewer-declined') {
       if (typeof data.message?.peerId === 'string') declineWaiting(roomId, data.message.peerId)
     } else if (data.type === 'pause-state') {
@@ -347,6 +351,7 @@ export default defineWebSocketHandler({
       }
 
       hostLastAction.set(roomId, action)
+      noteAction(roomId, { id, name, avatar })
       countActivation(roomId, data.message.groupId, data.message.controlId)
       roomsChanged()
       sendToEveryoneInRoom(roomId, {
@@ -368,6 +373,7 @@ export default defineWebSocketHandler({
     // Share settings are kept: viewers who stay on the page while the host is away must not suddenly
     // see each other because the host's choice was forgotten.
     hostLastAction.delete(roomId)
+    streamEnded(roomId)
     void getDb()
       .update(users)
       .set({ lastOnlineAt: new Date() })
