@@ -13,23 +13,15 @@ onMounted(() => refresh())
 // Server-decided, not guessed client-side: reuses the same requireAdmin gate every /api/admin/*
 // route uses (see server/api/admin/whoami.get.ts), so the Dashboard link only ever shows for an
 // account the server actually considers an admin right now, not a flag baked into the session.
-const isAdmin = ref(false)
-
-const checkIsAdmin = async (): Promise<void> => {
-  if (!loggedIn.value || !user.value?.discord) {
-    isAdmin.value = false
-    return
-  }
-
-  try {
-    await $fetch('/api/admin/whoami')
-    isAdmin.value = true
-  } catch {
-    isAdmin.value = false
-  }
-}
-
-watch(() => loggedIn.value && !!user.value?.discord, checkIsAdmin, { immediate: true })
+// useAsyncData + useRequestFetch (which forwards the session cookie) so this resolves during SSR -
+// otherwise the Dashboard link pops into the header after hydration.
+const hasDiscord = computed(() => loggedIn.value && !!user.value?.discord)
+const requestFetch = useRequestFetch()
+const { data: isAdmin } = await useAsyncData(
+  'is-admin',
+  () => (hasDiscord.value ? requestFetch('/api/admin/whoami').then(() => true, () => false) : Promise.resolve(false)),
+  { watch: [hasDiscord], default: () => false }
+)
 
 // Computeds, not plain arrays built once at setup - they need to react to isAdmin resolving
 // asynchronously after the initial render (and to the user's own name/avatar changing).
