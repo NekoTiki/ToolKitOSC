@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import ActivityStats from '@renderer/components/activity/ActivityStats.vue'
 import ViewerPatternValue, { stopViewerPatternPreview } from '@renderer/components/patterns/ViewerPatternValue.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
+import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { logRetentionDays } from '@renderer/composables/useCommandsDb'
 import { useControls } from '@renderer/composables/useControls'
 import { useLiveQuery } from '@renderer/composables/useLiveQuery'
@@ -40,6 +42,12 @@ const query = computed(() => ({
   control: typeof route.query.control === 'string' ? route.query.control : null,
   type: typeof route.query.type === 'string' ? (route.query.type as ControlTypes) : null
 }))
+
+// The log of this device's commands, or the server's counts.
+const view = computed<'log' | 'stats'>({
+  get: () => (route.query.view === 'stats' ? 'stats' : 'log'),
+  set: (value) => void router.replace({ query: value === 'stats' ? { view: 'stats' } : {} })
+})
 
 const setFilter = (key: 'range' | 'viewer' | 'control' | 'type', value: string | number | null): void => {
   const next = { ...route.query, [key]: value === null ? undefined : String(value) }
@@ -126,7 +134,17 @@ const COLUMNS = 'grid-cols-[6.5rem_minmax(0,11rem)_minmax(0,1fr)_7.5rem_minmax(0
         <b class="text-xl font-semibold text-highlighted">Activity</b>
       </div>
 
-      <div class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5">
+      <p
+        v-if="view === 'stats'"
+        class="text-sm text-muted"
+      >
+        Counted by the server for your share page, from every device you streamed with.
+      </p>
+
+      <div
+        v-else
+        class="-mr-1.5 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5"
+      >
         <div
           v-if="query.control"
           class="flex items-center gap-2.5 rounded-field glass px-3 py-2.5 text-sm"
@@ -228,13 +246,26 @@ const COLUMNS = 'grid-cols-[6.5rem_minmax(0,11rem)_minmax(0,1fr)_7.5rem_minmax(0
 
     <template #header>
       <PageHeader
-        :title="controlName ? `Activity · ${controlName}` : viewer ? `Activity · ${viewer.displayName}` : 'Activity'"
-        :meta="`${commands.length === ROW_LIMIT ? `Latest ${ROW_LIMIT}` : commands.length} actions`"
-      />
+        :title="view === 'stats' ? 'Activity · Stats' : controlName ? `Activity · ${controlName}` : viewer ? `Activity · ${viewer.displayName}` : 'Activity'"
+        :meta="view === 'stats' ? undefined : `${commands.length === ROW_LIMIT ? `Latest ${ROW_LIMIT}` : commands.length} actions`"
+      >
+        <template #actions>
+          <SegmentedControl
+            v-model="view"
+            :items="[
+              { value: 'log', label: 'Log', icon: 'i-lucide-list' },
+              { value: 'stats', label: 'Stats', icon: 'i-lucide-chart-column' }
+            ]"
+            aria-label="View"
+          />
+        </template>
+      </PageHeader>
     </template>
 
+    <ActivityStats v-if="view === 'stats'" />
+
     <div
-      v-if="commands.length"
+      v-else-if="commands.length"
       class="flex h-full min-h-80 flex-col overflow-hidden rounded-field border border-default bg-(--aurora-glass)"
     >
       <div
