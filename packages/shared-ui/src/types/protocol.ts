@@ -336,6 +336,8 @@ export type ServerToHostMessage =
   | WsEnvelope<'ai-generate-progress', AiGenerateProgressMessage>
   | WsEnvelope<'ai-generate-result', AiGenerateResultMessage>
   | WsEnvelope<'ai-generate-error', AiGenerateErrorMessage>
+  // A server admin pressed Stop everything for this host (dashboard Live page).
+  | WsEnvelope<'admin-stop', null>
 
 // Server -> browser viewer, over /ws/[roomId].
 export type ServerToViewerMessage =

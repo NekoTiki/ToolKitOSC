@@ -359,6 +359,11 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
         viewer_commands::handle(app, &value);
         return After::Continue;
     }
+    if kind.as_deref() == Some("admin-stop") {
+        // An admin of the server stopped everything for you; the webview says so.
+        tracing::warn!("A server admin stopped everything");
+        crate::setup::stop::stop_now(app);
+    }
 
     let _ = app.emit("server-message", text);
 

@@ -19,6 +19,7 @@ import {
   sendClientListToHost,
   sendMessageToHost
 } from '~~/server/routes/host'
+import { roomsChanged } from '~~/server/utils/liveRooms'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
@@ -130,6 +131,7 @@ const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client
 
   sendClientListToHost(roomId)
   broadcastPresence(roomId)
+  roomsChanged()
 }
 
 const removeClient = (roomId: RoomId, peerId: PeerId, peer: Pick<Peer, 'id'>) => {
@@ -145,6 +147,7 @@ const removeClient = (roomId: RoomId, peerId: PeerId, peer: Pick<Peer, 'id'>) =>
 
   sendClientListToHost(roomId)
   broadcastPresence(roomId)
+  roomsChanged()
 }
 
 export const sendToEveryoneInRoom = (roomId: RoomId, data: unknown) => {
