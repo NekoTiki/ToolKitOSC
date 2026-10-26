@@ -274,7 +274,8 @@ export interface CommandAcceptedMessage {
 export interface PresenceEntry {
   id: string
   name: string
-  // Discord avatar URL. Guests have none; the page draws their initials.
+  // Discord avatar, as /avatar/<id> on the server (the CDN URL contains the Discord id). Guests
+  // have none; the page draws their initials.
   avatar?: string
   discord: boolean
   // Last time one of their commands was accepted. Unset until they do something.
