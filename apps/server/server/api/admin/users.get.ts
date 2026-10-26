@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     entries.map(async (entry) => ({
       ...entry,
       credits: entry.hasAccess
-        ? { remaining: await remainingAccountCredits(entry.discordId, getSettings().dailyCredits) }
+        ? { remaining: await remainingAccountCredits(entry.discordId, entry.dailyCredits ?? getSettings().dailyCredits), daily: entry.dailyCredits ?? getSettings().dailyCredits }
         : null
     }))
   )

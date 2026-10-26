@@ -1,8 +1,8 @@
 import { logAdminAction } from '~~/server/db/adminLog'
 import { sendMessageToHost } from '~~/server/routes/host'
+import { dailyCreditsFor } from '~~/server/utils/ai/access'
 import { addCreditBonus, remainingAccountCredits } from '~~/server/utils/ai/rateLimit'
 import { creditBonusBodySchema } from '~~/server/utils/ai/schemas'
-import { getSettings } from '~~/server/utils/serverSettings'
 
 // Admin "increase credits for today" top-up (see rateLimit.ts's addCreditBonus) - additive on top
 // of the account's one overall daily pool, only for today.
@@ -17,13 +17,14 @@ export default defineEventHandler(async (event) => {
 
   await addCreditBonus(discordId, amount)
 
-  const remaining = await remainingAccountCredits(discordId, getSettings().dailyCredits)
+  const dailyCredits = await dailyCreditsFor(discordId)
+  const remaining = await remainingAccountCredits(discordId, dailyCredits)
 
   // Reuses the same 'ai-credits-update' push the generation endpoint sends, so the AI modal's
   // displayed balance updates live if this account has an open host connection right now.
   sendMessageToHost(discordId, 'ai-credits-update', {
     remainingCredits: remaining,
-    dailyCredits: getSettings().dailyCredits
+    dailyCredits
   })
 
   await logAdminAction(adminId, 'add-credits', discordId, { amount })

@@ -29,7 +29,9 @@ const ACTIONS: Record<string, { label: string; icon: string }> = {
   'stop-everything': { label: 'Stopped everything', icon: 'i-lucide-octagon-x' },
   announce: { label: 'Sent an announcement', icon: 'i-lucide-megaphone' },
   'clear-announcement': { label: 'Cleared the announcement', icon: 'i-lucide-x' },
-  'change-settings': { label: 'Changed server settings', icon: 'i-lucide-settings' }
+  'change-settings': { label: 'Changed server settings', icon: 'i-lucide-settings' },
+  'set-daily-credits': { label: 'Changed daily credits', icon: 'i-lucide-credit-card' },
+  'decline-ai-request': { label: 'Declined the AI request', icon: 'i-lucide-x' }
 }
 
 const actionOf = (action: string) => ACTIONS[action] ?? { label: action, icon: 'i-lucide-dot' }

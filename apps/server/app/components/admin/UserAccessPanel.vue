@@ -9,18 +9,28 @@ const props = defineProps<{ discordId: string }>()
 
 const { data, refresh } = await useFetch<{ users: AccessEntry[]; dailyCredits: number }>('/api/admin/users')
 
-const DAILY_CREDITS = computed(() => data.value?.dailyCredits ?? 0)
+const serverDailyCredits = computed(() => data.value?.dailyCredits ?? 0)
 
 const entry = computed(() => data.value?.users.find((user) => user.discordId === props.discordId) ?? null)
 
-const { grant, revoke, setCanSelectModel, saveNote, addCredits } = useAdminUserAccess(refresh)
+const { grant, revoke, setCanSelectModel, saveNote, addCredits, setDailyCredits } = useAdminUserAccess(refresh)
+
+const DAILY_CREDITS = computed(() => entry.value?.credits?.daily ?? serverDailyCredits.value)
 
 const note = ref('')
 const credits = ref(5)
+const daily = ref<number | undefined>(undefined)
 const confirmingRevoke = ref(false)
 const busy = ref(false)
 
-watch(entry, (value) => (note.value = value?.note ?? ''), { immediate: true })
+watch(
+  entry,
+  (value) => {
+    note.value = value?.note ?? ''
+    daily.value = value?.dailyCredits ?? undefined
+  },
+  { immediate: true }
+)
 
 // Every action disables the panel until the reload finishes, so double clicks don't stack.
 const run = async (action: () => Promise<void>): Promise<void> => {
@@ -96,6 +106,37 @@ const run = async (action: () => Promise<void>): Promise<void> => {
               Add credits for today
             </UButton>
           </div>
+          <UFormField
+            label="Credits per day"
+            :description="entry.dailyCredits === null ? `Server setting: ${serverDailyCredits}. Set a number to give them their own.` : `Their own pool. The server setting is ${serverDailyCredits}.`"
+          >
+            <div class="flex flex-wrap items-center gap-2">
+              <UInputNumber
+                v-model="daily"
+                :min="0"
+                :max="10000"
+                :placeholder="String(serverDailyCredits)"
+                class="w-36"
+              />
+              <UButton
+                color="neutral"
+                variant="subtle"
+                :disabled="busy || daily === undefined || daily === entry.dailyCredits"
+                @click="run(() => setDailyCredits(discordId, daily ?? null))"
+              >
+                Save
+              </UButton>
+              <UButton
+                v-if="entry.dailyCredits !== null"
+                color="neutral"
+                variant="ghost"
+                :disabled="busy"
+                @click="run(() => setDailyCredits(discordId, null))"
+              >
+                Use server setting
+              </UButton>
+            </div>
+          </UFormField>
         </div>
 
         <div class="grid content-start gap-3">

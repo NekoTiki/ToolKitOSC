@@ -11,8 +11,6 @@ const { data, error, refresh } = await useFetch<{ users: AccessEntry[]; dailyCre
 
 if (error.value) await redirectIfUnauthorized(error.value)
 
-// The server's Settings page sets it.
-const DAILY_CREDITS = computed(() => data.value?.dailyCredits ?? 0)
 
 const users = computed(() => data.value?.users ?? [])
 const query = ref('')
@@ -94,6 +92,8 @@ const submitGrant = async (): Promise<void> => {
         Grant AI access
       </UButton>
     </div>
+
+    <AdminAccessRequestsCard @changed="refresh()" />
 
     <UCard
       v-if="granting"
@@ -243,10 +243,10 @@ const submitGrant = async (): Promise<void> => {
             v-if="user.hasAccess"
             class="grid gap-1 max-md:hidden"
           >
-            <span class="font-mono text-xs tabular-nums">{{ user.credits?.remaining ?? 0 }} / {{ DAILY_CREDITS }}</span>
+            <span class="font-mono text-xs tabular-nums">{{ user.credits?.remaining ?? 0 }} / {{ user.credits?.daily ?? 0 }}</span>
             <UProgress
-              :model-value="Math.min(user.credits?.remaining ?? 0, DAILY_CREDITS)"
-              :max="DAILY_CREDITS"
+              :model-value="Math.min(user.credits?.remaining ?? 0, user.credits?.daily ?? 0)"
+              :max="user.credits?.daily ?? 0"
               size="xs"
             />
           </span>

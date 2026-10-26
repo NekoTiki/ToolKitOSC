@@ -3,6 +3,7 @@ import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import EmptyState from '@renderer/components/ui/EmptyState.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAiAccess } from '@renderer/composables/useAiAccess'
+import { useAiAccessRequest } from '@renderer/composables/useAiAccessRequest'
 import { useAiGenerationStatus } from '@renderer/composables/useAiGenerationStatus'
 import { useAiSession } from '@renderer/composables/useAiSession'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
@@ -30,6 +31,28 @@ const { statusMessage } = useAiGenerationStatus()
 const { options, optionsError, optionsLoading, result, openRun, openRunById, markAdded, runError, generating, runs, loadOptions, run } = useAiSession()
 
 onMounted(() => void loadOptions())
+
+const accessRequest = useAiAccessRequest()
+const requestMessage = ref('')
+
+watch(
+  () => access.value.hasAccess,
+  (hasAccess) => {
+    if (!hasAccess) void accessRequest.load()
+  },
+  { immediate: true }
+)
+
+const requestDescription = computed(() => {
+  switch (accessRequest.status.value) {
+    case 'pending':
+      return "You asked the server's admins. This page opens by itself when they approve."
+    case 'declined':
+      return 'An admin declined your request. You can ask again a week after.'
+    default:
+      return 'An admin of this server needs to give your account access. You can ask them here.'
+  }
+})
 
 const profile = ref('balanced')
 const provider = ref<string>()
@@ -172,8 +195,34 @@ const addPicked = (): void => {
       v-if="!access.hasAccess"
       icon="i-lucide-sparkles"
       title="AI suggestions aren't enabled"
-      description="An admin of this server needs to give your account access."
-    />
+      :description="accessRequest.status.value ? requestDescription : 'An admin of this server needs to give your account access.'"
+    >
+      <form
+        v-if="accessRequest.status.value === 'none'"
+        class="mt-2 grid w-full max-w-sm gap-2"
+        @submit.prevent="accessRequest.send(requestMessage)"
+      >
+        <UInput
+          v-model="requestMessage"
+          placeholder="A note for the admins (optional)"
+          :maxlength="300"
+        />
+        <UButton
+          type="submit"
+          icon="i-lucide-send"
+          class="justify-self-center"
+          :loading="accessRequest.sending.value"
+        >
+          Request access
+        </UButton>
+      </form>
+      <p
+        v-if="accessRequest.error.value"
+        class="text-sm text-error"
+      >
+        {{ accessRequest.error.value }}
+      </p>
+    </EmptyState>
     <EmptyState
       v-else-if="!avatarDetails"
       icon="i-lucide-radio-tower"

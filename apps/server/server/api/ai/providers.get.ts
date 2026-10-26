@@ -1,8 +1,7 @@
 import { getAiProviders } from '~~/server/utils/ai'
-import { getAiAccess } from '~~/server/utils/ai/access'
+import { dailyCreditsFor, getAiAccess } from '~~/server/utils/ai/access'
 import { PROMPT_PROFILES } from '~~/server/utils/ai/profiles'
 import { remainingAccountCredits } from '~~/server/utils/ai/rateLimit'
-import { getSettings } from '~~/server/utils/serverSettings'
 
 // Lets the client build its provider/profile pickers (and grey out/hide combinations with no key
 // configured on this server, or show remaining credits) without hardcoding either list or
@@ -19,6 +18,8 @@ export default defineEventHandler(async (event) => {
   const access = await getAiAccess(discordId)
 
   if (!access.hasAccess) throw createError({ statusCode: 403, statusMessage: "You don't have access to the AI control-suggestion feature." })
+
+  const dailyCredits = await dailyCreditsFor(discordId)
 
   const providers = getAiProviders().map((provider) => ({
     id: provider.id,
@@ -39,8 +40,8 @@ export default defineEventHandler(async (event) => {
     // One overall pool per account per day, shared across every provider (see rateLimit.ts) - not
     // per-provider, every profile just spends from this same number at a different rate
     // (profile.creditCost above).
-    remainingCredits: await remainingAccountCredits(discordId, getSettings().dailyCredits),
-    dailyCredits: getSettings().dailyCredits,
+    remainingCredits: await remainingAccountCredits(discordId, dailyCredits),
+    dailyCredits,
     // Profile is always the client's own choice (see suggest-controls.post.ts) - only the
     // provider/model is gated by this.
     canSelectModel: access.canSelectModel
