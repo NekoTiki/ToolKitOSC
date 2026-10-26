@@ -1,7 +1,7 @@
 import { lt } from 'drizzle-orm'
 
 import { ensureMigrated, getDb } from '~~/server/db'
-import { aiCreditBonus, aiCreditUsage, aiGenerationLog, controlActivationDaily } from '~~/server/db/schema'
+import { aiCreditBonus, aiCreditUsage, aiGenerationLog, controlActivationDaily, relayDaily } from '~~/server/db/schema'
 import { getSettings } from '~~/server/utils/serverSettings'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -19,7 +19,8 @@ async function pruneOldRows(): Promise<void> {
     db.delete(aiCreditUsage).where(lt(aiCreditUsage.day, cutoffDay)),
     db.delete(aiCreditBonus).where(lt(aiCreditBonus.day, cutoffDay)),
     db.delete(aiGenerationLog).where(lt(aiGenerationLog.createdAt, cutoffDate)),
-    db.delete(controlActivationDaily).where(lt(controlActivationDaily.day, cutoffDay))
+    db.delete(controlActivationDaily).where(lt(controlActivationDaily.day, cutoffDay)),
+    db.delete(relayDaily).where(lt(relayDaily.day, cutoffDay))
   ])
 }
 

@@ -1,4 +1,5 @@
 import { sendAlert } from '~~/server/utils/alerts'
+import { noteRateLimited } from '~~/server/utils/relayStats'
 
 // Fixed-window counter, per key - cheap and good enough here: what matters is catching a client
 // sending far more messages than any real interaction would, not smoothing bursts perfectly. The
@@ -30,6 +31,7 @@ const FLOOD_ALERT_PER_MINUTE = 100
 let limitedThisMinute = { minute: 0, count: 0 }
 
 const noteLimited = (): void => {
+  noteRateLimited()
   const minute = Math.floor(Date.now() / 60_000)
 
   if (limitedThisMinute.minute !== minute) limitedThisMinute = { minute, count: 0 }

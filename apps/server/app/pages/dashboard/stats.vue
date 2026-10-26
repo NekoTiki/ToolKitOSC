@@ -100,6 +100,8 @@ function updateStatsFromAttempt(attempt: Attempt): void {
       daily-title="Generations per day"
     />
 
+    <AdminRelayStatsCard :days="days" />
+
     <AdminAppVersionsCard />
 
     <RecentGenerationsCard
