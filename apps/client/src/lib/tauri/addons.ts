@@ -29,7 +29,12 @@ export type AddonState = 'off' | 'busy' | 'ok' | 'warn' | 'error'
 export interface Addon extends AddonManifest {
   enabled: boolean
   status: { state: AddonState; text: string }
+  // How its step in the welcome setup ended, if it had one.
+  setup: AddonSetup | null
 }
+
+export type AddonSetup = 'done' | 'later'
+
 
 export interface AddonsState {
   addons: Addon[]
@@ -55,6 +60,7 @@ export const addonsApi = {
   addonsList: (): Promise<AddonsState> => invoke('addons_list'),
   // Starts or stops it right away. Turning one off stops its devices first.
   addonsSetEnabled: (id: string, enabled: boolean): Promise<void> => invoke('addons_set_enabled', { id, enabled }),
+  addonsSetSetup: (id: string, setup: AddonSetup | null): Promise<void> => invoke('addons_set_setup', { id, setup }),
   addonsFinishSetup: (dismissKept: boolean): Promise<void> => invoke('addons_finish_setup', { dismissKept }),
   // Stop everything: every add-on stops and nothing can act until stopResume().
   addonsStopEverything: (): Promise<AddonStopFailure[]> => invoke('addons_stop_everything'),

@@ -10,7 +10,7 @@ import { useRouter } from 'vue-router'
 
 // Settings > Add-ons: one card per add-on, grouped by what they're for. An add-on that's off opens
 // no connection and adds nothing to the app; turning one on starts it right away.
-const { addons, state, finishSetup } = useAddons()
+const { addons, state, finishSetup, needsSetup: leftForLater } = useAddons()
 const { setAddon } = useAddonSwitch()
 const { hasToken } = useOpenShock()
 const { boards } = useBoards()
@@ -137,9 +137,16 @@ const canLaunch = (addon: Addon): boolean =>
           </p>
 
           <div
-            v-if="addon.badges.length"
+            v-if="addon.badges.length || leftForLater(addon)"
             class="flex shrink-0 flex-wrap justify-end gap-1.5"
           >
+            <UBadge
+              v-if="leftForLater(addon)"
+              label="Needs setup"
+              color="warning"
+              variant="subtle"
+              class="rounded-full"
+            />
             <UBadge
               v-for="badge in addon.badges"
               :key="badge"

@@ -170,6 +170,7 @@ pub fn run() {
             addons::commands::addons_list,
             addons::commands::addons_set_enabled,
             addons::commands::addons_finish_setup,
+            addons::commands::addons_set_setup,
             addons::commands::addons_stop_everything,
             // ESP32 boards
             boards::commands::boards_list,
