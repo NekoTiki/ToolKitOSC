@@ -162,7 +162,7 @@ async function runGeneration(ctx: GenerationContext): Promise<void> {
 // the client needs a real 401/403/429/503 for those, not a fire-and-forget accept) - only the
 // actual provider call moves to runGeneration() above, unawaited.
 export default defineEventHandler(async (event): Promise<{ requestId: string }> => {
-  const user = verifyDesktopToken(event)
+  const user = await verifyDesktopToken(event)
   const discordId = user.discord?.id
 
   if (!discordId) throw createError({ statusCode: 401, statusMessage: 'No Discord identity on token' })

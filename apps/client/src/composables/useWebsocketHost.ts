@@ -221,8 +221,10 @@ export function useWebsocketHost(): {
       sendTheme()
       sendMessage('share-settings', shareSettings.value)
     } else if (data.type === 'auth-error') {
-      // Rust forgets this token and connects again, signed out.
+      // Rust forgets this token and connects again, signed out. The reason is the server's own
+      // words: an expired token, a suspension, or an admin signing you out.
       console.error('Authentication failed:', data.message)
+      useToast().add({ title: 'Signed out of the server', description: data.message, icon: 'i-lucide-log-out', color: 'warning', duration: 0 })
     } else if (data.type === 'protocol-mismatch') {
       console.error('Protocol mismatch:', data.message.reason)
       serverProtocolVersion.value = data.message.serverVersion

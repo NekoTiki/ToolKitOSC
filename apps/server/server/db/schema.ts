@@ -13,7 +13,13 @@ export const users = sqliteTable('users', {
   lastSeenAt: integer('last_seen_at', { mode: 'timestamp' }).notNull(),
   // Whether the old share links built from the Discord id itself (/share/<id>, /s/<base62 of id>)
   // still open the page. Turned off for good when the host resets their link.
-  legacyShareLink: integer('legacy_share_link', { mode: 'boolean' }).notNull().default(true)
+  legacyShareLink: integer('legacy_share_link', { mode: 'boolean' }).notNull().default(true),
+  // Set by an admin (see db/accounts.ts): until then the app can't sign in and share pages treat
+  // them as a guest. Null when not suspended.
+  suspendedUntil: integer('suspended_until', { mode: 'timestamp' }),
+  suspendReason: text('suspend_reason'),
+  // Desktop tokens carry the version they were made with (`tv`); bumping it signs out every app.
+  tokenVersion: integer('token_version').notNull().default(0)
 })
 
 // Codes that open a host's share page (see db/shareLinks.ts). `main` is the random link everyone
