@@ -6,6 +6,7 @@ import type { User } from '#auth-utils'
 import type { ControlGroup, ControlType, PresenceEntry, ViewerToServerMessage } from '#shared/types/protocol'
 import { resolveControlForViewer } from '#shared/utils/controlLimits'
 import { guestName } from '#shared/utils/guestName'
+import { resolveShareCode } from '~~/server/db/shareLinks'
 import {
   hostArgs,
   hostControls,
@@ -101,15 +102,12 @@ export const broadcastPresence = (roomId: RoomId) => {
   }
 }
 
-const getRoomId = (url: string): string | null => {
-  const path = new URL(url).pathname
-  const pathParts = path.split('/')
+// The room behind the code in /ws/<code>, looked up once per connection: every handler awaits
+// the same promise, so a message that arrives while open is still resolving waits for it.
+const getRoomId = (peer: { context: Record<string, unknown>; request: { url: string } }): Promise<string | null> => {
+  peer.context.roomId ??= resolveShareCode(new URL(peer.request.url).pathname.split('/')[2] ?? '')
 
-  if (pathParts.length >= 3) {
-    return pathParts[2] ?? null
-  }
-
-  return null
+  return peer.context.roomId as Promise<string | null>
 }
 
 const addClient = (roomId: RoomId, peerId: PeerId, peer: Peer, data: Omit<Client, 'peers'>) => {
@@ -190,16 +188,22 @@ export default defineWebSocketHandler({
   async open(_peer) {
     const peer: Peer = _peer as unknown as Peer
 
-    const { id: sessionId, user, secure } = await getUserSession(peer)
+    const roomId = await getRoomId(peer)
 
-    const roomId = getRoomId(peer.request.url)
+    // A reset or made-up link: the page already shows a 404 for it.
+    if (!roomId) {
+      peer.close(4404, 'Not Found')
+      return
+    }
+
+    const { id: sessionId, user, secure } = await getUserSession(peer)
     const userIp = useWsIp(peer)
 
-    addClient(roomId!, sessionId, peer, { sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
+    addClient(roomId, sessionId, peer, { sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
 
-    const controls = viewerControlsFor(roomId!, sessionId)
-    const args = hostArgs.get(roomId!)!
-    const theme = hostTheme.get(roomId!)
+    const controls = viewerControlsFor(roomId, sessionId)
+    const args = hostArgs.get(roomId)!
+    const theme = hostTheme.get(roomId)
 
     if (controls) {
       peer.send({ type: 'controls-update', message: controls })
@@ -213,18 +217,18 @@ export default defineWebSocketHandler({
       peer.send({ type: 'theme-update', message: theme })
     }
 
-    peer.send({ type: 'host-status', message: hostList.has(roomId!) ? 'online' : 'offline' })
-    peer.send({ type: 'host-paused', message: hostPaused.has(roomId!) })
+    peer.send({ type: 'host-status', message: hostList.has(roomId) ? 'online' : 'offline' })
+    peer.send({ type: 'host-paused', message: hostPaused.has(roomId) })
 
     peer.send({
       type: 'welcome',
       message: `Welcome ${user?.discord?.name || 'Anonymous'}! Your peer ID is ${sessionId}`
     })
 
-    const lastAction = hostLastAction.get(roomId!)
+    const lastAction = hostLastAction.get(roomId)
 
     if (lastAction) {
-      peer.send({ type: 'viewer-action', message: showViewers(roomId!) ? lastAction : { ...lastAction, viewer: null } })
+      peer.send({ type: 'viewer-action', message: showViewers(roomId) ? lastAction : { ...lastAction, viewer: null } })
     }
   },
   async message(peer, message) {
@@ -233,9 +237,11 @@ export default defineWebSocketHandler({
       return
     }
 
-    const { id: sessionId, user } = await getUserSession(peer)
+    const roomId = await getRoomId(peer)
 
-    const roomId = getRoomId(peer.request.url)
+    if (!roomId) return
+
+    const { id: sessionId, user } = await getUserSession(peer)
 
     const data = JSON.parse(message.text()) as ViewerToServerMessage
 
@@ -261,7 +267,7 @@ export default defineWebSocketHandler({
 
       if (data.type === 'command') {
         // The host stopped everything: the page shows a paused card, and the host would reject it.
-        if (hostPaused.has(roomId!)) return
+        if (hostPaused.has(roomId)) return
 
         // Only the shape is checked here. Whether this viewer may do this (locks, limits, their
         // groups' rules, sign-in, bans) is decided by the desktop app alone
@@ -270,26 +276,28 @@ export default defineWebSocketHandler({
         if (typeof data.message?.groupId !== 'string' || typeof data.message?.controlId !== 'string' || typeof data.message?.type !== 'string') return
       } else {
         // Mirror the host's copy (see useWebsocketHost.ts), so the new name shows in everyone's list.
-        const client = clientList.get(roomId!)?.get(sessionId)
+        const client = clientList.get(roomId)?.get(sessionId)
         const displayName = typeof data.message.displayName === 'string' ? data.message.displayName.trim().slice(0, 64) : ''
 
         if (client && displayName) {
           client.user = { ...(client.user ?? { username: '', email: '' }), userDefinedDisplayName: displayName }
-          broadcastPresence(roomId!)
+          broadcastPresence(roomId)
         }
       }
 
-      sendMessageToHost(roomId!, data.type, data.message, {
+      sendMessageToHost(roomId, data.type, data.message, {
         from: sessionId
       })
     }
   },
   async close(peer) {
+    const roomId = await getRoomId(peer)
+
+    if (!roomId) return
+
     const { id: sessionId } = await getUserSession(peer)
 
-    const roomId = getRoomId(peer.request.url)
-
-    removeClient(roomId!, sessionId, peer)
+    removeClient(roomId, sessionId, peer)
     clearRateLimit(`${roomId}:${sessionId}`)
   },
   error(peer, error) {

@@ -23,7 +23,12 @@ const shareId = route.params.shareId as string
 // Awaited (not fire-and-forget) so `shareInfo` is already populated when the SEO meta below reads
 // it - this is what Discord's link-preview crawler (which never runs JS) actually sees, not the
 // generic fallback text a client-side-only fetch would leave in the initial HTML.
-const { data: shareInfo } = await useFetch<ShareInfo>(`/api/share/${shareId}`)
+const { data: shareInfo, error: shareError } = await useFetch<ShareInfo>(`/api/share/${shareId}`)
+
+// A reset or made-up link.
+if (shareError.value?.statusCode === 404) {
+  throw createError({ statusCode: 404, statusMessage: 'This share link does not exist', fatal: true })
+}
 
 const requestUrl = useRequestURL()
 const pageUrl = `${requestUrl.origin}/share/${shareId}`
