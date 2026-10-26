@@ -40,6 +40,8 @@ export function useWebsocketClient(roomId: string) {
   const paused = ref(false)
   // A message from the server's admins, shown above the controls.
   const notice = ref<ServerNotice | null>(null)
+  // The server closed this page: the room is full, or too many pages are open from this network.
+  const refused = ref<'room-full' | 'too-many-connections' | null>(null)
 
   const { status, data, send, open, close } = useWebSocket(`/ws/${roomId}`, {
     heartbeat: {
@@ -100,6 +102,8 @@ export function useWebsocketClient(roomId: string) {
         paused.value = data.message
       } else if (data.type === 'server-notice') {
         notice.value = data.message
+      } else if (data.type === 'connection-refused') {
+        refused.value = data.message.reason
       } else if (data.type === 'presence') {
         you.value = data.message.you
         viewers.value = data.message.viewers
@@ -122,6 +126,7 @@ export function useWebsocketClient(roomId: string) {
     lastAction,
     paused,
     notice,
+    refused,
     status,
     hostStatus,
     data,

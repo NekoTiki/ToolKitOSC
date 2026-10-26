@@ -371,6 +371,8 @@ export type ServerToViewerMessage =
   | WsEnvelope<'viewer-action', ViewerActionMessage>
   | WsEnvelope<'host-paused', boolean>
   | WsEnvelope<'server-notice', ServerNotice | null>
+  // Sent right before the server closes a share page it won't take (see connectionCaps.ts).
+  | WsEnvelope<'connection-refused', { reason: 'room-full' | 'too-many-connections' }>
 
 // Browser viewer -> server, over /ws/[roomId].
 export type ViewerToServerMessage =

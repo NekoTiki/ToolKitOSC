@@ -20,6 +20,7 @@ import {
   sendClientListToHost,
   sendMessageToHost
 } from '~~/server/routes/host'
+import { connectionRefusal } from '~~/server/utils/connectionCaps'
 import { roomsChanged } from '~~/server/utils/liveRooms'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
 import { currentNotice } from '~~/server/utils/serverNotice'
@@ -218,6 +219,17 @@ export default defineWebSocketHandler({
     const userIp = useWsIp(peer)
     // A suspended account watches as a guest.
     const user = sessionUser?.discord?.id && (await isSuspended(sessionUser.discord.id)) ? null : sessionUser
+    const refusal = connectionRefusal({
+      socketsFromIp: [...clientList.values()].flatMap((room) => [...room.values()]).filter((client) => client.ip === userIp).reduce((sum, client) => sum + client.peers.size, 0),
+      viewersInRoom: clientList.get(roomId)?.size ?? 0,
+      alreadyInRoom: !!clientList.get(roomId)?.has(sessionId)
+    })
+
+    if (refusal) {
+      peer.send({ type: 'connection-refused', message: { reason: refusal } })
+      peer.close(4429, refusal)
+      return
+    }
 
     addClient(roomId, sessionId, peer, { sessionId, user: user ?? null, ip: userIp, guestId: secure?.guestId })
 

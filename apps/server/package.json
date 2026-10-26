@@ -11,7 +11,8 @@
     "typecheck": "nuxt typecheck",
     "lint": "eslint --cache .",
     "format": "prettier --write .",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test": "vitest run"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
@@ -36,6 +37,7 @@
     "@types/lodash": "^4.17.25",
     "drizzle-kit": "^0.31.5",
     "prettier": "^3.9.6",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.4",
+    "vitest": "^5.0.5"
   }
 }
