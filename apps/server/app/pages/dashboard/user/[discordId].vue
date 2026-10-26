@@ -14,6 +14,7 @@ interface UserStatsResponse {
   user: UserRow
   ai: StatsResult
   controls: ControlStatsResult
+  shareLinks: { main: string | null; custom: string | null }
 }
 
 const route = useRoute()
@@ -24,7 +25,7 @@ const { redirectIfUnauthorized } = useAdminApi()
 // Same SSR reasoning as dashboard/stats.vue - useFetch (not adminFetch/onMounted) so the initial
 // HTML an admin gets already has real data in it.
 const days = ref(14)
-const { data: userStats, error: statsError } = await useFetch<UserStatsResponse>(`/api/admin/users/${discordId}/stats`, { query: { days } })
+const { data: userStats, error: statsError, refresh } = await useFetch<UserStatsResponse>(`/api/admin/users/${discordId}/stats`, { query: { days } })
 
 const notFound = computed(() => (statsError.value as { statusCode?: number })?.statusCode === 404)
 
@@ -83,6 +84,13 @@ useHead({ title: () => `${name.value} · Dashboard` })
       </div>
 
       <AdminUserAccessPanel :discord-id="discordId" />
+
+      <AdminShareLinkPanel
+        v-if="userStats"
+        :discord-id="discordId"
+        :links="userStats.shareLinks"
+        @changed="refresh()"
+      />
 
       <div class="flex flex-wrap items-center gap-2.5">
         <h2 class="flex-1 text-lg font-semibold text-highlighted">

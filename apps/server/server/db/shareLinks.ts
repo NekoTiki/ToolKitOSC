@@ -63,6 +63,16 @@ export async function resetMainShareCode(discordId: string): Promise<string> {
   return mainShareCode(discordId)
 }
 
+// What the host has right now, without making a main link for someone who never shared (admin pages).
+export async function existingShareLinks(discordId: string): Promise<{ main: string | null; custom: string | null }> {
+  const links = await getDb().select().from(shareLinks).where(eq(shareLinks.discordId, discordId))
+
+  return {
+    main: links.find((link) => link.kind === 'main')?.code ?? null,
+    custom: links.find((link) => link.kind === 'custom')?.code ?? null
+  }
+}
+
 export async function customShareName(discordId: string): Promise<string | null> {
   const [link] = await getDb()
     .select({ code: shareLinks.code })
