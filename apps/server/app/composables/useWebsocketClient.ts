@@ -1,4 +1,4 @@
-import type { ControlGroup, PresenceEntry, ServerToViewerMessage, ViewerActionMessage } from '@toolkitosc/shared-ui'
+import type { ControlGroup, PresenceEntry, ServerNotice, ServerToViewerMessage, ViewerActionMessage } from '@toolkitosc/shared-ui'
 
 import { useBhapticsControl } from '~/composables/useBhapticsControl'
 import { useClientTheme } from '~/composables/useClientTheme'
@@ -38,6 +38,8 @@ export function useWebsocketClient(roomId: string) {
   const lastAction = ref<ViewerActionMessage | null>(null)
   // The host pressed Stop everything. Commands are dropped until they resume.
   const paused = ref(false)
+  // A message from the server's admins, shown above the controls.
+  const notice = ref<ServerNotice | null>(null)
 
   const { status, data, send, open, close } = useWebSocket(`/ws/${roomId}`, {
     heartbeat: {
@@ -96,6 +98,8 @@ export function useWebsocketClient(roomId: string) {
         if (data.message.secondary) setTheme('secondary', data.message.secondary)
       } else if (data.type === 'host-paused') {
         paused.value = data.message
+      } else if (data.type === 'server-notice') {
+        notice.value = data.message
       } else if (data.type === 'presence') {
         you.value = data.message.you
         viewers.value = data.message.viewers
@@ -117,6 +121,7 @@ export function useWebsocketClient(roomId: string) {
     you,
     lastAction,
     paused,
+    notice,
     status,
     hostStatus,
     data,

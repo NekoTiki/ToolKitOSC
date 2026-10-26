@@ -14,7 +14,7 @@ import { serverWsUrl } from '@renderer/composables/useWebsocketSettings'
 import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { assistantName } from '@renderer/utils/viewers'
-import type { ClientListEntry, ControlTypes } from '@toolkitosc/shared-ui'
+import type { ClientListEntry, ControlTypes, ServerNotice } from '@toolkitosc/shared-ui'
 import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import type { ComputedRef } from 'vue'
@@ -58,6 +58,22 @@ export const serverSupportedControlTypes = ref<ControlTypes[] | null>(null)
 // this client can create but the connected server can't display for viewers yet. Recomputed by
 // the watch in useWebsocketHost() below.
 export const unsupportedControlTypes = ref<ControlTypes[]>([])
+// The server sends its notice again on every reconnect: show each one once.
+let shownNoticeId: string | null = null
+
+const showServerNotice = (notice: ServerNotice | null): void => {
+  if (!notice || notice.id === shownNoticeId) return
+
+  shownNoticeId = notice.id
+  useToast().add({
+    title: 'Message from the server',
+    description: notice.text,
+    icon: 'i-lucide-megaphone',
+    color: notice.level === 'warning' ? 'warning' : 'info',
+    duration: 20_000
+  })
+}
+
 const clientsMap = computed<Record<string, Client>>(() => {
   const map: Record<string, Client> = {}
 
@@ -247,6 +263,8 @@ export function useWebsocketHost(): {
       useAiGenerationStatus().applyResult(data.message)
     } else if (data.type === 'ai-generate-error') {
       useAiGenerationStatus().applyError(data.message)
+    } else if (data.type === 'server-notice') {
+      showServerNotice(data.message)
     } else if (data.type === 'admin-stop') {
       // Rust already stopped everything.
       useToast().add({

@@ -9,6 +9,7 @@ const route = useRoute()
 const navItems = [
   { label: 'Overview', description: 'Usage and AI stats', icon: 'i-lucide-chart-column', to: '/dashboard/stats' },
   { label: 'Live', description: 'Who is streaming now', icon: 'i-lucide-radio', to: '/dashboard/live' },
+  { label: 'Announcements', description: 'Message every host', icon: 'i-lucide-megaphone', to: '/dashboard/announcements' },
   { label: 'Users', description: 'Access and credits', icon: 'i-lucide-users', to: '/dashboard/users' },
   { label: 'Generations', description: 'Live AI request log', icon: 'i-lucide-sparkles', to: '/dashboard/generations' }
 ]

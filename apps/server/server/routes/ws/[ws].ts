@@ -21,6 +21,7 @@ import {
 } from '~~/server/routes/host'
 import { roomsChanged } from '~~/server/utils/liveRooms'
 import { AUTHENTICATED_MAX_PER_WINDOW, clearRateLimit, isRateLimited } from '~~/server/utils/rateLimiter'
+import { currentNotice } from '~~/server/utils/serverNotice'
 import { useWsIp } from '~~/server/utils/useWsIp'
 
 type RoomId = string
@@ -227,6 +228,10 @@ export default defineWebSocketHandler({
       type: 'welcome',
       message: `Welcome ${user?.discord?.name || 'Anonymous'}! Your peer ID is ${sessionId}`
     })
+
+    const notice = currentNotice()
+
+    if (notice?.onSharePages) peer.send({ type: 'server-notice', message: notice })
 
     const lastAction = hostLastAction.get(roomId)
 
