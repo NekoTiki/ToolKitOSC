@@ -2,8 +2,8 @@ import { lt } from 'drizzle-orm'
 
 import { ensureMigrated, getDb } from '~~/server/db'
 import { aiCreditBonus, aiCreditUsage, aiGenerationLog, controlActivationDaily } from '~~/server/db/schema'
+import { getSettings } from '~~/server/utils/serverSettings'
 
-const RETENTION_DAYS = 90
 const DAY_MS = 24 * 60 * 60 * 1000
 
 // Credit counters are day-partitioned (see rateLimit.ts), so they already reset themselves the
@@ -12,7 +12,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // only ever looks back ~90 days), so the sqlite file doesn't grow forever.
 async function pruneOldRows(): Promise<void> {
   const db = getDb()
-  const cutoffDate = new Date(Date.now() - RETENTION_DAYS * DAY_MS)
+  const cutoffDate = new Date(Date.now() - getSettings().retentionDays * DAY_MS)
   const cutoffDay = cutoffDate.toISOString().slice(0, 10)
 
   await Promise.all([

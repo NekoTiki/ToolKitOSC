@@ -12,7 +12,8 @@ const navItems = [
   { label: 'Announcements', description: 'Message every host', icon: 'i-lucide-megaphone', to: '/dashboard/announcements' },
   { label: 'Users', description: 'Access and credits', icon: 'i-lucide-users', to: '/dashboard/users' },
   { label: 'Generations', description: 'Live AI request log', icon: 'i-lucide-sparkles', to: '/dashboard/generations' },
-  { label: 'Log', description: 'What admins changed', icon: 'i-lucide-scroll-text', to: '/dashboard/log' }
+  { label: 'Log', description: 'What admins changed', icon: 'i-lucide-scroll-text', to: '/dashboard/log' },
+  { label: 'Settings', description: 'Limits and AI', icon: 'i-lucide-settings', to: '/dashboard/settings' }
 ]
 
 // A user's page belongs to Users in the navigation.

@@ -1,6 +1,6 @@
 import { listAccessEntries } from '~~/server/utils/ai/access'
-import { ACCOUNT_DAILY_CREDITS } from '~~/server/utils/ai/profiles'
 import { remainingAccountCredits } from '~~/server/utils/ai/rateLimit'
+import { getSettings } from '~~/server/utils/serverSettings'
 
 // Every known Discord user (not just ones already granted access - see listAccessEntries), each
 // with today's remaining overall credits (one pool per account, not per provider - see
@@ -14,10 +14,10 @@ export default defineEventHandler(async (event) => {
     entries.map(async (entry) => ({
       ...entry,
       credits: entry.hasAccess
-        ? { remaining: await remainingAccountCredits(entry.discordId, ACCOUNT_DAILY_CREDITS) }
+        ? { remaining: await remainingAccountCredits(entry.discordId, getSettings().dailyCredits) }
         : null
     }))
   )
 
-  return { users }
+  return { users, dailyCredits: getSettings().dailyCredits }
 })

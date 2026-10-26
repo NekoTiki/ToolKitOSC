@@ -40,7 +40,7 @@ export async function remainingAccountCredits(discordId: string, basePoolSize: n
 
 // One overall daily credit pool per account, shared across every provider - not per-(account,
 // provider) - spent at whatever rate the calling profile costs (see profiles.ts's `creditCost`),
-// fungible across profiles AND providers. `basePoolSize` is ACCOUNT_DAILY_CREDITS; an admin's
+// fungible across profiles AND providers. `basePoolSize` is the dailyCredits setting; an admin's
 // addCreditBonus top-up for today is added on top of it here. Returns the fresh remaining count on
 // success, or null if `cost` doesn't fit what's left today - not just increment-and-report, so a
 // caller can't race past the pool with repeat calls.

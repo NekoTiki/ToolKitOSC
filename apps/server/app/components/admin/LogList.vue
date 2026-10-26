@@ -28,7 +28,8 @@ const ACTIONS: Record<string, { label: string; icon: string }> = {
   'sign-out-everywhere': { label: 'Signed out everywhere', icon: 'i-lucide-log-out' },
   'stop-everything': { label: 'Stopped everything', icon: 'i-lucide-octagon-x' },
   announce: { label: 'Sent an announcement', icon: 'i-lucide-megaphone' },
-  'clear-announcement': { label: 'Cleared the announcement', icon: 'i-lucide-x' }
+  'clear-announcement': { label: 'Cleared the announcement', icon: 'i-lucide-x' },
+  'change-settings': { label: 'Changed server settings', icon: 'i-lucide-settings' }
 }
 
 const actionOf = (action: string) => ACTIONS[action] ?? { label: action, icon: 'i-lucide-dot' }

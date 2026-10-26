@@ -1,3 +1,5 @@
+import { getSettings } from '~~/server/utils/serverSettings'
+
 import { isProviderHealthy, pickNextProvider } from './loadBalancer'
 import { createCloudflareProvider } from './providers/cloudflare'
 import { createGeminiProvider } from './providers/gemini'
@@ -39,7 +41,7 @@ export function getAiProvider(id: string): AiProvider | undefined {
 // the pinned one is configured but currently unhealthy with nothing else to fall back to.
 export function resolveDefaultProvider(): AiProvider | undefined {
   const providers = getAiProviders().filter((p) => p.isConfigured())
-  const preferred = useRuntimeConfig().aiDefaultProvider
+  const preferred = getSettings().defaultProvider
 
   if (preferred) {
     const pinned = providers.find((p) => p.id === preferred)

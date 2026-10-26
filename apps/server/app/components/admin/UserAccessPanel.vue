@@ -5,11 +5,11 @@ import type { AccessEntry } from '~/composables/useAdminUserAccess'
 // revoke (now with a confirmation step), model choice, today's credits and the admin-only note.
 // Previously spread across the users list as inline controls, with no note field and no
 // confirmation before revoking.
-const DAILY_CREDITS = 20
-
 const props = defineProps<{ discordId: string }>()
 
-const { data, refresh } = await useFetch<{ users: AccessEntry[] }>('/api/admin/users')
+const { data, refresh } = await useFetch<{ users: AccessEntry[]; dailyCredits: number }>('/api/admin/users')
+
+const DAILY_CREDITS = computed(() => data.value?.dailyCredits ?? 0)
 
 const entry = computed(() => data.value?.users.find((user) => user.discordId === props.discordId) ?? null)
 

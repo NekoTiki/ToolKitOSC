@@ -5,13 +5,14 @@ import { accessEntryName } from '~/composables/useAdminUserAccess'
 // Every account that has ever signed in, with its AI access at a glance. Managing one account
 // (credits, model choice, note, revoke) happens on its own page; granting access - including to
 // a Discord ID that hasn't signed in yet - happens from the panel here.
-const DAILY_CREDITS = 20
-
 const { redirectIfUnauthorized } = useAdminApi()
 
-const { data, error, refresh } = await useFetch<{ users: AccessEntry[] }>('/api/admin/users')
+const { data, error, refresh } = await useFetch<{ users: AccessEntry[]; dailyCredits: number }>('/api/admin/users')
 
 if (error.value) await redirectIfUnauthorized(error.value)
+
+// The server's Settings page sets it.
+const DAILY_CREDITS = computed(() => data.value?.dailyCredits ?? 0)
 
 const users = computed(() => data.value?.users ?? [])
 const query = ref('')
