@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const theme = hostTheme.get(roomId)
-  const png = await renderOgImage({ share: getShareInfo(roomId), primary: theme?.primary, secondary: theme?.secondary })
+  const png = await renderOgImage({ share: await getShareInfo(roomId), primary: theme?.primary, secondary: theme?.secondary })
 
   setResponseHeaders(event, {
     'Content-Type': 'image/png',

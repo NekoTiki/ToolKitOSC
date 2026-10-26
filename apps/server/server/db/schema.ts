@@ -22,7 +22,11 @@ export const users = sqliteTable('users', {
   tokenVersion: integer('token_version').notNull().default(0),
   // What the desktop app last signed in with, for the admin dashboard. Null for older apps.
   appVersion: text('app_version'),
-  os: text('os')
+  os: text('os'),
+  // Shown on the share page while the host is offline ("Back Friday 9 pm"), set in Settings > Sharing.
+  offlineMessage: text('offline_message'),
+  // When the host's app last disconnected, for "last live 2 h ago".
+  lastOnlineAt: integer('last_online_at', { mode: 'timestamp' })
 })
 
 // Settings admins change from the dashboard (see utils/serverSettings.ts), one row per key, the

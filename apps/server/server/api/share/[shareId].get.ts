@@ -22,5 +22,5 @@ export default defineEventHandler(async (event): Promise<ShareInfo> => {
     throw createError({ statusCode: 404, statusMessage: 'Not Found' })
   }
 
-  return getShareInfo(roomId)
+  return await getShareInfo(roomId)
 })
