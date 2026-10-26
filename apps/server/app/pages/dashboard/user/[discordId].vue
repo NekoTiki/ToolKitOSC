@@ -104,6 +104,7 @@ const refreshAll = (): void => {
         :suspended-until="userStats.user.suspendedUntil"
         :suspend-reason="userStats.user.suspendReason"
         @changed="refreshAll"
+        @deleted="navigateTo('/dashboard/users')"
       />
 
       <AdminUserAccessPanel :discord-id="discordId" />

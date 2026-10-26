@@ -1,7 +1,17 @@
 import { eq, sql } from 'drizzle-orm'
 
 import { getDb } from './index'
-import { users } from './schema'
+import {
+  aiAccess,
+  aiAccessRequests,
+  aiCreditBonus,
+  aiCreditUsage,
+  aiGenerationLog,
+  controlActivationDaily,
+  controlInventory,
+  shareLinks,
+  users
+} from './schema'
 
 // Suspensions and "sign out everywhere", checked wherever a Discord account signs in: the desktop
 // app's /host socket and REST calls (with the token's `tv`), share-link routes and share pages.
@@ -56,6 +66,25 @@ export async function suspend(discordId: string, days: number | null, reason: st
 
 export async function unsuspend(discordId: string): Promise<void> {
   await getDb().update(users).set({ suspendedUntil: null, suspendReason: null }).where(eq(users.discordId, discordId))
+}
+
+// Everything the server keeps about this account ("Delete my data"). The admin log stays: it's
+// the admins' record of what they did. Their share links stop working.
+export async function deleteAccountData(discordId: string): Promise<void> {
+  const db = getDb()
+
+  await db.batch([
+    db.delete(shareLinks).where(eq(shareLinks.discordId, discordId)),
+    db.delete(aiAccess).where(eq(aiAccess.discordId, discordId)),
+    db.delete(aiAccessRequests).where(eq(aiAccessRequests.discordId, discordId)),
+    db.delete(aiCreditUsage).where(eq(aiCreditUsage.discordId, discordId)),
+    db.delete(aiCreditBonus).where(eq(aiCreditBonus.discordId, discordId)),
+    db.delete(aiGenerationLog).where(eq(aiGenerationLog.discordId, discordId)),
+    db.delete(controlInventory).where(eq(controlInventory.discordId, discordId)),
+    db.delete(controlActivationDaily).where(eq(controlActivationDaily.discordId, discordId)),
+    // Last: the rows above point at it.
+    db.delete(users).where(eq(users.discordId, discordId))
+  ])
 }
 
 export async function signOutEverywhere(discordId: string): Promise<void> {

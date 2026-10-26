@@ -28,6 +28,30 @@ const signOut = async (): Promise<void> => {
   if (ok) await forgetToken()
 }
 
+const toast = useToast()
+
+// Everything this server keeps about you: your share links, AI history and stats. Then signs out.
+const deleteData = async (): Promise<void> => {
+  const ok = await confirm({
+    title: 'Delete your data on this server?',
+    message: 'The server forgets your account: your share link and custom name **stop working**, and your AI access, credits and stats are deleted. Your controls and viewers in this app stay. You can sign in again later as a new account.',
+    confirmText: 'Delete my data'
+  })
+
+  if (!ok) return
+
+  try {
+    const response = await api.serverRequest(serverWsUrl.value, 'DELETE', '/api/me')
+
+    if (response.status >= 400) throw new Error((response.body as { statusMessage?: string } | null)?.statusMessage ?? `The server answered ${response.status}`)
+
+    toast.add({ title: 'Your data was deleted from the server', icon: 'i-lucide-check', color: 'success' })
+    await forgetToken()
+  } catch (err) {
+    toast.add({ title: 'Could not delete your data', description: (err as Error).message, color: 'error' })
+  }
+}
+
 const draft = ref(serverWsUrl.value)
 const error = ref<string>()
 
@@ -162,6 +186,22 @@ const status = computed<StatusInfo>(() => {
         Sign in with Discord
       </UButton>
     </template>
+    <div
+      v-if="loggedIn && user"
+      class="flex flex-wrap items-center justify-between gap-3"
+    >
+      <p class="text-[13px] text-muted">
+        Want this server to forget you? Your share link stops working.
+      </p>
+      <UButton
+        icon="i-lucide-trash-2"
+        color="error"
+        variant="ghost"
+        @click="deleteData"
+      >
+        Delete my data
+      </UButton>
+    </div>
   </FormSection>
 
   <FormSection title="Server">
