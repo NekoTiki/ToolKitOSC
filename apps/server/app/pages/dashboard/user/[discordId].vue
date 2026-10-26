@@ -36,6 +36,14 @@ if (statsError.value && !notFound.value) await redirectIfUnauthorized(statsError
 const name = computed(() => userStats.value?.user.displayName || userStats.value?.user.username || discordId)
 
 useHead({ title: () => `${name.value} · Dashboard` })
+
+const log = useTemplateRef<{ refresh: () => Promise<void> }>('log')
+
+// An action shows up in the log below as well.
+const refreshAll = (): void => {
+  void refresh()
+  void log.value?.refresh()
+}
 </script>
 
 <template>
@@ -90,7 +98,7 @@ useHead({ title: () => `${name.value} · Dashboard` })
         :discord-id="discordId"
         :suspended-until="userStats.user.suspendedUntil"
         :suspend-reason="userStats.user.suspendReason"
-        @changed="refresh()"
+        @changed="refreshAll"
       />
 
       <AdminUserAccessPanel :discord-id="discordId" />
@@ -99,7 +107,7 @@ useHead({ title: () => `${name.value} · Dashboard` })
         v-if="userStats"
         :discord-id="discordId"
         :links="userStats.shareLinks"
-        @changed="refresh()"
+        @changed="refreshAll"
       />
 
       <div class="flex flex-wrap items-center gap-2.5">
@@ -123,6 +131,15 @@ useHead({ title: () => `${name.value} · Dashboard` })
       <RecentGenerationsCard
         :discord-id="discordId"
         :limit="5"
+      />
+
+      <h2 class="text-lg font-semibold text-highlighted">
+        Admin actions
+      </h2>
+      <AdminLogList
+        ref="log"
+        :discord-id="discordId"
+        :limit="20"
       />
     </template>
   </div>

@@ -22,6 +22,21 @@ export const users = sqliteTable('users', {
   tokenVersion: integer('token_version').notNull().default(0)
 })
 
+// What admins did from the dashboard, for the user page and the Log page. Never pruned: it's the
+// record of who changed what, and stays small. `detail` is JSON (the reason, amount, text...).
+export const adminLog = sqliteTable(
+  'admin_log',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    adminId: text('admin_id').notNull(),
+    action: text('action').notNull(),
+    targetId: text('target_id'),
+    detail: text('detail', { mode: 'json' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+  },
+  (t) => [index('admin_log_target_id_idx').on(t.targetId), index('admin_log_created_at_idx').on(t.createdAt)]
+)
+
 // Codes that open a host's share page (see db/shareLinks.ts). `main` is the random link everyone
 // gets, `custom` the name the host picked (at most one each), `invite` a link that can expire.
 export const shareLinks = sqliteTable(
