@@ -1,4 +1,4 @@
-import { like, or } from 'drizzle-orm'
+import { and, count, eq, gte, isNotNull, like, or } from 'drizzle-orm'
 
 import { getDb } from './index'
 import { users } from './schema'
@@ -41,6 +41,22 @@ export async function upsertUserFromAuth(user: {
     displayName: user.discord.name,
     avatarUrl: user.discord.avatar
   })
+}
+
+export async function recordAppVersion(discordId: string, appVersion: string, os: string | null): Promise<void> {
+  await getDb().update(users).set({ appVersion: appVersion.slice(0, 32), os: os?.slice(0, 16) ?? null }).where(eq(users.discordId, discordId))
+}
+
+// How many accounts seen in the last `days` run each app version and OS.
+export async function appVersionCounts(days: number) {
+  const db = getDb()
+  const recent = and(gte(users.lastSeenAt, new Date(Date.now() - days * 86_400_000)), isNotNull(users.appVersion))
+  const [versions, systems] = await Promise.all([
+    db.select({ label: users.appVersion, value: count() }).from(users).where(recent).groupBy(users.appVersion).orderBy(users.appVersion),
+    db.select({ label: users.os, value: count() }).from(users).where(recent).groupBy(users.os)
+  ])
+
+  return { versions, systems }
 }
 
 // Used when granting AI access to a Discord id that hasn't connected yet (pre-granting) - inserts

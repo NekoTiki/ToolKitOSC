@@ -100,6 +100,8 @@ function updateStatsFromAttempt(attempt: Attempt): void {
       daily-title="Generations per day"
     />
 
+    <AdminAppVersionsCard />
+
     <RecentGenerationsCard
       @generation-logged="updateStatsFromAttempt"
       @reconnected="refreshStats"

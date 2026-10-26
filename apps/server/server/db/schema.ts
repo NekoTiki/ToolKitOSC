@@ -19,7 +19,10 @@ export const users = sqliteTable('users', {
   suspendedUntil: integer('suspended_until', { mode: 'timestamp' }),
   suspendReason: text('suspend_reason'),
   // Desktop tokens carry the version they were made with (`tv`); bumping it signs out every app.
-  tokenVersion: integer('token_version').notNull().default(0)
+  tokenVersion: integer('token_version').notNull().default(0),
+  // What the desktop app last signed in with, for the admin dashboard. Null for older apps.
+  appVersion: text('app_version'),
+  os: text('os')
 })
 
 // What admins did from the dashboard, for the user page and the Log page. Never pruned: it's the

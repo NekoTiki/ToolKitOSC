@@ -101,7 +101,8 @@ pub fn connect(app: &AppHandle, url: String, protocol_version: u32) {
             inner.clients.clear();
 
             let id = inner.next_id;
-            let auth = token.as_deref().map(|token| auth_message(token, protocol_version));
+            let app_version = app.package_info().version.to_string();
+            let auth = token.as_deref().map(|token| auth_message(token, protocol_version, &app_version));
             let tx = link::spawn(app.clone(), id, url.clone(), auth);
             inner.link = Some(Link { id, url, token, protocol_version, tx });
             None
@@ -250,10 +251,12 @@ fn args_update(msg: &OscMessage) -> String {
     serde_json::json!({ "type": "args-update", "message": msg }).to_string()
 }
 
-fn auth_message(token: &str, protocol_version: u32) -> String {
+/// The app's version (from tauri.conf.json, which the release build sets from the tag) and OS let
+/// the server's admins see which versions are still in use.
+fn auth_message(token: &str, protocol_version: u32, app_version: &str) -> String {
     serde_json::json!({
         "type": "auth-token",
-        "message": { "token": token, "protocolVersion": protocol_version }
+        "message": { "token": token, "protocolVersion": protocol_version, "appVersion": app_version, "os": std::env::consts::OS }
     })
     .to_string()
 }
@@ -410,15 +413,17 @@ mod tests {
 
     #[test]
     fn auth_message_shape() {
-        let value: serde_json::Value = serde_json::from_str(&auth_message("jwt", 2)).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&auth_message("jwt", 2, "1.4.0")).unwrap();
         assert_eq!(value["type"], "auth-token");
         assert_eq!(value["message"]["token"], "jwt");
         assert_eq!(value["message"]["protocolVersion"], 2);
+        assert_eq!(value["message"]["appVersion"], "1.4.0");
+        assert_eq!(value["message"]["os"], std::env::consts::OS);
     }
 
     #[test]
     fn redact_blanks_the_token() {
-        let text = redact(&auth_message("secret", 2));
+        let text = redact(&auth_message("secret", 2, "1.4.0"));
         assert!(!text.contains("secret"));
         assert!(text.contains("protocolVersion"));
     }
