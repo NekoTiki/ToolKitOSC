@@ -52,6 +52,19 @@ fn actuators(control: &Value) -> Vec<ActuatorRef> {
     control.get("actuators").cloned().and_then(|a| serde_json::from_value(a).ok()).unwrap_or_default()
 }
 
+// shortcut: one fixed hold for every Button, make it a setting if an avatar needs longer.
+const PRESS_HOLD: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// Sets a Button's parameter to `on`, long enough for the avatar to see it, then back.
+fn press(app: &AppHandle, address: &str, on: bool) {
+    send(app, address, json!(on));
+    let (app, address) = (app.clone(), address.to_owned());
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(PRESS_HOLD).await;
+        send(&app, &address, json!(!on));
+    });
+}
+
 /// Each toy control's level as last set, for automations that hold and put it back.
 static TOY_LEVELS: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
 
@@ -80,6 +93,11 @@ pub fn run(app: &AppHandle, control: &Value, command: &Value, viewer_name: Optio
     let control_id = text(control, "id").unwrap_or_default();
 
     match kind {
+        "button" => {
+            if let Some(address) = text(control, "inputAddress") {
+                press(app, address, !control.get("reverse").and_then(Value::as_bool).unwrap_or(false));
+            }
+        }
         "boolean" => {
             if let (Some(address), Some(value)) = (text(control, "inputAddress"), value) {
                 send(app, address, value.clone());

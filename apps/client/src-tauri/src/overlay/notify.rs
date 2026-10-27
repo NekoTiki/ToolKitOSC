@@ -224,6 +224,7 @@ pub fn describe(control: Option<&serde_json::Value>, kind: &str, name: &str, val
         }
         "owo" => (format!("played {} on {name}", value.and_then(serde_json::Value::as_str).unwrap_or("a sensation")), String::new()),
         "preset" => (format!("applied {name}"), String::new()),
+        "button" => (format!("pressed {name}"), String::new()),
         _ => (format!("used {name}"), String::new())
     }
 }

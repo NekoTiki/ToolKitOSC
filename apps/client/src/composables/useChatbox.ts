@@ -17,7 +17,7 @@ const MIN_INTERVAL_MS = 3000
 export type ChatboxKind = 'toggles' | 'options' | 'sliders' | 'toys' | 'patterns' | 'shocks' | 'presets' | 'bhaptics' | 'owo'
 
 export const CHATBOX_KINDS: { value: ChatboxKind; label: string; types: ControlTypes[] }[] = [
-  { value: 'toggles', label: 'Toggles', types: ['boolean', 'boolean-group'] },
+  { value: 'toggles', label: 'Toggles', types: ['boolean', 'boolean-group', 'button'] },
   { value: 'options', label: 'Options', types: ['enum', 'step-enum', 'boolean-enum'] },
   { value: 'sliders', label: 'Sliders', types: ['slider'] },
   { value: 'toys', label: 'Toys', types: ['intiface-toy'] },

@@ -11,6 +11,7 @@ export type ControlTypes =
   | 'enum'
   | 'slider'
   | 'step-enum'
+  | 'button'
   | 'open-shock-shocker'
   | 'intiface-toy'
   | 'intiface-pattern'
@@ -35,6 +36,7 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   enum: 'Enum',
   slider: 'Slider',
   'step-enum': 'Step Enum',
+  button: 'Button',
   // Named for what each one does rather than the integration it belongs to - the type picker
   // already groups these under an "OpenShock"/"Intiface" heading (see ControlModal.vue), so
   // repeating the brand name in the label itself was redundant there.
@@ -53,6 +55,8 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   enum: 'warning',
   slider: 'success',
   'step-enum': 'neutral',
+  // A toggle that switches itself back.
+  button: 'primary',
   'open-shock-shocker': 'error',
   'intiface-toy': 'success',
   // Reuses 'enum''s 'warning' - it's a chip-picker built on the exact same UX, and we're already
@@ -204,6 +208,14 @@ export interface StepEnumControl extends BaseControl {
     icon?: string
     value: number
   }[]
+}
+
+// A press sets the parameter on for a moment, then back off (off then on with `reverse`), for
+// one-shot actions like a quick change.
+export interface ButtonControl extends BaseControl {
+  type: 'button'
+  reverse?: boolean
+  inputAddress: string
 }
 
 export interface OpenShockControl extends BaseControl {
@@ -452,6 +464,7 @@ export type ControlType =
   | EnumControl
   | SliderControl
   | StepEnumControl
+  | ButtonControl
   | OpenShockControl
   | IntifaceToyControl
   | IntifacePatternControl
@@ -493,6 +506,11 @@ export interface SliderControlCommand extends BaseControlCommand {
 export interface StepEnumControlCommand extends BaseControlCommand {
   type: 'step-enum'
   value: number
+}
+
+// No `value`: a press. The control decides what it sends.
+export interface ButtonControlCommand extends BaseControlCommand {
+  type: 'button'
 }
 
 export interface OpenShockControlCommand extends BaseControlCommand {
@@ -552,6 +570,7 @@ export type ControlCommand =
   | EnumControlCommand
   | SliderControlCommand
   | StepEnumControlCommand
+  | ButtonControlCommand
   | OpenShockControlCommand
   | IntifaceToyControlCommand
   | IntifacePatternControlCommand
@@ -566,6 +585,7 @@ export type CommandWithoutIds =
   | Omit<EnumControlCommand, 'groupId' | 'controlId'>
   | Omit<SliderControlCommand, 'groupId' | 'controlId'>
   | Omit<StepEnumControlCommand, 'groupId' | 'controlId'>
+  | Omit<ButtonControlCommand, 'groupId' | 'controlId'>
   | Omit<OpenShockControlCommand, 'groupId' | 'controlId'>
   | Omit<IntifaceToyControlCommand, 'groupId' | 'controlId'>
   | Omit<IntifacePatternControlCommand, 'groupId' | 'controlId'>

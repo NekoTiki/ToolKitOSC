@@ -59,7 +59,7 @@ const features = [
     icon: 'lucide:sliders-horizontal',
     title: 'A control for every parameter',
     description:
-      'Toggles, toggle groups, multi-state toggle logic, enums, step-enums and sliders, each with its own icon and mapped to any OSC address.'
+      'Toggles, buttons, toggle groups, multi-state toggle logic, enums, step-enums and sliders, each with its own icon and mapped to any OSC address.'
   },
   {
     icon: 'lucide:share-2',

@@ -108,7 +108,7 @@ const controlName = computed(() => {
   return 'Deleted control'
 })
 
-const TYPES: ControlTypes[] = ['boolean', 'slider', 'enum', 'open-shock-shocker', 'intiface-toy', 'intiface-pattern', 'preset']
+const TYPES: ControlTypes[] = ['boolean', 'button', 'slider', 'enum', 'open-shock-shocker', 'intiface-toy', 'intiface-pattern', 'preset']
 
 // A viewer's own pattern carries its recording (see ViewerPatternValue.vue).
 const withSamples = (command: Command): (Command & { samples: number[] }) | null => (command.samples?.length ? (command as Command & { samples: number[] }) : null)

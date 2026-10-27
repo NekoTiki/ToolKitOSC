@@ -7,6 +7,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -130,6 +146,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -265,6 +297,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -427,6 +475,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -570,6 +634,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -690,6 +770,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -833,12 +929,167 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
+            "groupRules": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "properties": {
+                  "limits": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "disabledOptions": {
+                        "items": {
+                          "type": [
+                            "string",
+                            "number"
+                          ]
+                        },
+                        "type": "array"
+                      },
+                      "max": {
+                        "type": "number"
+                      },
+                      "min": {
+                        "type": "number"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "locked": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "inputAddress": {
+              "type": "string"
+            },
+            "limits": {
+              "additionalProperties": false,
+              "properties": {
+                "disabledOptions": {
+                  "items": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "max": {
+                  "type": "number"
+                },
+                "min": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "locked": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "paused": {
+              "type": "boolean"
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "reverse": {
+              "type": "boolean"
+            },
+            "size": {
+              "enum": [
+                "normal",
+                "wide"
+              ],
+              "type": "string"
+            },
+            "type": {
+              "const": "button",
+              "type": "string"
+            },
+            "unavailable": {
+              "type": "boolean"
+            },
+            "unavailableReason": {
+              "type": "string"
+            },
+            "viaGroup": {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "color"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "id",
+            "inputAddress",
+            "name",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "animationDuration": {
               "const": 3000,
               "type": "number"
             },
             "cooldown": {
               "type": "number"
+            },
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
             },
             "duration": {
               "additionalProperties": false,
@@ -1038,6 +1289,22 @@
               },
               "type": "array"
             },
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -1208,6 +1475,22 @@
               },
               "type": "array"
             },
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -1357,6 +1640,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "groupRules": {
               "additionalProperties": {
                 "additionalProperties": false,
@@ -1477,6 +1776,22 @@
         {
           "additionalProperties": false,
           "properties": {
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
             "effects": {
               "items": {
                 "type": "string"
@@ -1651,6 +1966,22 @@
           "properties": {
             "cooldown": {
               "type": "number"
+            },
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
             },
             "groupRules": {
               "additionalProperties": {

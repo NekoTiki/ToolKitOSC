@@ -540,10 +540,10 @@ pub enum ControlRun {
 /// Which control types each way of running fits.
 fn run_fits(run: &ControlRun, control_type: &str) -> bool {
     match run {
-        ControlRun::Set { .. } => !matches!(control_type, "preset" | "open-shock-shocker"),
+        ControlRun::Set { .. } => !matches!(control_type, "preset" | "open-shock-shocker" | "button"),
         ControlRun::Toggle => matches!(control_type, "boolean" | "boolean-group"),
         ControlRun::Pulse { .. } => control_type == "intiface-toy",
-        ControlRun::Press => matches!(control_type, "preset" | "open-shock-shocker"),
+        ControlRun::Press => matches!(control_type, "preset" | "open-shock-shocker" | "button"),
         ControlRun::Hold { .. } => {
             matches!(control_type, "boolean" | "boolean-group" | "enum" | "step-enum" | "slider" | "intiface-toy" | "intiface-pattern")
         }

@@ -12,7 +12,7 @@ export interface PromptProfile {
   description: string
   // Restricts the JSON schema's `type` enum, not just the prompt wording - a hard guarantee the
   // model can't route around (matters most for Groq's strict mode), not a suggestion.
-  allowedTypes: Extract<ControlTypes, 'boolean' | 'slider' | 'step-enum' | 'boolean-group' | 'boolean-enum'>[]
+  allowedTypes: Extract<ControlTypes, 'boolean' | 'button' | 'slider' | 'step-enum' | 'boolean-group' | 'boolean-enum'>[]
   maxCompletionTokens: number
   // Whether to run detectClusterHints() (see clustering.ts) and hand its output to the model as
   // candidate boolean-group/boolean-enum hints - only worth the extra pre-pass when the profile
@@ -30,7 +30,7 @@ export const PROMPT_PROFILES: Record<PromptProfileId, PromptProfile> = {
     id: 'light',
     label: 'Light',
     description: 'Fast and safe - toggles and sliders only, no relationship guessing between parameters.',
-    allowedTypes: ['boolean', 'slider', 'step-enum'],
+    allowedTypes: ['boolean', 'button', 'slider', 'step-enum'],
     maxCompletionTokens: 8000,
     useClusterHints: false,
     creditCost: 1
@@ -39,7 +39,7 @@ export const PROMPT_PROFILES: Record<PromptProfileId, PromptProfile> = {
     id: 'balanced',
     label: 'Balanced',
     description: 'Uses every control type, including toggle-groups/exclusive-choice sets where the relationship between parameters is reasonably clear from their names.',
-    allowedTypes: ['boolean', 'slider', 'step-enum', 'boolean-group', 'boolean-enum'],
+    allowedTypes: ['boolean', 'button', 'slider', 'step-enum', 'boolean-group', 'boolean-enum'],
     maxCompletionTokens: 14000,
     // Cheap, deterministic, and genuinely helps Balanced actually use the toggle-group/
     // exclusive-choice types its schema already allows instead of defaulting to plain booleans
@@ -51,7 +51,7 @@ export const PROMPT_PROFILES: Record<PromptProfileId, PromptProfile> = {
     id: 'heavy',
     label: 'Heavy',
     description: 'Most thorough - actively hunts for toggle-group/exclusive-choice structure instead of settling for flat lists of separate toggles. Slower, costs more, higher chance of an over-eager grouping call.',
-    allowedTypes: ['boolean', 'slider', 'step-enum', 'boolean-group', 'boolean-enum'],
+    allowedTypes: ['boolean', 'button', 'slider', 'step-enum', 'boolean-group', 'boolean-enum'],
     maxCompletionTokens: 20000,
     useClusterHints: true,
     creditCost: 4

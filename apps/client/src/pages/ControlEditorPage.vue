@@ -91,6 +91,7 @@ const allTypeGroups = computed<{ label: string; items: TypeChoice[] }[]>(() => [
     label: 'VRChat',
     items: [
       { value: 'boolean', icon: 'i-lucide-toggle-right', description: 'On or off, one parameter' },
+      { value: 'button', icon: 'i-lucide-pointer', description: 'On for a moment, then back off' },
       { value: 'boolean-group', icon: 'i-lucide-layers', description: 'One switch for several parameters' },
       { value: 'boolean-enum', icon: 'i-lucide-git-fork', description: 'Options that set several toggles' },
       { value: 'enum', icon: 'i-lucide-list', description: 'Pick one value from a list' },
@@ -379,7 +380,7 @@ onBeforeRouteLeave(async () => {
         </FormSection>
 
         <FormSection :title="`${type ? CONTROL_TYPE_LABELS[type] : ''} settings`">
-          <template v-if="type === 'boolean' || type === 'enum' || type === 'slider' || type === 'step-enum'">
+          <template v-if="type === 'boolean' || type === 'button' || type === 'enum' || type === 'slider' || type === 'step-enum'">
             <UFormField :error="errors.address">
               <AddressField
                 v-model:address="model.inputAddress"
@@ -392,6 +393,12 @@ onBeforeRouteLeave(async () => {
               v-model="model.reverse"
               label="Reverse"
               description="On sends false, off sends true."
+            />
+            <UCheckbox
+              v-if="type === 'button'"
+              v-model="model.reverse"
+              label="Reverse"
+              description="A press sends false, then true."
             />
           </template>
 

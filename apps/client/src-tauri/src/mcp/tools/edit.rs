@@ -101,8 +101,8 @@ pub struct DeleteRequest {
 }
 
 /// Every control type, as in shared-ui's `KNOWN_CONTROL_TYPES`.
-const CONTROL_TYPES: [&str; 12] =
-    ["boolean", "boolean-group", "boolean-enum", "enum", "slider", "step-enum", "open-shock-shocker", "intiface-toy", "intiface-pattern", "preset", "bhaptics", "owo"];
+const CONTROL_TYPES: [&str; 13] =
+    ["boolean", "boolean-group", "boolean-enum", "enum", "slider", "step-enum", "button", "open-shock-shocker", "intiface-toy", "intiface-pattern", "preset", "bhaptics", "owo"];
 
 /// A stored control of these groups, to change.
 fn find_mut<'a>(groups: &'a mut [Value], group_id: &str, control_id: &str) -> Option<&'a mut Value> {
