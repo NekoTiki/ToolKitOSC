@@ -140,7 +140,7 @@ fn tile(app: &AppHandle, group_id: &str, control: &Value) -> Option<Tile> {
         "bhaptics" => TileKind::Menu { options: std::iter::once("Buzz".to_owned()).chain(effects(control).iter().map(|effect| label(effect))).collect(), current: None },
         "slider" => TileKind::Level { value: text(control, "inputAddress").and_then(|address| value(app, address)).unwrap_or(0.0) },
         "intiface-toy" => TileKind::Level { value: crate::controls::toy_level(text(control, "id")?) },
-        "preset" => TileKind::Press,
+        "preset" | "button" => TileKind::Press,
         "open-shock-shocker" | "owo" => TileKind::Hold,
         _ => TileKind::AppOnly
     };

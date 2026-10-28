@@ -95,7 +95,10 @@ export function buildControlSuggestionSchema(profile: PromptProfile) {
 function typeGuidance(type: PromptProfile['allowedTypes'][number], profileId: PromptProfileId): string {
   switch (type) {
     case 'boolean':
-      return `- 'Bool' kind, standalone -> 'boolean'. Set "address" to that parameter's address.`
+      return `- 'Bool' kind, standalone -> 'boolean'. Set "address" to that parameter's address. Use 'button' instead when it's a one-shot action.`
+
+    case 'button':
+      return `- 'Bool' kind that's a one-shot action rather than something that stays on or off -> 'button': a "quick change", an outfit/hair swap or cycle, next/previous, reset, randomize, a play-once emote or effect trigger. A button turns the parameter on for a moment, then back off. Set "address". Never for anything meant to stay on (clothing, accessories, effects you'd leave running).`
 
     case 'slider':
       return `- 'Float' kind -> always 'slider'. Set "address".`

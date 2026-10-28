@@ -3,11 +3,11 @@ import { ref } from 'vue'
 
 import ControlBase from './ControlBase.vue'
 
-defineProps<{ title: string; icon?: string }>()
+const props = withDefaults(defineProps<{ title: string; icon?: string; action?: string }>(), { action: 'Apply' })
 const emit = defineEmits<{ (e: 'run'): void }>()
 
-// A brief lit state after each tap - applying a preset has no lasting on/off state of its own to
-// show, so this is the only confirmation the tap landed.
+// A brief lit state after each tap - applying a preset (or pressing a Button) has no lasting on/off
+// state of its own to show, so this is the only confirmation the tap landed.
 const flashing = ref(false)
 let flashTimeout: ReturnType<typeof setTimeout> | undefined
 
@@ -26,7 +26,7 @@ const run = (): void => {
     :active="flashing"
     role="button"
     tabindex="0"
-    :aria-label="`Apply ${title}`"
+    :aria-label="`${action} ${title}`"
     @click="run"
     @keydown.enter.space.prevent="run"
   >
@@ -38,7 +38,7 @@ const run = (): void => {
         name="i-lucide-play"
         class="size-4"
       />
-      APPLY
+      {{ props.action.toUpperCase() }}
     </div>
   </control-base>
 </template>

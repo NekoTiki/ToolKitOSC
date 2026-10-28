@@ -176,9 +176,9 @@ export function normalizeSuggestion(
         continue
       }
 
-      // Everything else (boolean/slider/step-enum) is keyed off exactly one real parameter, and
+      // Everything else (boolean/button/slider/step-enum) is keyed off exactly one real parameter, and
       // its kind decides the actual control type regardless of what the model picked - a
-      // 'Bool' parameter can only ever honestly become a 'boolean' control, etc.
+      // 'Bool' parameter can only ever honestly become a 'boolean' or 'button' control, etc.
       const addressResult = aiAddressSchema.safeParse(suggestion.address)
       const param = addressResult.success ? byAddress.get(addressResult.data) : undefined
 
@@ -190,7 +190,7 @@ export function normalizeSuggestion(
         controls.push({
           id: randomUUID(),
           name,
-          type: 'boolean',
+          type: suggestion.type === 'button' ? 'button' : 'boolean',
           icon,
           inputAddress: param.address
         })

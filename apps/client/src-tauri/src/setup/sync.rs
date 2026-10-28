@@ -46,7 +46,7 @@ fn addresses(groups: &[Value]) -> BTreeSet<String> {
     };
     for control in groups.iter().filter_map(|group| group.get("controls")?.as_array()).flatten() {
         match control.get("type").and_then(Value::as_str) {
-            Some("boolean" | "enum" | "slider" | "step-enum") => add(control.get("inputAddress")),
+            Some("boolean" | "enum" | "slider" | "step-enum" | "button") => add(control.get("inputAddress")),
             Some("boolean-group") => {
                 for input in control.get("inputs").and_then(Value::as_array).into_iter().flatten() {
                     add(input.get("inputAddress"));

@@ -4,6 +4,7 @@ import type { ControlType } from '@toolkitosc/shared-ui'
 const inputAddresses = (control: ControlType): string[] => {
   switch (control.type) {
     case 'boolean':
+    case 'button':
     case 'enum':
     case 'step-enum':
     case 'slider':

@@ -69,6 +69,7 @@ const usedBy = computed(() => {
   const collect = (control: ControlType): void => {
     switch (control.type) {
       case 'boolean':
+      case 'button':
       case 'enum':
       case 'step-enum':
       case 'slider':

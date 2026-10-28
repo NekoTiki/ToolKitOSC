@@ -21,8 +21,8 @@ export interface AiParameterInput {
 // before this. normalize.ts is what actually enforces which fields matter per `type`.
 export interface AiControlSuggestion {
   name: string
-  type: 'boolean' | 'slider' | 'step-enum' | 'boolean-group' | 'boolean-enum'
-  // boolean | slider
+  type: 'boolean' | 'button' | 'slider' | 'step-enum' | 'boolean-group' | 'boolean-enum'
+  // boolean | button | slider
   address?: string
   // step-enum: value per option. boolean-enum: which addresses that option drives true/false.
   options?: {

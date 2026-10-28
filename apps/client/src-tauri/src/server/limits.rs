@@ -220,7 +220,7 @@ pub fn sanitize_command(control: &Value, command: &Value) -> Option<Value> {
                 .is_some_and(|patterns| patterns.iter().any(|pattern| pattern.get("id").and_then(Value::as_str) == Some(id)));
             (allowed && !is_option_disabled(limits, &json!(id))).then(|| json!({ "type": kind, "value": id }))
         }
-        "open-shock-shocker" | "preset" => Some(json!({ "type": kind })),
+        "open-shock-shocker" | "preset" | "button" => Some(json!({ "type": kind })),
         "bhaptics" => {
             let action = value?.as_str()?;
             // Nothing above the control's own cap or the profile's max is ever played.

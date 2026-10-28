@@ -53,6 +53,7 @@ type AnyDraft = Partial<
 
 const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
   boolean: (m) => (m.inputAddress = ''),
+  button: (m) => (m.inputAddress = ''),
   slider: (m) => (m.inputAddress = ''),
   'step-enum': (m) => {
     m.inputAddress = ''
@@ -101,6 +102,7 @@ const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
 // Which parameter type each address-based control type can drive.
 const ADDRESS_TYPE: Partial<Record<ControlType['type'], 'Bool' | 'Int' | 'Float'>> = {
   boolean: 'Bool',
+  button: 'Bool',
   'boolean-group': 'Bool',
   'boolean-enum': 'Bool',
   enum: 'Int',
@@ -171,10 +173,14 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
       if (!value || value === model.value.type) return
 
       // Keep what carries over between types (name, icon, tile width, pin), reset the rest.
-      const { name, icon, size, pinned, id } = model.value
+      const { name, icon, size, pinned, id, inputAddress, reverse } = model.value
+      const sameKind = !!model.value.type && ADDRESS_TYPE[model.value.type] === ADDRESS_TYPE[value]
 
       model.value = { id, name, icon, size, pinned, type: value } as AnyDraft
       typeDefaults[value](model.value)
+      // The parameter too, when the new type takes the same kind (Toggle to Button, Enum to Step Enum).
+      if (sameKind && inputAddress && model.value.inputAddress !== undefined) model.value.inputAddress = inputAddress
+      if (reverse && (value === 'boolean' || value === 'button')) model.value.reverse = reverse
       errors.value = {}
     }
   })
@@ -238,6 +244,7 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
 
     switch (m.type) {
       case 'boolean':
+      case 'button':
       case 'slider':
         if (!m.inputAddress) next.address = 'Pick the parameter this control changes.'
         break

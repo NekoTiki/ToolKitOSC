@@ -266,7 +266,7 @@ export const CONTROL_RUNS: Record<
     label: 'Press',
     description: 'Presses it once.',
     runs: 'moment',
-    controlTypes: ['preset', 'open-shock-shocker']
+    controlTypes: ['preset', 'open-shock-shocker', 'button']
   },
   hold: {
     label: 'Hold',

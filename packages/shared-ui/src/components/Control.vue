@@ -182,6 +182,13 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :icon="control.icon"
       @run="$emit('command', { type: 'preset' })"
     />
+    <control-preset
+      v-else-if="control.type === 'button'"
+      :title="control.name"
+      :icon="control.icon"
+      action="Press"
+      @run="$emit('command', { type: 'button' })"
+    />
     <control-bhaptics
       v-else-if="control.type === 'bhaptics'"
       :control="control"
