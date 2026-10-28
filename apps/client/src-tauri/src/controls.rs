@@ -53,7 +53,7 @@ fn actuators(control: &Value) -> Vec<ActuatorRef> {
 }
 
 // shortcut: one fixed hold for every Button, make it a setting if an avatar needs longer.
-const PRESS_HOLD: std::time::Duration = std::time::Duration::from_millis(250);
+const PRESS_HOLD: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Sets a Button's parameter to `on`, long enough for the avatar to see it, then back.
 fn press(app: &AppHandle, address: &str, on: bool) {
