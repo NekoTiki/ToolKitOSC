@@ -23,10 +23,17 @@ runs:
         apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
         packages="libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf"
         install() {
-          sudo timeout 5m apt-get $apt_opts update -q &&
+          sudo timeout 3m apt-get $apt_opts update -q &&
             sudo DEBIAN_FRONTEND=noninteractive timeout 10m apt-get $apt_opts install -y -q --no-install-recommends $packages
         }
-        install || { echo "::warning::Installing the Linux dependencies failed, retrying once"; install; }
+        # The runner's Ubuntu mirrors (azure.archive.ubuntu.com, then archive.ubuntu.com) are
+        # sometimes unreachable from it for a while: then try once more through kernel.org's
+        # mirror, which is on another network.
+        install || {
+          echo "::warning::The runner's Ubuntu mirrors didn't answer, retrying through mirrors.edge.kernel.org"
+          sudo find /etc/apt -name '*.list' -exec sed -i 's#mirror+file:/etc/apt/apt-mirrors.txt#http://mirrors.edge.kernel.org/ubuntu/#' {} +
+          install
+        }
 
     - name: Set app version
       if: inputs.version != ''
