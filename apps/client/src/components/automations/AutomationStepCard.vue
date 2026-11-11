@@ -41,7 +41,7 @@ import {
   stepCanWait,
   stepKindsFor
 } from '@renderer/utils/automations'
-import { CONTROL_TYPE_LABELS } from '@toolkitosc/shared-ui'
+import { CONTROL_TYPE_LABELS, isOpenShockType } from '@toolkitosc/shared-ui'
 import { computed, defineAsyncComponent, ref } from 'vue'
 
 // Async: it shows the options of "one of these" with this card, which would import itself.
@@ -329,7 +329,7 @@ const controlRunItems = computed(() =>
 )
 
 const controlRunDescription = computed(() =>
-  controlStep.value?.controlType === 'open-shock-shocker'
+  isOpenShockType(controlStep.value?.controlType)
     ? "Uses the shocker's own intensity, duration and cooldown."
     : CONTROL_RUNS[controlRunType.value].description
 )

@@ -263,6 +263,24 @@
     "expected": { "type": "open-shock-shocker" }
   },
   {
+    "name": "a shock the viewer chooses carries their choice",
+    "control": {
+      "id": "c", "name": "C", "type": "open-shock-choice", "mode": "Shock", "shockers": [],
+      "intensity": { "min": 1, "max": 5 }, "duration": { "min": 300, "max": 600 }, "cooldown": 0, "animationDuration": 3000
+    },
+    "command": { "type": "open-shock-choice", "intensity": 99, "duration": 450, "value": 3 },
+    "expected": { "type": "open-shock-choice", "intensity": 99, "duration": 450 }
+  },
+  {
+    "name": "a fixed shock drops a viewer's choice",
+    "control": {
+      "id": "c", "name": "C", "type": "open-shock-fixed", "mode": "Shock", "shockers": [],
+      "intensity": { "min": 5, "max": 5 }, "duration": { "min": 300, "max": 300 }, "cooldown": 0, "animationDuration": 3000
+    },
+    "command": { "type": "open-shock-fixed", "intensity": 99, "duration": 450 },
+    "expected": { "type": "open-shock-fixed" }
+  },
+  {
     "name": "a preset carries no value",
     "control": { "id": "c", "name": "C", "type": "preset", "presetId": "p" },
     "command": { "type": "preset" },

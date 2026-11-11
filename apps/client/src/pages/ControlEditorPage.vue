@@ -31,7 +31,7 @@ import type {
   IntifacePatternControl,
   IntifaceToyControl
 } from '@toolkitosc/shared-ui'
-import { Control, CONTROL_TYPE_LABELS, controlTileSpan } from '@toolkitosc/shared-ui'
+import { Control, CONTROL_TYPE_LABELS, controlTileSpan, isOpenShockType } from '@toolkitosc/shared-ui'
 import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
@@ -106,6 +106,20 @@ const allTypeGroups = computed<{ label: string; items: TypeChoice[] }[]>(() => [
         value: 'open-shock-shocker',
         icon: 'material-symbols:electric-bolt',
         description: 'A random shock or vibration in a range',
+        disabled: !editor.openShockAvailable.value,
+        reason: 'Add an OpenShock API key in Settings'
+      },
+      {
+        value: 'open-shock-fixed',
+        icon: 'material-symbols:electric-bolt',
+        description: 'The same shock or vibration every time',
+        disabled: !editor.openShockAvailable.value,
+        reason: 'Add an OpenShock API key in Settings'
+      },
+      {
+        value: 'open-shock-choice',
+        icon: 'i-lucide-sliders-horizontal',
+        description: 'Viewers choose how strong and how long, within your limits',
         disabled: !editor.openShockAvailable.value,
         reason: 'Add an OpenShock API key in Settings'
       }
@@ -192,11 +206,6 @@ const owoOptions = computed<OwoOptions>({
   }),
   set: (value) => Object.assign(model.value, value)
 })
-
-const openShockModes = [
-  { label: 'Shock', value: 'Shock' as const },
-  { label: 'Vibrate', value: 'Vibrate' as const }
-]
 
 // Large tiles don't fit two-wide in the preview column, and a 2×2 picker previews as one row
 // (its options scroll), so the preview is capped at medium.
@@ -301,31 +310,19 @@ onBeforeRouteLeave(async () => {
         </FormSection>
 
         <FormSection title="Basics">
-          <UFormField
-            label="Name"
-            required
-            :error="errors.name"
-          >
-            <UInput
-              v-model="model.name"
-              placeholder="Hoodie, Face, Tail wag…"
-              class="w-full"
-              @update:model-value="errors.name = undefined"
-            />
-          </UFormField>
-
-          <UFormField
-            v-if="type !== 'open-shock-shocker'"
-            label="Icon"
-          >
-            <IconSelectMenu
-              v-model="model.icon"
-              class="w-full"
-              @keyup.backspace="model.icon = ''"
-            />
-          </UFormField>
-
-          <div class="grid gap-3 sm:grid-cols-2">
+          <div class="grid items-start gap-3 sm:grid-cols-2">
+            <UFormField
+              label="Name"
+              required
+              :error="errors.name"
+            >
+              <UInput
+                v-model="model.name"
+                placeholder="Hoodie, Face, Tail wag…"
+                class="w-full"
+                @update:model-value="errors.name = undefined"
+              />
+            </UFormField>
             <UFormField
               label="Group"
               :description="targetGroupId !== groupId ? 'The control moves to this group when you save.' : undefined"
@@ -335,6 +332,45 @@ onBeforeRouteLeave(async () => {
                 :items="groupItems"
                 class="w-full"
               />
+            </UFormField>
+          </div>
+
+          <UFormField
+            v-if="!isOpenShockType(type)"
+            label="Icon"
+          >
+            <IconSelectMenu
+              v-model="model.icon"
+              class="w-full"
+              @keyup.backspace="model.icon = ''"
+            />
+          </UFormField>
+
+          <!-- Tile width sits right of the pin options, or below them on narrow screens. -->
+          <div class="grid items-start gap-3 sm:grid-cols-2">
+            <UFormField label="Pin">
+              <div class="grid gap-2.5">
+                <UCheckbox
+                  :model-value="!!model.pinned"
+                  label="In the app"
+                  description="Listed together at the top of the Controls page."
+                  size="lg"
+                  @update:model-value="model.pinned = !!$event || undefined"
+                />
+                <UCheckbox
+                  v-if="isOn('overlay')"
+                  :model-value="wristPinned"
+                  label="To your wrist"
+                  :description="
+                    controlId
+                      ? 'On the Pinned page of the VR overlay panel for this avatar. Applies right away.'
+                      : 'Save the control first.'
+                  "
+                  :disabled="!controlId"
+                  size="lg"
+                  @update:model-value="setWristPinned(!!$event)"
+                />
+              </div>
             </UFormField>
             <UFormField
               label="Tile width"
@@ -352,31 +388,6 @@ onBeforeRouteLeave(async () => {
               />
             </UFormField>
           </div>
-
-          <UFormField label="Pin">
-            <div class="grid gap-2.5">
-              <UCheckbox
-                :model-value="!!model.pinned"
-                label="In the app"
-                description="Listed together at the top of the Controls page."
-                size="lg"
-                @update:model-value="model.pinned = !!$event || undefined"
-              />
-              <UCheckbox
-                v-if="isOn('overlay')"
-                :model-value="wristPinned"
-                label="To your wrist"
-                :description="
-                  controlId
-                    ? 'On the Pinned page of the VR overlay panel for this avatar. Applies right away.'
-                    : 'Save the control first.'
-                "
-                :disabled="!controlId"
-                size="lg"
-                @update:model-value="setWristPinned(!!$event)"
-              />
-            </div>
-          </UFormField>
         </FormSection>
 
         <FormSection :title="`${type ? CONTROL_TYPE_LABELS[type] : ''} settings`">
@@ -444,7 +455,7 @@ onBeforeRouteLeave(async () => {
             :actions="[{ label: `Turn on ${typeAddonOff.name}`, icon: 'i-lucide-power', color: 'neutral', variant: 'subtle', onClick: () => void setAddon(typeAddonOff!, true) }]"
           />
 
-          <template v-if="type === 'open-shock-shocker'">
+          <template v-if="isOpenShockType(type)">
             <UAlert
               v-if="!editor.openShockAvailable.value && !typeAddonOff"
               color="warning"
@@ -460,7 +471,7 @@ onBeforeRouteLeave(async () => {
                 v-model:intensity="model.intensity"
                 v-model:duration="model.duration"
                 v-model:cooldown="model.cooldown"
-                :open-shock-mode="openShockModes"
+                :type="type"
                 :shocker-list="shockerList"
               />
             </UFormField>

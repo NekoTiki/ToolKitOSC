@@ -4,15 +4,14 @@
 // where the value comes from/goes to differs, which each thin wrapper owns via this component's
 // plain modelValue/update:modelValue v-model.
 //
-// A linear fader, not a dial: dragging along a straight track is far easier to control with a
-// shaky VR pointer than tracing a circle. Arrow keys nudge it by 5% for keyboard users.
+// The fader itself is Fader.vue; this adds the optimistic display and the debounced commits.
 import _ from 'lodash'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import ControlBase from './ControlBase.vue'
+import Fader from './Fader.vue'
 
 const DEFAULT_DEBOUNCE_MS = 50
-const KEY_STEP = 5
 
 const props = defineProps<{
   title: string
@@ -61,11 +60,6 @@ watch(
 
 onBeforeUnmount(clearReconcileTimeout)
 
-const rangeMin = computed(() => Math.max(0, Math.min(100, props.min ?? 0)))
-const rangeMax = computed(() => Math.max(rangeMin.value, Math.min(100, props.max ?? 100)))
-
-const clampToRange = (value: number): number => Math.round(Math.max(rangeMin.value, Math.min(rangeMax.value, value)))
-
 const commitDelay = props.debounceMs ?? DEFAULT_DEBOUNCE_MS
 
 const commit = _.debounce((value: number) => emit('update:modelValue', value), commitDelay, {
@@ -74,10 +68,9 @@ const commit = _.debounce((value: number) => emit('update:modelValue', value), c
   maxWait: commitDelay
 })
 
+// The fader already keeps the value within the range.
 const setValue = (value: number): void => {
-  const clamped = clampToRange(value)
-
-  localValue.value = clamped
+  localValue.value = value
 
   clearReconcileTimeout()
   reconcileTimeout = setTimeout(() => {
@@ -85,52 +78,14 @@ const setValue = (value: number): void => {
     reconcileTimeout = undefined
   }, RECONCILE_TIMEOUT_MS)
 
-  commit(clamped)
+  commit(value)
 }
 
-const trackRef = ref<HTMLElement>()
-
-// The knob's center travels between half the track height from each end, so the knob never sticks
-// out past the track - see the template's `--k`.
-const valueAt = (event: PointerEvent): number => {
-  const rect = trackRef.value!.getBoundingClientRect()
-  const radius = rect.height / 2
-
-  return ((event.clientX - rect.left - radius) / Math.max(rect.width - 2 * radius, 1)) * 100
-}
-
-// Pointer capture keeps the drag going when the pointer leaves the track, and the final value is
-// always committed on release (the leading-edge debounce above may have skipped the last move).
-const onPointerDown = (event: PointerEvent): void => {
-  // Left button only - right-click is reserved for context menus.
-  if (event.button !== 0 || !trackRef.value) return
-
-  event.preventDefault()
-  trackRef.value.setPointerCapture(event.pointerId)
-  setValue(valueAt(event))
-
-  const track = trackRef.value
-  const onMove = (e: PointerEvent): void => setValue(valueAt(e))
-  const onUp = (e: PointerEvent): void => {
-    commit.cancel()
-    emit('update:modelValue', clampToRange(valueAt(e)))
-    track.removeEventListener('pointermove', onMove)
-    track.removeEventListener('pointerup', onUp)
-    track.removeEventListener('pointercancel', onUp)
-  }
-
-  track.addEventListener('pointermove', onMove)
-  track.addEventListener('pointerup', onUp)
-  track.addEventListener('pointercancel', onUp)
-}
-
-const onKeydown = (event: KeyboardEvent): void => {
-  const delta = { ArrowRight: KEY_STEP, ArrowUp: KEY_STEP, ArrowLeft: -KEY_STEP, ArrowDown: -KEY_STEP }[event.key]
-
-  if (delta === undefined) return
-
-  event.preventDefault()
-  setValue(displayValue.value + delta)
+// The final value is always committed on release (the leading-edge debounce above may have skipped
+// the last move).
+const onChange = (value: number): void => {
+  commit.cancel()
+  emit('update:modelValue', value)
 }
 </script>
 
@@ -146,46 +101,13 @@ const onKeydown = (event: KeyboardEvent): void => {
       </span>
     </template>
 
-    <!-- Nested like the OFF/ON switch: the fill and the knob sit 4px inside the track, with corners
-    4px tighter than the track's, so every edge runs parallel. --k is the knob's size; its left edge
-    travels from 4px to (100% - 4px - --k), so its center stays half a track height from each end
-    (see valueAt). The fill always ends at the knob's far edge - the knob caps it, no seam. -->
-    <div
-      ref="trackRef"
-      role="slider"
-      tabindex="0"
-      :aria-label="title"
-      :aria-valuemin="rangeMin"
-      :aria-valuemax="rangeMax"
-      :aria-valuenow="Math.round(displayValue)"
-      class="relative h-(--tile-control) cursor-grab touch-none overflow-hidden rounded-field well [--k:calc(var(--tile-control)-0.5rem)] active:cursor-grabbing"
-      @pointerdown="onPointerDown"
-      @keydown="onKeydown"
-      @click.stop
-    >
-      <div
-        class="absolute inset-y-1 left-1 rounded-[calc(var(--radius-field)-0.25rem)] bg-linear-to-r from-secondary/30 to-secondary/85"
-        :style="{ width: `calc(var(--k) + (100% - 0.5rem - var(--k)) * ${displayValue / 100})` }"
-      />
-      <!-- Out-of-range parts of the track, measured along the same line the knob's center travels. -->
-      <div
-        v-if="rangeMin > 0"
-        class="pointer-events-none absolute inset-y-0 left-0 bg-black/35 bg-[repeating-linear-gradient(135deg,transparent_0_6px,rgb(255_255_255/0.08)_6px_12px)]"
-        :style="{ width: `calc(0.25rem + var(--k) / 2 + (100% - 0.5rem - var(--k)) * ${rangeMin / 100})` }"
-      />
-      <div
-        v-if="rangeMax < 100"
-        class="pointer-events-none absolute inset-y-0 right-0 bg-black/35 bg-[repeating-linear-gradient(135deg,transparent_0_6px,rgb(255_255_255/0.08)_6px_12px)]"
-        :style="{ width: `calc(0.25rem + var(--k) / 2 + (100% - 0.5rem - var(--k)) * ${(100 - rangeMax) / 100})` }"
-      />
-      <div
-        class="pointer-events-none absolute top-1 flex size-(--k) items-center justify-center gap-1 rounded-[calc(var(--radius-field)-0.25rem)] bg-white shadow-[0_2px_10px_rgb(0_0_0/0.35)]"
-        :style="{ left: `calc(0.25rem + (100% - 0.5rem - var(--k)) * ${displayValue / 100})` }"
-      >
-        <!-- Grip lines: says "drag me" without relying on a hover state. -->
-        <span class="h-[34%] w-0.5 rounded-full bg-black/20" />
-        <span class="h-[34%] w-0.5 rounded-full bg-black/20" />
-      </div>
-    </div>
+    <fader
+      :model-value="displayValue"
+      :label="title"
+      :range-min="min"
+      :range-max="max"
+      @update:model-value="setValue"
+      @change="onChange"
+    />
   </control-base>
 </template>

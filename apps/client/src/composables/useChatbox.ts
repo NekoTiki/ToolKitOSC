@@ -22,7 +22,7 @@ export const CHATBOX_KINDS: { value: ChatboxKind; label: string; types: ControlT
   { value: 'sliders', label: 'Sliders', types: ['slider'] },
   { value: 'toys', label: 'Toys', types: ['intiface-toy'] },
   { value: 'patterns', label: 'Toy patterns', types: ['intiface-pattern'] },
-  { value: 'shocks', label: 'Shocks and vibrations', types: ['open-shock-shocker'] },
+  { value: 'shocks', label: 'Shocks and vibrations', types: ['open-shock-shocker', 'open-shock-fixed', 'open-shock-choice'] },
   { value: 'presets', label: 'Presets', types: ['preset'] },
   { value: 'bhaptics', label: 'bHaptics', types: ['bhaptics'] },
   { value: 'owo', label: 'OWO', types: ['owo'] }

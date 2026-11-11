@@ -228,7 +228,7 @@ fn execute(
     // Automations can start from it. A shock that didn't go out (cooldown) doesn't count.
     if let Some(control) = control {
         let control_type = text(control, "type").map(str::to_owned);
-        if control_type.as_deref() != Some("open-shock-shocker") || outcome.shock.is_some() {
+        if !control_type.as_deref().is_some_and(crate::openshock::is_shocker) || outcome.shock.is_some() {
             crate::automations::event(
                 app,
                 &crate::automations::model::AppEvent::ViewerCommand { control_id: Some(control_id.to_owned()), control_type }

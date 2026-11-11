@@ -174,7 +174,10 @@ impl AppEvent {
                 AppEvent::ViewerCommand { control_id: id, control_type: kind }
             ) => {
                 control_id.as_ref().map_or(true, |c| Some(c) == id.as_ref())
-                    && control_type.as_ref().map_or(true, |t| Some(t) == kind.as_ref())
+                    // Every Shocker type counts as "a viewer sends a shock".
+                    && control_type.as_ref().map_or(true, |t| {
+                        kind.as_ref().is_some_and(|k| t == k || (crate::openshock::is_shocker(t) && crate::openshock::is_shocker(k)))
+                    })
             }
             (a, b) => a == b
         }
@@ -540,10 +543,10 @@ pub enum ControlRun {
 /// Which control types each way of running fits.
 fn run_fits(run: &ControlRun, control_type: &str) -> bool {
     match run {
-        ControlRun::Set { .. } => !matches!(control_type, "preset" | "open-shock-shocker" | "button"),
+        ControlRun::Set { .. } => !matches!(control_type, "preset" | "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice" | "button"),
         ControlRun::Toggle => matches!(control_type, "boolean" | "boolean-group"),
         ControlRun::Pulse { .. } => control_type == "intiface-toy",
-        ControlRun::Press => matches!(control_type, "preset" | "open-shock-shocker" | "button"),
+        ControlRun::Press => matches!(control_type, "preset" | "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice" | "button"),
         ControlRun::Hold { .. } => {
             matches!(control_type, "boolean" | "boolean-group" | "enum" | "step-enum" | "slider" | "intiface-toy" | "intiface-pattern")
         }
@@ -798,7 +801,7 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
         }
         // A shock step would set itself off again.
         Trigger::ShockSent => {
-            if automation.then.iter().any(|step| matches!(&step.action, Action::Control { control_type, .. } if control_type == "open-shock-shocker")) {
+            if automation.then.iter().any(|step| matches!(&step.action, Action::Control { control_type, .. } if crate::openshock::is_shocker(control_type))) {
                 return Err("When a shock goes out, it can't send another one.".into());
             }
         }

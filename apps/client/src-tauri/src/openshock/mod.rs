@@ -517,17 +517,35 @@ fn now_ms() -> u64 {
 }
 
 /// `floor(random × (max − min) + min)`, as the webview always rolled: `max` itself never comes up.
-fn roll(range: Option<&Value>) -> f64 {
+/// The three Shocker control types: rolled ("open-shock-shocker"), fixed, and the viewer's choice.
+pub fn is_shocker(kind: &str) -> bool {
+    matches!(kind, "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice")
+}
+
+fn bounds(range: Option<&Value>) -> (f64, f64) {
     let min = range.and_then(|r| r.get("min")).and_then(Value::as_f64).unwrap_or(0.0);
     let max = range.and_then(|r| r.get("max")).and_then(Value::as_f64).unwrap_or(min);
+    (min, max.max(min))
+}
+
+fn roll(range: Option<&Value>) -> f64 {
+    let (min, max) = bounds(range);
     (rand::random::<f64>() * (max - min) + min).floor()
 }
 
-/// Runs a Shocker control: checks its cooldown, rolls the intensity and duration, shows the roll on
-/// its tile (the `shock-value` event, which the share page gets too), and sends the shock once the
-/// reel animation is over. Returns what was rolled, with the shockers' names, or `None` when
+/// A viewer's choice, kept within the control's range. No choice (an automation, the overlay, an
+/// assistant) rolls, like a random pick.
+fn chosen(range: Option<&Value>, choice: Option<&Value>) -> f64 {
+    let (min, max) = bounds(range);
+    choice.and_then(Value::as_f64).filter(|value| value.is_finite()).map(|value| value.round().clamp(min, max)).unwrap_or_else(|| roll(range))
+}
+
+/// Runs a Shocker control: checks its cooldown, picks the intensity and duration (rolled, fixed, or
+/// the viewer's choice from `command`, by the control's type), shows them on its tile (the
+/// `shock-value` event, which the share page gets too), and sends the shock, after the reel
+/// animation for a rolled one. Returns what was sent, with the shockers' names, or `None` when
 /// OpenShock isn't available or the control is cooling down.
-pub fn fire_control(app: &AppHandle, control: &Value, viewer_name: Option<String>) -> Option<Value> {
+pub fn fire_control(app: &AppHandle, control: &Value, command: &Value, viewer_name: Option<String>) -> Option<Value> {
     if !available(app) {
         return None;
     }
@@ -539,11 +557,22 @@ pub fn fire_control(app: &AppHandle, control: &Value, viewer_name: Option<String
 
     let mode = serde_json::from_value::<ControlType>(control.get("mode")?.clone()).ok()?;
     let shockers: Vec<String> = serde_json::from_value(control.get("shockers")?.clone()).ok()?;
-    let intensity = roll(control.get("intensity"));
-    let duration = roll(control.get("duration"));
-    let animation = control.get("animationDuration").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64;
+    let kind = control.get("type").and_then(Value::as_str).unwrap_or_default();
+    let (intensity_range, duration_range) = (control.get("intensity"), control.get("duration"));
+    let (intensity, duration) = match kind {
+        "open-shock-fixed" => (bounds(intensity_range).0, bounds(duration_range).0),
+        "open-shock-choice" => (chosen(intensity_range, command.get("intensity")), chosen(duration_range, command.get("duration"))),
+        _ => (roll(intensity_range), roll(duration_range))
+    };
+    // Only a rolled shock plays the reels first; the others go out at once.
+    let animation = if kind != "open-shock-shocker" {
+        0
+    } else {
+        control.get("animationDuration").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64
+    };
     let cooldown = control.get("cooldown").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as u64;
-    let cooldown_end = now + cooldown + animation;
+    // The cooldown starts once the shock is over: after the reels, then the shock itself.
+    let cooldown_end = now + animation + duration.clamp(0.0, 65535.0) as u64 + cooldown;
 
     let names: Vec<String> = {
         let mut inner = openshock(app).inner.lock().unwrap();
@@ -648,7 +677,7 @@ impl crate::addons::Addon for Addon {
             badges: &["shocks"],
             needs: &[],
             needs_any: &[],
-            control_types: &["open-shock-shocker"],
+            control_types: &["open-shock-shocker", "open-shock-fixed", "open-shock-choice"],
             automation_kinds: &["shock-sent"],
             pages: &[]
         }
@@ -692,6 +721,19 @@ impl crate::addons::Addon for Addon {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_viewer_choice_stays_within_the_range() {
+        let range = json!({ "min": 10, "max": 40 });
+        assert_eq!(chosen(Some(&range), Some(&json!(25.4))), 25.0);
+        assert_eq!(chosen(Some(&range), Some(&json!(99))), 40.0);
+        assert_eq!(chosen(Some(&range), Some(&json!(-5))), 10.0);
+        // No choice rolls within the range.
+        let rolled = chosen(Some(&range), None);
+        assert!((10.0..=40.0).contains(&rolled));
+        let rolled = chosen(Some(&range), Some(&json!("loud")));
+        assert!((10.0..=40.0).contains(&rolled));
+    }
 
     #[test]
     fn rest_json_names_the_type() {

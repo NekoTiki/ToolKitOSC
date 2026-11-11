@@ -10,6 +10,7 @@ import ControlEnum from './ControlEnum.vue'
 import ControlIntifacePattern from './ControlIntifacePattern.vue'
 import ControlIntifaceToy from './ControlIntifaceToy.vue'
 import ControlOpenShock from './ControlOpenShock.vue'
+import ControlOpenShockPick from './ControlOpenShockPick.vue'
 import ControlOwo from './ControlOwo.vue'
 import ControlPreset from './ControlPreset.vue'
 import ControlSlider from './ControlSlider.vue'
@@ -57,6 +58,8 @@ defineEmits<{
 // Every control type that can go unavailable has its own reason, shown on the tile itself.
 const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
   'open-shock-shocker': "OpenShock isn't set up",
+  'open-shock-fixed': "OpenShock isn't set up",
+  'open-shock-choice': "OpenShock isn't set up",
   'intiface-toy': 'Intiface or its toys are offline',
   'intiface-pattern': 'Intiface or its toys are offline',
   preset: 'This preset no longer exists',
@@ -155,6 +158,17 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :intensity="control.intensity"
       :duration="control.duration"
       @run="$emit('command', { type: 'open-shock-shocker' })"
+    />
+    <control-open-shock-pick
+      v-else-if="control.type === 'open-shock-fixed' || control.type === 'open-shock-choice'"
+      :control-id="control.id"
+      :title="control.name"
+      :mode="control.mode"
+      :choice="control.type === 'open-shock-choice'"
+      :intensity="control.intensity"
+      :duration="control.duration"
+      :wide="control.size === 'wide'"
+      @run="$emit('command', { type: control.type, ...$event })"
     />
     <control-intiface-toy
       v-else-if="control.type === 'intiface-toy'"
