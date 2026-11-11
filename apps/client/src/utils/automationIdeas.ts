@@ -1,6 +1,7 @@
 import type { Automation, AutomationStep, AutomationTrigger, AvatarParameterTrigger, Board, ParameterCondition, ParameterValueType } from '@renderer/lib/tauri-bridge'
 import { newAutomation, newStep } from '@renderer/utils/automations'
 import type { ControlTypes } from '@toolkitosc/shared-ui'
+import { isOpenShockType } from '@toolkitosc/shared-ui'
 
 // Ready-made automations to start from ("Start from an idea" on the Automations page). Each one
 // is built with what you have (your first toy, profile, board output...), and isn't offered when
@@ -49,6 +50,7 @@ const avatarWhen = (context: IdeaContext, valueType: ParameterValueType, conditi
 })
 
 const firstControl = (context: IdeaContext, type: ControlTypes) => context.controls.find((c) => c.type === type)
+const firstShocker = (context: IdeaContext) => context.controls.find((c) => isOpenShockType(c.type))
 
 export const AUTOMATION_IDEAS: AutomationIdea[] = [
   {
@@ -98,7 +100,7 @@ export const AUTOMATION_IDEAS: AutomationIdea[] = [
     icons: ['i-lucide-zap', 'i-lucide-message-square'],
     kinds: ['app-event', 'chatbox'],
     build: (context) =>
-      firstControl(context, 'open-shock-shocker')
+      firstShocker(context)
         ? automation(
             context,
             'Thank for shocks',

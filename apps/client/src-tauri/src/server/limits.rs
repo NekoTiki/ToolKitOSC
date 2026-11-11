@@ -220,7 +220,20 @@ pub fn sanitize_command(control: &Value, command: &Value) -> Option<Value> {
                 .is_some_and(|patterns| patterns.iter().any(|pattern| pattern.get("id").and_then(Value::as_str) == Some(id)));
             (allowed && !is_option_disabled(limits, &json!(id))).then(|| json!({ "type": kind, "value": id }))
         }
-        "open-shock-shocker" | "preset" | "button" => Some(json!({ "type": kind })),
+        // Only a control that lets viewers choose passes their choice on; fire_control keeps it within
+        // the control's ranges.
+        "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice" => {
+            let mut sanitized = json!({ "type": kind });
+            if kind == "open-shock-choice" {
+                for key in ["intensity", "duration"] {
+                    if let Some(choice) = command.get(key).filter(|choice| choice.as_f64().is_some_and(f64::is_finite)) {
+                        sanitized[key] = choice.clone();
+                    }
+                }
+            }
+            Some(sanitized)
+        }
+        "preset" | "button" => Some(json!({ "type": kind })),
         "bhaptics" => {
             let action = value?.as_str()?;
             // Nothing above the control's own cap or the profile's max is ever played.

@@ -212,7 +212,7 @@ pub fn describe(control: Option<&serde_json::Value>, kind: &str, name: &str, val
                 None => (format!("played a pattern on {name}"), String::new())
             }
         }
-        "open-shock-shocker" => {
+        "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice" => {
             let vibrate = control.and_then(|c| c.get("mode")).and_then(serde_json::Value::as_str) == Some("Vibrate");
             let intensity = value.and_then(|v| v.get("intensity")).and_then(serde_json::Value::as_f64);
             let duration = value.and_then(|v| v.get("duration")).and_then(serde_json::Value::as_f64);
@@ -232,7 +232,7 @@ pub fn describe(control: Option<&serde_json::Value>, kind: &str, name: &str, val
 /// The kind of toast a control type makes.
 pub fn kind_of(control_type: &str) -> Kind {
     match control_type {
-        "open-shock-shocker" | "owo" => Kind::Shock,
+        "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice" | "owo" => Kind::Shock,
         "intiface-toy" | "intiface-pattern" => Kind::Toy,
         _ => Kind::Control
     }

@@ -156,7 +156,7 @@ const fire = (): void => {
   <control-base
     :title="title"
     kind="danger"
-    :class="{ 'shock-rolling': rolling, 'shock-hit': hit }"
+    :class="[{ 'shock-rolling': rolling, 'shock-hit': hit }, { '[--ui-error:var(--ui-info)]': mode === 'Vibrate' }]"
   >
     <template #badge>
       <span

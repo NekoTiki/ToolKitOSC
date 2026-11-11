@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PatternSparkline from '@renderer/components/patterns/PatternSparkline.vue'
+import CheckChip from '@renderer/components/ui/CheckChip.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import type { IntifacePatternDefinition } from '@renderer/composables/useIntifacePatterns'
 import { allPatterns } from '@renderer/composables/useIntifacePatterns'
@@ -80,19 +81,13 @@ const toggle = (pattern: IntifacePatternDefinition, checked: boolean): void => {
       </ULink>
     </template>
     <div class="grid gap-2 sm:grid-cols-2">
-      <!-- Explicit, per-checkbox id: see IntifaceFields.vue's actuator checkboxes for why one of
-      these sitting inside a single UFormField needs its own id rather than none at all. -->
-      <label
+      <CheckChip
         v-for="(pattern, index) in patterns"
+        :id="`intiface-pattern-${index}`"
         :key="pattern.id"
-        :for="`intiface-pattern-${index}`"
-        class="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-default bg-(--aurora-well) px-3"
+        :model-value="isAllowed(pattern.id)"
+        @update:model-value="toggle(pattern, $event)"
       >
-        <UCheckbox
-          :id="`intiface-pattern-${index}`"
-          :model-value="isAllowed(pattern.id)"
-          @update:model-value="toggle(pattern, !!$event)"
-        />
         <PatternSparkline
           :pattern="pattern"
           :mine="!!pattern.durationMs"
@@ -107,7 +102,7 @@ const toggle = (pattern: IntifacePatternDefinition, checked: boolean): void => {
           variant="soft"
           size="sm"
         />
-      </label>
+      </CheckChip>
     </div>
   </UFormField>
 

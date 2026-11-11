@@ -74,7 +74,7 @@ fn unavailable(control: &Value, live: &impl Live) -> (bool, Option<String>) {
         return (true, Some(format!("{addon} is off")));
     }
     match kind {
-        "open-shock-shocker" => {
+        "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice" => {
             let offline = live.openshock_available() && live.hubs_offline(&strings(control, "shockers"));
             (!live.openshock_available() || offline, offline.then(|| "Hub offline".to_owned()))
         }

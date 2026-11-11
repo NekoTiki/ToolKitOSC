@@ -93,7 +93,7 @@ impl Session {
     fn run_control(&self, Parameters(request): Parameters<RunRequest>) -> Result<String, String> {
         let control = crate::setup::find_control(&self.app, &request.group_id, &request.control_id).ok_or("No such control: get the ids from list_controls")?;
         let kind = control.get("type").cloned().unwrap_or(Value::Null);
-        if kind == "open-shock-shocker" {
+        if kind.as_str().is_some_and(crate::openshock::is_shocker) {
             return Err("Shocker controls aren't something this tool fires".to_owned());
         }
         let mut message = request.extra;
@@ -109,10 +109,12 @@ impl Session {
     #[tool(description = "Fires one of the host's OpenShock shocker controls, with the intensity and duration the control rolls, its cooldown, and what the active profile allows assistants")]
     fn fire_shocker(&self, Parameters(ShockRequest { group_id, control_id }): Parameters<ShockRequest>) -> Result<String, String> {
         let control = crate::setup::find_control(&self.app, &group_id, &control_id).ok_or("No such control: get the ids from list_controls")?;
-        if control.get("type").and_then(Value::as_str) != Some("open-shock-shocker") {
+        let kind = control.get("type").and_then(Value::as_str).filter(|kind| crate::openshock::is_shocker(kind));
+        let Some(kind) = kind else {
             return Err("That isn't a shocker control: use run_control".to_owned());
-        }
-        let message = json!({ "groupId": group_id, "controlId": control_id, "type": "open-shock-shocker" });
+        };
+        // No intensity or duration: a Viewer Shocker rolls within its ranges.
+        let message = json!({ "groupId": group_id, "controlId": control_id, "type": kind });
         let accepted = crate::server::viewer_commands::assistant(&self.app, &self.name(), &message)?;
         if accepted.get("value").is_none_or(Value::is_null) {
             return Err("It didn't fire: the shocker is cooling down, or OpenShock can't be reached".to_owned());

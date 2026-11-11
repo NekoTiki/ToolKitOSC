@@ -133,7 +133,7 @@ pub fn run(app: &AppHandle, control: &Value, command: &Value, viewer_name: Optio
             }
         }
         "preset" => run_preset(app, text(control, "presetId").unwrap_or_default()),
-        "open-shock-shocker" => outcome.shock = crate::openshock::fire_control(app, control, viewer_name),
+        kind if crate::openshock::is_shocker(kind) => outcome.shock = crate::openshock::fire_control(app, control, command, viewer_name),
         // Toys only move while Intiface is connected.
         "intiface-toy" if crate::intiface::connected(app) => {
             let level = value.and_then(Value::as_f64).unwrap_or(0.0);

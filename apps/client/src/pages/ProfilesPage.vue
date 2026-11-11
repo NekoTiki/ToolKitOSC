@@ -10,7 +10,7 @@ import type { GroupOverrides, LockedControlGroup } from '@renderer/composables/u
 import { groupOverrideCounts, profileCounts, profileSummary, useLockedControls } from '@renderer/composables/useLockedControls'
 import { useViewerGroups } from '@renderer/composables/useViewerGroups'
 import type { ControlLimits, ControlType, ViewerGroupRule } from '@toolkitosc/shared-ui'
-import { CONTROL_TYPE_LABELS, isOptionDisabled, LIMITABLE_CONTROL_TYPES, limitRange, normalizeLimits } from '@toolkitosc/shared-ui'
+import { CONTROL_TYPE_LABELS, isOpenShockControl, isOptionDisabled, LIMITABLE_CONTROL_TYPES, limitRange, normalizeLimits } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
@@ -282,7 +282,7 @@ const isActive = computed(() => !!profileId.value && currentLockedControlsGroup.
 
 // Shockers show their mode (shock or vibrate) rather than a generic icon.
 const controlIcon = (control: ControlType): string =>
-  control.type === 'open-shock-shocker' ? (control.mode === 'Shock' ? 'material-symbols:electric-bolt' : 'i-lucide-waves') : control.icon || 'i-lucide-square'
+  isOpenShockControl(control) ? (control.mode === 'Shock' ? 'material-symbols:electric-bolt' : 'i-lucide-waves') : control.icon || 'i-lucide-square'
 
 const save = (): boolean => {
   if (!draft.value) return false

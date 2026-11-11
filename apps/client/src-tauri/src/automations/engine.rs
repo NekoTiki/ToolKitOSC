@@ -1346,6 +1346,9 @@ mod tests {
         assert!(sends(&state.on_event(&toggle, &TestEnv)).is_empty());
         let shock = AppEvent::ViewerCommand { control_id: Some("s".into()), control_type: Some("open-shock-shocker".into()) };
         assert_eq!(sends(&state.on_event(&shock, &TestEnv)).len(), 1);
+        // A fixed or viewer-chosen shock is a shock too.
+        let chosen = AppEvent::ViewerCommand { control_id: Some("s".into()), control_type: Some("open-shock-choice".into()) };
+        assert_eq!(sends(&state.on_event(&chosen, &TestEnv)).len(), 1);
         assert!(sends(&state.on_event(&AppEvent::FirstViewer, &TestEnv)).is_empty());
     }
 

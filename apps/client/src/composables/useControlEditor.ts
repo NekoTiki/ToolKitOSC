@@ -20,6 +20,7 @@ import type {
   SliderControl,
   StepEnumControl
 } from '@toolkitosc/shared-ui'
+import { isOpenShockType } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
 import type { ComputedRef, Ref, WritableComputedRef } from 'vue'
 import { computed, ref, watch } from 'vue'
@@ -51,6 +52,15 @@ type AnyDraft = Partial<
   inputs?: BooleanGroupControl['inputs'] | BooleanEnumControl['inputs']
 }
 
+function shockerDefaults(m: AnyDraft, intensity: OpenShockControl['intensity'], duration: OpenShockControl['duration']): void {
+  m.mode = 'Shock'
+  m.shockers = []
+  m.intensity = intensity
+  m.duration = duration
+  m.cooldown = 1000
+  m.animationDuration = 3000
+}
+
 const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
   boolean: (m) => (m.inputAddress = ''),
   button: (m) => (m.inputAddress = ''),
@@ -65,14 +75,10 @@ const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
   },
   'boolean-group': (m) => (m.inputs = [{ inputAddress: '' }]),
   'boolean-enum': (m) => (m.inputs = [{ id: getUUID(), name: '', icon: '', inputAddress: { true: [''], false: [''] } }]),
-  'open-shock-shocker': (m) => {
-    m.mode = 'Shock'
-    m.shockers = []
-    m.intensity = { min: 0, max: 100 }
-    m.duration = { min: 300, max: 1000 }
-    m.cooldown = 1000
-    m.animationDuration = 3000
-  },
+  'open-shock-shocker': (m) => shockerDefaults(m, { min: 0, max: 100 }, { min: 300, max: 1000 }),
+  // Fixed keeps each range's min and max equal: the host sends the minimum.
+  'open-shock-fixed': (m) => shockerDefaults(m, { min: 25, max: 25 }, { min: 1000, max: 1000 }),
+  'open-shock-choice': (m) => shockerDefaults(m, { min: 0, max: 50 }, { min: 300, max: 3000 }),
   'intiface-toy': (m) => (m.actuators = []),
   'intiface-pattern': (m) => {
     m.actuators = []
@@ -173,7 +179,8 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
       if (!value || value === model.value.type) return
 
       // Keep what carries over between types (name, icon, tile width, pin), reset the rest.
-      const { name, icon, size, pinned, id, inputAddress, reverse } = model.value
+      const { name, icon, size, pinned, id, inputAddress, reverse, mode, shockers, cooldown } = model.value
+      const fromShocker = isOpenShockType(model.value.type)
       const sameKind = !!model.value.type && ADDRESS_TYPE[model.value.type] === ADDRESS_TYPE[value]
 
       model.value = { id, name, icon, size, pinned, type: value } as AnyDraft
@@ -181,6 +188,8 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
       // The parameter too, when the new type takes the same kind (Toggle to Button, Enum to Step Enum).
       if (sameKind && inputAddress && model.value.inputAddress !== undefined) model.value.inputAddress = inputAddress
       if (reverse && (value === 'boolean' || value === 'button')) model.value.reverse = reverse
+      // From one Shocker type to another: the shockers, mode and cooldown too.
+      if (fromShocker && isOpenShockType(value)) Object.assign(model.value, { mode, shockers, cooldown })
       errors.value = {}
     }
   })
@@ -232,7 +241,7 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
 
   const previewUnavailable = computed(
     () =>
-      (model.value.type === 'open-shock-shocker' && !openShockAvailable.value) ||
+      (isOpenShockType(model.value.type) && !openShockAvailable.value) ||
       ((model.value.type === 'intiface-toy' || model.value.type === 'intiface-pattern') && intifaceUnavailable.value)
   )
 
@@ -260,6 +269,8 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
         if (!m.inputs?.length || (m.inputs as BooleanEnumControl['inputs']).some((input) => !input.name.trim())) next.inputs = 'Every option needs a name.'
         break
       case 'open-shock-shocker':
+      case 'open-shock-fixed':
+      case 'open-shock-choice':
         if (!m.shockers?.length) next.shockers = 'Pick at least one shocker.'
         if (m.intensity && m.intensity.min > m.intensity.max) next.range = 'Minimum intensity is higher than the maximum.'
         else if (m.duration && m.duration.min > m.duration.max) next.range = 'Minimum duration is longer than the maximum.'

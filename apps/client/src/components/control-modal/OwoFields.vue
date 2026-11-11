@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CheckChip from '@renderer/components/ui/CheckChip.vue'
 import type { OwoControl, OwoMuscle } from '@toolkitosc/shared-ui'
 import { OWO_MIN_COOLDOWN_MS, OWO_MUSCLES, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
@@ -47,19 +48,14 @@ const fromSlider = (value: number | number[] | undefined, apply: (value: number)
       :label="side === 'front' ? 'Front muscles viewers can reach' : 'Back muscles viewers can reach'"
     >
       <div class="flex flex-wrap gap-2">
-        <label
+        <CheckChip
           v-for="muscle in ALL.filter((m) => OWO_MUSCLES[m].side === side)"
+          :id="`owo-muscle-${muscle}`"
           :key="muscle"
-          :for="`owo-muscle-${muscle}`"
-          class="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-default bg-(--aurora-well) px-3"
-        >
-          <UCheckbox
-            :id="`owo-muscle-${muscle}`"
-            :model-value="muscles.includes(muscle)"
-            @update:model-value="muscles = toggle(muscles, muscle, !!$event)"
-          />
-          <span :class="muscles.includes(muscle) ? 'text-highlighted' : 'text-muted'">{{ OWO_MUSCLES[muscle].label }}</span>
-        </label>
+          :label="OWO_MUSCLES[muscle].label"
+          :model-value="muscles.includes(muscle)"
+          @update:model-value="muscles = toggle(muscles, muscle, $event)"
+        />
       </div>
     </UFormField>
     <UFormField
@@ -67,19 +63,14 @@ const fromSlider = (value: number | number[] | undefined, apply: (value: number)
       description="Buttons on the tile. Viewers pick one, then tap a muscle."
     >
       <div class="flex flex-wrap gap-2">
-        <label
+        <CheckChip
           v-for="sensation in OWO_SENSATIONS"
+          :id="`owo-sensation-${sensation.id}`"
           :key="sensation.id"
-          :for="`owo-sensation-${sensation.id}`"
-          class="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-default bg-(--aurora-well) px-3"
-        >
-          <UCheckbox
-            :id="`owo-sensation-${sensation.id}`"
-            :model-value="sensations.includes(sensation.id)"
-            @update:model-value="sensations = toggle(sensations, sensation.id, !!$event)"
-          />
-          <span :class="sensations.includes(sensation.id) ? 'text-highlighted' : 'text-muted'">{{ sensation.label }}</span>
-        </label>
+          :label="sensation.label"
+          :model-value="sensations.includes(sensation.id)"
+          @update:model-value="sensations = toggle(sensations, sensation.id, $event)"
+        />
       </div>
     </UFormField>
     <div class="grid gap-x-7 gap-y-4 sm:grid-cols-2">

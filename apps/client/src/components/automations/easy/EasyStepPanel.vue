@@ -32,6 +32,7 @@ import {
   stepKindsFor
 } from '@renderer/utils/automations'
 import { EASY_DELAYS, EASY_PULSES, seconds } from '@renderer/utils/automationSentence'
+import { isOpenShockControl, isOpenShockType } from '@toolkitosc/shared-ui'
 import { computed } from 'vue'
 
 // Easy mode, one thing the automation does: what kind of thing, which one, and how, in plain
@@ -167,7 +168,7 @@ const valueKind = computed((): 'bool' | 'choice' | 'level' => {
 const controlWays = computed(() => {
   if (!controlStep.value) return []
   const type = controlStep.value.controlType
-  const press = picked.value?.type === 'open-shock-shocker' ? (picked.value.mode === 'Vibrate' ? 'Vibrate' : 'Shock') : 'Apply'
+  const press = isOpenShockControl(picked.value) ? (picked.value.mode === 'Vibrate' ? 'Vibrate' : 'Shock') : 'Apply'
   return waysFor(controlRunsFor(props.condition, type), valueKind.value === 'bool', {
     set: type === 'intiface-toy' ? 'Leave it on' : 'Set it',
     toggle: 'The other way',
@@ -463,7 +464,7 @@ const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind ===
           />
         </UFormField>
         <p
-          v-if="picked?.type === 'open-shock-shocker'"
+          v-if="isOpenShockType(picked?.type)"
           class="text-sm text-muted"
         >
           Uses the shocker's own intensity, duration and cooldown.

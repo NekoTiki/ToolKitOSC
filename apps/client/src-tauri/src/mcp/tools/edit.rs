@@ -101,8 +101,8 @@ pub struct DeleteRequest {
 }
 
 /// Every control type, as in shared-ui's `KNOWN_CONTROL_TYPES`.
-const CONTROL_TYPES: [&str; 13] =
-    ["boolean", "boolean-group", "boolean-enum", "enum", "slider", "step-enum", "button", "open-shock-shocker", "intiface-toy", "intiface-pattern", "preset", "bhaptics", "owo"];
+const CONTROL_TYPES: [&str; 15] =
+    ["boolean", "boolean-group", "boolean-enum", "enum", "slider", "step-enum", "button", "open-shock-shocker", "open-shock-fixed", "open-shock-choice", "intiface-toy", "intiface-pattern", "preset", "bhaptics", "owo"];
 
 /// A stored control of these groups, to change.
 fn find_mut<'a>(groups: &'a mut [Value], group_id: &str, control_id: &str) -> Option<&'a mut Value> {
@@ -337,12 +337,16 @@ mod tests {
 
     #[test]
     fn control_types_match_the_docs() {
-        // Every `const` in the generated schema is a control's `type`.
+        // Every `const` in the generated schema is a control's `type`, and so is every value of a
+        // `type` that several controls share (the three Shockers).
         fn consts(value: &Value, found: &mut std::collections::BTreeSet<String>) {
             match value {
                 Value::Object(map) => {
                     if let Some(Value::String(kind)) = map.get("const") {
                         found.insert(kind.clone());
+                    }
+                    if let Some(Value::Array(kinds)) = map.get("properties").and_then(|p| p.get("type")).and_then(|t| t.get("enum")) {
+                        found.extend(kinds.iter().filter_map(Value::as_str).map(str::to_owned));
                     }
                     map.values().for_each(|value| consts(value, found));
                 }

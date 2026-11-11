@@ -13,6 +13,8 @@ export type ControlTypes =
   | 'step-enum'
   | 'button'
   | 'open-shock-shocker'
+  | 'open-shock-fixed'
+  | 'open-shock-choice'
   | 'intiface-toy'
   | 'intiface-pattern'
   | 'preset'
@@ -41,6 +43,8 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   // already groups these under an "OpenShock"/"Intiface" heading (see ControlModal.vue), so
   // repeating the brand name in the label itself was redundant there.
   'open-shock-shocker': 'Shocker',
+  'open-shock-fixed': 'Fixed Shocker',
+  'open-shock-choice': 'Viewer Shocker',
   'intiface-toy': 'Toy',
   'intiface-pattern': 'Toy Pattern',
   preset: 'Preset',
@@ -58,6 +62,8 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   // A toggle that switches itself back.
   button: 'primary',
   'open-shock-shocker': 'error',
+  'open-shock-fixed': 'error',
+  'open-shock-choice': 'error',
   'intiface-toy': 'success',
   // Reuses 'enum''s 'warning' - it's a chip-picker built on the exact same UX, and we're already
   // out of unique semantic colors (see the comment above).
@@ -218,8 +224,19 @@ export interface ButtonControl extends BaseControl {
   inputAddress: string
 }
 
+// The three Shocker types share one shape and differ in how a press picks the intensity and
+// duration. 'open-shock-shocker' rolls within the ranges behind a slot-machine animation.
+// 'open-shock-fixed' always sends the minimums (the editor keeps each range's min and max equal).
+// 'open-shock-choice' lets whoever presses choose within the ranges; a press that doesn't choose
+// (an automation, the overlay, an assistant) rolls.
+export const OPEN_SHOCK_TYPES = ['open-shock-shocker', 'open-shock-fixed', 'open-shock-choice'] as const
+
+export type OpenShockType = (typeof OPEN_SHOCK_TYPES)[number]
+
+export const isOpenShockType = (type: string | null | undefined): type is OpenShockType => OPEN_SHOCK_TYPES.includes(type as OpenShockType)
+
 export interface OpenShockControl extends BaseControl {
-  type: 'open-shock-shocker'
+  type: OpenShockType
   mode: 'Shock' | 'Vibrate'
   shockers: string[]
   intensity: {
@@ -472,6 +489,8 @@ export type ControlType =
   | BhapticsControl
   | OwoControl
 
+export const isOpenShockControl = (control: ControlType | null | undefined): control is OpenShockControl => isOpenShockType(control?.type)
+
 export interface BaseControlCommand {
   groupId: string
   controlId: string
@@ -513,8 +532,12 @@ export interface ButtonControlCommand extends BaseControlCommand {
   type: 'button'
 }
 
+// `intensity` (%) and `duration` (ms) are the viewer's choice on an 'open-shock-choice' control;
+// the desktop app ignores them on the others, and clamps them to the control's ranges.
 export interface OpenShockControlCommand extends BaseControlCommand {
-  type: 'open-shock-shocker'
+  type: OpenShockType
+  intensity?: number
+  duration?: number
 }
 
 export interface IntifaceToyControlCommand extends BaseControlCommand {

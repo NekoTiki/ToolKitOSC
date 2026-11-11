@@ -141,7 +141,7 @@ fn tile(app: &AppHandle, group_id: &str, control: &Value) -> Option<Tile> {
         "slider" => TileKind::Level { value: text(control, "inputAddress").and_then(|address| value(app, address)).unwrap_or(0.0) },
         "intiface-toy" => TileKind::Level { value: crate::controls::toy_level(text(control, "id")?) },
         "preset" | "button" => TileKind::Press,
-        "open-shock-shocker" | "owo" => TileKind::Hold,
+        "open-shock-shocker" | "open-shock-fixed" | "open-shock-choice" | "owo" => TileKind::Hold,
         _ => TileKind::AppOnly
     };
     let kind = expected(app, text(control, "id")?, control).unwrap_or(kind);

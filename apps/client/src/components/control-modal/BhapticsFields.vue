@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CheckChip from '@renderer/components/ui/CheckChip.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import type { BhapticsControl, BhapticsPosition } from '@toolkitosc/shared-ui'
 import { BHAPTICS_EFFECTS } from '@toolkitosc/shared-ui'
@@ -168,19 +169,14 @@ const fromSlider = (value: number | number[] | undefined, apply: (value: number)
       description="Buttons under the grid. Each plays across every side the tile has."
     >
       <div class="flex flex-wrap gap-2">
-        <label
+        <CheckChip
           v-for="effect in BHAPTICS_EFFECTS"
+          :id="`bhaptics-effect-${effect.id}`"
           :key="effect.id"
-          :for="`bhaptics-effect-${effect.id}`"
-          class="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-default bg-(--aurora-well) px-3"
-        >
-          <UCheckbox
-            :id="`bhaptics-effect-${effect.id}`"
-            :model-value="effects?.includes(effect.id) ?? false"
-            @update:model-value="toggleEffect(effect.id, !!$event)"
-          />
-          <span :class="effects?.includes(effect.id) ? 'text-highlighted' : 'text-muted'">{{ effect.label }}</span>
-        </label>
+          :label="effect.label"
+          :model-value="effects?.includes(effect.id) ?? false"
+          @update:model-value="toggleEffect(effect.id, $event)"
+        />
       </div>
     </UFormField>
     <p class="text-sm text-dimmed">

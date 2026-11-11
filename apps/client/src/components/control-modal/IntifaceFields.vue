@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import CheckChip from '@renderer/components/ui/CheckChip.vue'
 import type { IntifaceDevice } from '@renderer/composables/useIntiface'
+import { api } from '@renderer/lib/tauri-bridge'
 import type { IntifaceToyControl } from '@toolkitosc/shared-ui'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps<{
   devices: Map<number, IntifaceDevice>
@@ -47,10 +49,40 @@ const deviceList = computed(() => {
 const isSelected = (deviceIndex: number, actuatorIndex: number): boolean =>
   actuators.value.some((a) => a.deviceIndex === deviceIndex && a.actuatorIndex === actuatorIndex)
 
-// Toys are listed one per group with a checkbox per actuator (vibrate, rotate, oscillate, ...) -
-// a toy with a single motor is effectively "select this toy", a toy with several asks about each
-// one independently, per the task's requirement, rather than only letting the whole toy be
-// selected as one unit.
+// Toys are listed one per group with a chip per actuator (vibrate, rotate, oscillate, ...): a toy
+// with a single motor is effectively "select this toy", a toy with several asks about each one.
+// Motors of the same kind are numbered (Vibrate 1, Vibrate 2), since Intiface often names them alike.
+const actuatorLabel = (device: IntifaceDevice, actuator: IntifaceDevice['actuators'][number]): string => {
+  const same = device.actuators.filter((a) => a.description === actuator.description)
+
+  return same.length > 1 ? `${actuator.description} ${same.indexOf(actuator) + 1}` : actuator.description
+}
+
+// Test: runs one motor gently for a second, to find out which one it is.
+const TEST_LEVEL = 0.5
+const TEST_MS = 1000
+const testing = ref<string | null>(null)
+let testTimer: ReturnType<typeof setTimeout> | undefined
+let testStop: (() => void) | undefined
+
+const test = (device: IntifaceDevice, actuator: IntifaceDevice['actuators'][number]): void => {
+  testStop?.()
+
+  const target = [{ deviceIndex: device.index, actuatorIndex: actuator.index, actuatorType: actuator.actuatorType }]
+
+  testing.value = `${device.index}-${actuator.index}`
+  void api.toysSet(target, TEST_LEVEL)
+  testStop = () => {
+    clearTimeout(testTimer)
+    void api.toysSet(target, 0)
+    testing.value = null
+    testStop = undefined
+  }
+  testTimer = setTimeout(() => testStop?.(), TEST_MS)
+}
+
+onBeforeUnmount(() => testStop?.())
+
 const toggle = (
   device: IntifaceDevice,
   actuator: IntifaceDevice['actuators'][number],
@@ -81,7 +113,8 @@ const toggle = (
   <UFormField
     label="Toys"
     :required="required ?? true"
-    :description="description ?? 'Pick which actuators this slider controls. Toys with more than one motor (vibrate, rotate, oscillate, ...) list each one separately.'"
+    :ui="{ container: 'mt-3' }"
+    :description="description ?? 'Pick the motors this control drives. A toy with several lists each one; the button beside it runs it for a second so you can tell which is which.'"
   >
     <div
       v-if="deviceList.length === 0"
@@ -91,15 +124,15 @@ const toggle = (
     </div>
     <div
       v-else
-      class="flex flex-col gap-3"
+      class="flex flex-wrap items-start gap-x-6 gap-y-4"
     >
       <div
         v-for="{ device, online } in deviceList"
         :key="device.index"
-        class="flex flex-col gap-1.5 rounded-lg border border-default p-3"
+        class="grid gap-2"
       >
         <div class="flex items-center gap-2">
-          <p class="text-sm font-medium">
+          <p class="text-sm font-medium text-highlighted">
             {{ device.name }}
           </p>
           <UBadge
@@ -110,18 +143,31 @@ const toggle = (
             label="Offline"
           />
         </div>
-        <!-- Explicit, per-checkbox id: without one, Nuxt UI's useFormField() has every checkbox
-        here inherit the *same* id from the single enclosing UFormField, so their <label for>
-        all point at the first checkbox's input - clicking any row's label text then toggles
-        only the first actuator, not the one actually clicked. -->
-        <UCheckbox
-          v-for="actuator in device.actuators"
-          :id="`intiface-actuator-${device.index}-${actuator.index}`"
-          :key="actuator.index"
-          :model-value="isSelected(device.index, actuator.index)"
-          :label="actuator.description"
-          @update:model-value="toggle(device, actuator, !!$event)"
-        />
+        <div class="flex flex-wrap gap-2">
+          <CheckChip
+            v-for="actuator in device.actuators"
+            :id="`intiface-actuator-${device.index}-${actuator.index}`"
+            :key="actuator.index"
+            :label="actuatorLabel(device, actuator)"
+            :model-value="isSelected(device.index, actuator.index)"
+            @update:model-value="toggle(device, actuator, $event)"
+          >
+            <template #end>
+              <UButton
+                :disabled="!online"
+                icon="mdi:vibrate"
+                color="neutral"
+                variant="ghost"
+                size="lg"
+                class="mr-1.5 rounded-full"
+                :aria-label="`Test ${actuatorLabel(device, actuator)} on ${device.name}`"
+                :title="online ? 'Test: runs it for a second' : 'Connect the toy to test it'"
+                :loading="testing === `${device.index}-${actuator.index}`"
+                @click="test(device, actuator)"
+              />
+            </template>
+          </CheckChip>
+        </div>
       </div>
     </div>
   </UFormField>

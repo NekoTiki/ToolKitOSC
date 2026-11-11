@@ -1,5 +1,5 @@
 import type { ControlType, ControlTypes } from '../types/controls'
-import { INTIFACE_PATTERN_OFF_ID, OWO_SENSATIONS, VIEWER_PATTERN_ID } from '../types/controls'
+import { INTIFACE_PATTERN_OFF_ID, isOpenShockControl, OWO_SENSATIONS, VIEWER_PATTERN_ID } from '../types/controls'
 import type { OpenShockCommandResult } from '../types/openShock'
 import type { CommandValue } from '../types/protocol'
 
@@ -57,8 +57,10 @@ export const describeCommand = (control: ControlType | undefined, type: ControlT
       }
       break
 
-    case 'open-shock-shocker': {
-      const mode = control?.type === 'open-shock-shocker' && control.mode === 'Vibrate' ? 'vibration' : 'shock'
+    case 'open-shock-shocker':
+    case 'open-shock-fixed':
+    case 'open-shock-choice': {
+      const mode = isOpenShockControl(control) && control.mode === 'Vibrate' ? 'vibration' : 'shock'
 
       return isOpenShockCommandValue(value) ? `sent a ${mode} · ${formatCommandValue(value)}` : `sent a ${mode}`
     }

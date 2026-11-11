@@ -12,7 +12,7 @@ import type { DescribeContext } from '@renderer/utils/automations'
 import { CONDITIONS, formatClock, formatMinutes, parameterName, toysLabel, triggerCondition, WEEKDAYS } from '@renderer/utils/automations'
 import { builtinGuardText, builtinWhenText } from '@renderer/utils/builtinParameters'
 import type { ControlType } from '@toolkitosc/shared-ui'
-import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
+import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, isOpenShockControl, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
 
 // An automation as one plain sentence ("When Boop turns on, buzz Lush at 60% for 2 s, any time,
 // every time."), for the list and the Easy editor. Names and values are `strong`, so the page can
@@ -192,7 +192,7 @@ const controlStep = (step: ControlAction, context?: DescribeContext): Rich => {
     case 'toggle':
       return rich`flip ${name}`
     case 'press':
-      if (control?.type === 'open-shock-shocker') return control.mode === 'Vibrate' ? rich`vibrate with ${name}` : rich`shock with ${name}`
+      if (isOpenShockControl(control)) return control.mode === 'Vibrate' ? rich`vibrate with ${name}` : rich`shock with ${name}`
       return step.controlType === 'preset' ? rich`apply ${name}` : rich`press ${name}`
     case 'follow':
       return [...(toy ? rich`buzz ${name} following it` : rich`move ${name} with it`), ...range(run.min, run.max)]

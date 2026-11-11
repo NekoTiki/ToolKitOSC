@@ -1216,7 +1216,11 @@
               "type": "string"
             },
             "type": {
-              "const": "open-shock-shocker",
+              "enum": [
+                "open-shock-shocker",
+                "open-shock-fixed",
+                "open-shock-choice"
+              ],
               "type": "string"
             },
             "unavailable": {
