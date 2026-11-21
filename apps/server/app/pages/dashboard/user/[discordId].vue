@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ControlStatsResult, StatsResult } from '~/types/adminStats'
+import type { AddonUsage, ControlStatsResult, StatsResult } from '~/types/adminStats'
 import { DAY_RANGES } from '~/types/adminStats'
 
 interface UserRow {
@@ -19,6 +19,7 @@ interface UserStatsResponse {
   ai: StatsResult
   controls: ControlStatsResult
   shareLinks: { main: string | null; custom: string | null }
+  addons: AddonUsage[]
 }
 
 const route = useRoute()
@@ -114,6 +115,11 @@ const refreshAll = (): void => {
         :discord-id="discordId"
         :links="userStats.shareLinks"
         @changed="refreshAll"
+      />
+
+      <AdminUserAddonsCard
+        v-if="userStats"
+        :addons="userStats.addons"
       />
 
       <div class="flex flex-wrap items-center gap-2.5">

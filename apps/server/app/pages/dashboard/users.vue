@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AccessEntry } from '~/composables/useAdminUserAccess'
 import { accessEntryName } from '~/composables/useAdminUserAccess'
+import { addonInfo } from '~/types/adminStats'
 
 // Every account that has ever signed in, with its AI access at a glance. Managing one account
 // (credits, model choice, note, revoke) happens on its own page; granting access - including to
@@ -213,7 +214,7 @@ const submitGrant = async (): Promise<void> => {
           v-for="user in filteredUsers"
           :key="user.discordId"
           :to="`/dashboard/user/${user.discordId}`"
-          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-2.5 transition-colors hover:bg-(--aurora-glass) md:grid-cols-[auto_minmax(0,1fr)_9rem_7rem_8rem_auto]"
+          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-2.5 transition-colors hover:bg-(--aurora-glass) md:grid-cols-[auto_minmax(0,1fr)_7.5rem_9rem_7rem_8rem_auto]"
         >
           <UAvatar
             :src="user.avatarUrl ?? undefined"
@@ -223,6 +224,18 @@ const submitGrant = async (): Promise<void> => {
           <span class="grid min-w-0">
             <b class="truncate font-medium text-highlighted">{{ accessEntryName(user) }}</b>
             <small class="truncate font-mono text-[11.5px] text-muted">{{ user.discordId }}</small>
+          </span>
+          <span
+            class="flex flex-wrap gap-1 text-muted max-md:hidden"
+            :aria-label="user.addons?.length ? `Add-ons: ${user.addons.map((id) => addonInfo(id).name).join(', ')}` : 'No add-ons'"
+          >
+            <UIcon
+              v-for="id in user.addons"
+              :key="id"
+              :name="addonInfo(id).icon"
+              class="size-4"
+              :title="addonInfo(id).name"
+            />
           </span>
           <NuxtTime
             class="text-sm text-muted max-md:hidden"
