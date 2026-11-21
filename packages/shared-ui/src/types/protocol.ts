@@ -230,6 +230,12 @@ export interface ControlsUpdateMessage {
   groups: ControlGroup[]
 }
 
+// Every add-on this OS can run, for the admin dashboard. Ids and counts only, never device names.
+// `devices` is null when the add-on is off or has no devices (leash, overlay…).
+export interface AddonStatsMessage {
+  addons: { id: string; enabled: boolean; devices: number | null }[]
+}
+
 export interface ClientListEntry {
   peerId: string
   ip: string
@@ -345,6 +351,7 @@ export type HostToServerMessage =
   // appVersion/os: for the admin dashboard; older apps leave them out.
   | WsEnvelope<'auth-token', { token: string; protocolVersion: number; appVersion?: string; os?: string }>
   | WsEnvelope<'controls-update', ControlsUpdateMessage>
+  | WsEnvelope<'addon-stats', AddonStatsMessage>
   | WsEnvelope<'args-initial', Record<string, OSCArg[]>>
   | WsEnvelope<'args-update', ArgUpdateMessage>
   | WsEnvelope<'theme-update', ThemeUpdateMessage>

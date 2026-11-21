@@ -85,6 +85,10 @@ pub trait Addon: Sync {
     /// For the first launch with add-ons: whether you were already using it, so it stays on.
     /// May block (OpenShock reads the password store).
     fn was_in_use(&self, app: &AppHandle) -> bool;
+    /// How many devices it has, for the share server's admin stats. None when it has no devices.
+    fn devices(&self, _app: &AppHandle) -> Option<usize> {
+        None
+    }
 }
 
 /// Every add-on, in the order the Add-ons page lists them.
@@ -108,12 +112,14 @@ fn find(id: &str) -> Option<&'static dyn Addon> {
 pub struct Addons {
     file: Mutex<AddonsFile>,
     /// Hand-offs `adopt` got before `start` loaded the switches. None once they're loaded.
-    queued: Mutex<Option<Vec<String>>>
+    queued: Mutex<Option<Vec<String>>>,
+    /// The last `addon-stats` sent, so nothing goes out twice.
+    sent_stats: Mutex<Option<serde_json::Value>>
 }
 
 impl Default for Addons {
     fn default() -> Self {
-        Self { file: Mutex::new(AddonsFile::default()), queued: Mutex::new(Some(Vec::new())) }
+        Self { file: Mutex::new(AddonsFile::default()), queued: Mutex::new(Some(Vec::new())), sent_stats: Mutex::new(None) }
     }
 }
 
@@ -273,6 +279,38 @@ pub fn changed(app: &AppHandle) {
     let _ = app.emit("addons-update", view(app));
     // Whether controls are available follows add-ons and their connections.
     crate::setup::refresh(app);
+    send_stats(app, false);
+}
+
+/// Every add-on this OS can run: its id, whether it's on and how many devices it has. Ids and
+/// counts only, never names.
+fn stats(app: &AppHandle) -> serde_json::Value {
+    let enabled = addons(app).file.lock().unwrap().enabled_ids();
+    let list: Vec<serde_json::Value> = available()
+        .map(|addon| {
+            let id = addon.manifest().id;
+            let on = enabled.contains(id);
+            serde_json::json!({ "id": id, "enabled": on, "devices": if on { addon.devices(app) } else { None } })
+        })
+        .collect();
+    serde_json::json!({ "addons": list })
+}
+
+/// Tells the share server which add-ons are on, for its admin dashboard. `again` sends it even
+/// when nothing changed: the server just signed us in.
+pub fn send_stats(app: &AppHandle, again: bool) {
+    if !crate::server::authed(app) {
+        return;
+    }
+    let stats = stats(app);
+    {
+        let mut sent = addons(app).sent_stats.lock().unwrap();
+        if !again && sent.as_ref() == Some(&stats) {
+            return;
+        }
+        *sent = Some(stats.clone());
+    }
+    crate::server::send_message(app, "addon-stats", stats);
 }
 
 /// Turns an add-on on or off, saves it, and starts or stops it. Turning one off stops its devices
