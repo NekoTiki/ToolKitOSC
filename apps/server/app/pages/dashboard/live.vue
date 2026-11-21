@@ -15,16 +15,7 @@ const rooms = computed(() =>
   [...(data.value?.rooms ?? [])].sort((a, b) => Number(b.online) - Number(a.online) || b.viewers - a.viewers)
 )
 
-// "Online for 2 h 15 min", ticking once a minute.
-const now = useNow({ interval: 60_000 })
-const onlineFor = (since: number): string => {
-  const minutes = Math.max(0, Math.floor((now.value.getTime() - since) / 60_000))
-  const hours = Math.floor(minutes / 60)
-
-  if (!hours) return minutes ? `${minutes} min` : 'less than a minute'
-
-  return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`
-}
+const onlineFor = useOnlineFor()
 
 const totals = computed(() => ({
   hosts: rooms.value.filter((room) => room.online).length,

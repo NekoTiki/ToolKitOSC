@@ -23,6 +23,8 @@ const name = computed(() => userStats.value?.user.displayName || userStats.value
 
 useHead({ title: () => `${name.value} · Dashboard` })
 
+const onlineFor = useOnlineFor()
+
 const base = `/dashboard/user/${discordId}`
 // `active` set by hand: the Account link is the parent path, which every subpage starts with.
 const sections = computed<NavigationMenuItem[]>(() =>
@@ -73,10 +75,15 @@ const sections = computed<NavigationMenuItem[]>(() =>
           </h1>
           <p class="truncate font-mono text-xs text-muted">
             {{ discordId }}<template v-if="userStats">
-              · last seen <NuxtTime
-                :datetime="userStats.user.lastSeenAt"
-                relative
-              />
+              <template v-if="userStats.onlineSince">
+                · <span class="text-success">online for {{ onlineFor(userStats.onlineSince) }}</span>
+              </template>
+              <template v-else>
+                · last seen <NuxtTime
+                  :datetime="userStats.user.lastSeenAt"
+                  relative
+                />
+              </template>
               <template v-if="userStats.user.appVersion">
                 · app {{ userStats.user.appVersion }}{{ userStats.user.os ? ` on ${userStats.user.os}` : '' }}
               </template>

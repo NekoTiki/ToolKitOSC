@@ -59,4 +59,6 @@ export interface UserStatsResponse {
   controls: ControlStatsResult
   shareLinks: { main: string | null; custom: string | null }
   addons: AddonUsage[]
+  // When their app connected, while it's connected.
+  onlineSince: number | null
 }

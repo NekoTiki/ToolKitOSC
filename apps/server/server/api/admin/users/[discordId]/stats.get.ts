@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { getDb } from '~~/server/db'
 import { users } from '~~/server/db/schema'
 import { existingShareLinks } from '~~/server/db/shareLinks'
+import { hostList } from '~~/server/routes/host'
 import { userAddonUsage } from '~~/server/utils/addonStats'
 import { queryStats } from '~~/server/utils/ai/generationLog'
 import { statsQuerySchema } from '~~/server/utils/ai/schemas'
@@ -30,5 +31,8 @@ export default defineEventHandler(async (event) => {
 
   if (!user) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
-  return { user, ai, controls, shareLinks, addons }
+  // When their app connected, while it's connected.
+  const onlineSince = hostList.get(discordId)?.connectedAt ?? null
+
+  return { user, ai, controls, shareLinks, addons, onlineSince }
 })
