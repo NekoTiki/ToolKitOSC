@@ -1,7 +1,7 @@
 import { useAddons } from '@renderer/composables/useAddons'
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { BHAPTICS_POSITIONS, useBhaptics } from '@renderer/composables/useBhaptics'
-import { useIntiface } from '@renderer/composables/useIntiface'
+import { THIS_PC, toyKey, useIntiface } from '@renderer/composables/useIntiface'
 import { useOwo } from '@renderer/composables/useOwo'
 import type {
   AvatarHaptics,
@@ -66,14 +66,20 @@ const save = (): void => {
   }, SAVE_DELAY_MS)
 }
 
-// "device-actuator", as the page's routes use it, "b-<position>-<region>" for bHaptics gear, or
-// "o-<region>" for OWO muscles.
-export const actuatorKey = (actuator: { deviceIndex: number; actuatorIndex: number; bhaptics?: HapticsBhapticsTarget; owo?: HapticsOwoTarget }): string =>
+// "server:device-actuator", as the page's routes use it, "b-<position>-<region>" for bHaptics gear,
+// or "o-<region>" for OWO muscles.
+export const actuatorKey = (actuator: {
+  server?: string
+  deviceIndex: number
+  actuatorIndex: number
+  bhaptics?: HapticsBhapticsTarget
+  owo?: HapticsOwoTarget
+}): string =>
   actuator.bhaptics
     ? `b-${actuator.bhaptics.position}-${actuator.bhaptics.region}`
     : actuator.owo
       ? `o-${actuator.owo.region}`
-      : `${actuator.deviceIndex}-${actuator.actuatorIndex}`
+      : `${toyKey(actuator.server, actuator.deviceIndex)}-${actuator.actuatorIndex}`
 
 // Each OWO region, the muscles it fires and what it's called.
 export const OWO_REGIONS: Record<HapticsOwoTarget['region'], { label: string; muscles: OwoMuscle[] }> = {
@@ -157,6 +163,8 @@ export const parseZone = (name: string): { kind: HapticsZoneKind; name: string }
 
 export interface HapticsToy {
   key: string
+  // The Intiface server the toy is on (unused for bHaptics and OWO).
+  server: string
   deviceIndex: number
   actuatorIndex: number
   actuatorType: string
@@ -196,7 +204,7 @@ export function useAvatarHaptics(): {
   removeOverride: (key: string) => void
 } {
   const { avatarDetails } = useAvatarDetails()
-  const { devices } = useIntiface()
+  const { devices, toyServerName } = useIntiface()
   const { state: bhapticsState } = useBhaptics()
   const { state: owoState } = useOwo()
 
@@ -219,7 +227,8 @@ export function useAvatarHaptics(): {
     for (const device of devices.value.values()) {
       for (const actuator of device.actuators) {
         list.push({
-          key: actuatorKey({ deviceIndex: device.index, actuatorIndex: actuator.index }),
+          key: actuatorKey({ server: device.server, deviceIndex: device.index, actuatorIndex: actuator.index }),
+          server: device.server,
           deviceIndex: device.index,
           actuatorIndex: actuator.index,
           actuatorType: actuator.actuatorType,
@@ -241,6 +250,7 @@ export function useAvatarHaptics(): {
 
           list.push({
             key: actuatorKey({ deviceIndex: 0, actuatorIndex: 0, bhaptics: target }),
+            server: THIS_PC,
             deviceIndex: 0,
             actuatorIndex: 0,
             actuatorType: 'bHaptics',
@@ -261,6 +271,7 @@ export function useAvatarHaptics(): {
 
         list.push({
           key: actuatorKey({ deviceIndex: 0, actuatorIndex: 0, owo: target }),
+          server: THIS_PC,
           deviceIndex: 0,
           actuatorIndex: 0,
           actuatorType: 'OWO',
@@ -283,6 +294,7 @@ export function useAvatarHaptics(): {
       list.push({
         key,
         ...actuator,
+        server: actuator.server ?? THIS_PC,
         ...(actuator.bhaptics && { actuatorType: 'bHaptics', deviceName: bhapticsTargetName(actuator.bhaptics) }),
         ...(actuator.owo && { actuatorType: 'OWO', deviceName: OWO_REGIONS[actuator.owo.region].label }),
         connected: false,
@@ -293,8 +305,13 @@ export function useAvatarHaptics(): {
     return list
   })
 
-  const toyName = (toy: HapticsToy): string =>
-    toy.oneOfMany ? `${toy.deviceName} · ${toy.actuatorDescription || `motor ${toy.actuatorIndex + 1}`}` : toy.deviceName
+  // With several Intiface servers, a toy also says which one it's on.
+  const toyName = (toy: HapticsToy): string => {
+    const name = toy.oneOfMany ? `${toy.deviceName} · ${toy.actuatorDescription || `motor ${toy.actuatorIndex + 1}`}` : toy.deviceName
+    const server = toy.bhaptics || toy.owo ? '' : toyServerName(toy.server)
+
+    return server ? `${name} · ${server}` : name
+  }
 
   // The worn avatar's zones: every one its parameters declare, and any that sent a value.
   const zones = computed(() => {
@@ -329,7 +346,7 @@ export function useAvatarHaptics(): {
   }
 
   const outputToEdit = (target: HapticsSettings, toy: HapticsToy): HapticsOutput => {
-    const actuator = _.pick(toy, ['deviceIndex', 'actuatorIndex', 'actuatorType', 'deviceName', 'actuatorDescription', 'bhaptics', 'owo'])
+    const actuator = _.pick(toy, ['server', 'deviceIndex', 'actuatorIndex', 'actuatorType', 'deviceName', 'actuatorDescription', 'bhaptics', 'owo'])
     const fresh = (): HapticsOutput => ({ actuator, sources: [], maxStrength: 1 })
 
     if (scope.value === 'avatar' && avatarId.value) {

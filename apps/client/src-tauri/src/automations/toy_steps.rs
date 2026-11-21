@@ -36,7 +36,7 @@ fn actuators(app: &AppHandle, toys: &[ToyMotor]) -> Vec<ActuatorRef> {
         return crate::intiface::actuators(app);
     }
     toys.iter()
-        .map(|toy| ActuatorRef { device_index: toy.device_index, actuator_index: toy.actuator_index, actuator_type: toy.actuator_type.clone() })
+        .map(|toy| ActuatorRef { server: toy.server.clone(), device_index: toy.device_index, actuator_index: toy.actuator_index, actuator_type: toy.actuator_type.clone() })
         .collect()
 }
 

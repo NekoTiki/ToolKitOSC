@@ -62,6 +62,9 @@ impl Default for AvatarHaptics {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Actuator {
+    /// The Intiface server the toy is on. Saved before there were several: this PC.
+    #[serde(default = "crate::intiface::this_pc")]
+    pub server: String,
     pub device_index: u32,
     pub actuator_index: u32,
     pub actuator_type: String,
@@ -74,9 +77,9 @@ pub struct Actuator {
 }
 
 /// Which actuator an output is for, to match a global output with an avatar's own.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActuatorKey {
-    Intiface(u32, u32),
+    Intiface(String, u32, u32),
     Bhaptics(Position, Region),
     Owo(OwoRegion)
 }
@@ -87,7 +90,7 @@ impl Actuator {
             Some(target) => ActuatorKey::Bhaptics(target.position, target.region),
             None => match &self.owo {
                 Some(target) => ActuatorKey::Owo(target.region),
-                None => ActuatorKey::Intiface(self.device_index, self.actuator_index)
+                None => ActuatorKey::Intiface(self.server.clone(), self.device_index, self.actuator_index)
             }
         }
     }
@@ -427,7 +430,7 @@ mod tests {
         let settings: HapticsSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.priority, TouchPriority { threshold: 0.02, grace_ms: 1500 });
         let output = &settings.outputs[0];
-        assert_eq!(output.actuator.key(), ActuatorKey::Intiface(2, 1));
+        assert_eq!(output.actuator.key(), ActuatorKey::Intiface(crate::intiface::THIS_PC.into(), 2, 1));
         let HapticsSource::SpsSocket(socket) = &output.sources[0] else { panic!("not a socket") };
         assert!(socket.my_plugs && socket.other_plugs && socket.other_hands && !socket.own_hands);
         assert_eq!(socket.shape, Shape { follow_movement: false, dead_zone: 0.1, scale: 1.0 });

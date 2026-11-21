@@ -1,4 +1,4 @@
-//! One task per Intiface URL while it's switched on: connect, handshake, list devices, start
+//! One task per Intiface server while the add-on is on: connect, handshake, list devices, start
 //! scanning, read batteries every 30 s, and try again 3 s after any drop or failure. A failure
 //! before the handshake is diagnosed (see `super::diagnose`), which is also where auto-launch
 //! happens.
@@ -29,24 +29,24 @@ enum End {
     Done
 }
 
-pub fn spawn(app: AppHandle, id: u64, url: String) -> mpsc::UnboundedSender<LinkCommand> {
+pub fn spawn(app: AppHandle, server: String, id: u64, url: String) -> mpsc::UnboundedSender<LinkCommand> {
     let (tx, rx) = mpsc::unbounded_channel();
-    tauri::async_runtime::spawn(run(app, id, url, rx));
+    tauri::async_runtime::spawn(run(app, server, id, url, rx));
     tx
 }
 
-async fn run(app: AppHandle, id: u64, url: String, mut commands: mpsc::UnboundedReceiver<LinkCommand>) {
+async fn run(app: AppHandle, server: String, id: u64, url: String, mut commands: mpsc::UnboundedReceiver<LinkCommand>) {
     loop {
-        let end = session(&app, id, &url, &mut commands).await;
-        super::set_devices(&app, id, |devices| devices.clear());
+        let end = session(&app, &server, id, &url, &mut commands).await;
+        super::set_devices(&app, &server, id, |devices| devices.clear());
 
         match end {
             End::Done => return,
             End::Dropped => {
-                tracing::info!("Lost the connection to Intiface");
-                super::set_status(&app, id, Status::Connecting);
+                tracing::info!("Lost the connection to Intiface at {url}");
+                super::set_status(&app, &server, id, Status::Connecting);
             }
-            End::Failed(reason) => super::diagnose(&app, id, &url, reason).await
+            End::Failed(reason) => super::diagnose(&app, &server, id, &url, reason).await
         }
 
         let retry = sleep(RECONNECT_DELAY);
@@ -82,11 +82,11 @@ impl Session {
     }
 }
 
-async fn session(app: &AppHandle, id: u64, url: &str, commands: &mut mpsc::UnboundedReceiver<LinkCommand>) -> End {
+async fn session(app: &AppHandle, server: &str, id: u64, url: &str, commands: &mut mpsc::UnboundedReceiver<LinkCommand>) -> End {
     // Keep showing launching, refused or busy across retries instead of flickering every 3 s.
-    let shown = super::intiface(app).inner.lock().unwrap().status;
+    let shown = super::shown_status(app, server, id);
     if !matches!(shown, Some(Status::Launching | Status::Refused | Status::Busy)) {
-        super::set_status(app, id, Status::Connecting);
+        super::set_status(app, server, id, Status::Connecting);
     }
 
     let socket = match crate::net::connect(url, CONNECT_TIMEOUT).await {
@@ -111,7 +111,7 @@ async fn session(app: &AppHandle, id: u64, url: &str, commands: &mut mpsc::Unbou
     loop {
         tokio::select! {
             _ = battery.tick(), if handshake_done => {
-                if session.send(battery_reads(app)).await.is_err() {
+                if session.send(battery_reads(app, server)).await.is_err() {
                     return End::Dropped;
                 }
             }
@@ -127,7 +127,7 @@ async fn session(app: &AppHandle, id: u64, url: &str, commands: &mut mpsc::Unbou
                         Incoming::ServerInfo => {
                             handshake_done = true;
                             tracing::info!("Connected to Intiface at {url}");
-                            super::set_status(app, id, Status::Connected);
+                            super::set_status(app, server, id, Status::Connected);
                             // Bluetooth toys only show up once the server scans for them.
                             let start = vec![
                                 protocol::message("RequestDeviceList", json!({})),
@@ -138,9 +138,9 @@ async fn session(app: &AppHandle, id: u64, url: &str, commands: &mut mpsc::Unbou
                             }
                         }
                         Incoming::DeviceList(infos) => {
-                            super::set_devices(app, id, |devices| {
+                            super::set_devices(app, server, id, |devices| {
                                 devices.clear();
-                                for device in infos.iter().map(protocol::DeviceInfo::to_device) {
+                                for device in infos.iter().map(|info| info.to_device(server)) {
                                     if !device.actuators.is_empty() {
                                         devices.insert(device.index, device);
                                     }
@@ -149,19 +149,19 @@ async fn session(app: &AppHandle, id: u64, url: &str, commands: &mut mpsc::Unbou
                             reads = true;
                         }
                         Incoming::DeviceAdded(info) => {
-                            let device = info.to_device();
+                            let device = info.to_device(server);
                             if !device.actuators.is_empty() {
                                 tracing::info!("Toy connected: {}", device.name);
-                                super::set_devices(app, id, |devices| {
+                                super::set_devices(app, server, id, |devices| {
                                     devices.insert(device.index, device);
                                 });
                                 reads = true;
                             }
                         }
-                        Incoming::DeviceRemoved(index) => super::set_devices(app, id, |devices| {
+                        Incoming::DeviceRemoved(index) => super::set_devices(app, server, id, |devices| {
                             devices.remove(&index);
                         }),
-                        Incoming::Battery { device, level } => super::set_devices(app, id, |devices| {
+                        Incoming::Battery { device, level } => super::set_devices(app, server, id, |devices| {
                             if let Some(device) = devices.get_mut(&device) {
                                 device.battery = Some(level);
                             }
@@ -178,7 +178,7 @@ async fn session(app: &AppHandle, id: u64, url: &str, commands: &mut mpsc::Unbou
                     }
                 }
                 // A battery level isn't pushed by the server, so ask whenever the list changes.
-                if reads && session.send(battery_reads(app)).await.is_err() {
+                if reads && session.send(battery_reads(app, server)).await.is_err() {
                     return End::Dropped;
                 }
             }
@@ -197,6 +197,6 @@ async fn session(app: &AppHandle, id: u64, url: &str, commands: &mut mpsc::Unbou
     }
 }
 
-fn battery_reads(app: &AppHandle) -> Vec<Value> {
-    super::devices(app).iter().filter_map(protocol::battery_read).collect()
+fn battery_reads(app: &AppHandle, server: &str) -> Vec<Value> {
+    super::server_devices(app, server).iter().filter_map(protocol::battery_read).collect()
 }

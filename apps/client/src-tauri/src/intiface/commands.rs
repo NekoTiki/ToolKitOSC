@@ -13,10 +13,21 @@ pub fn intiface_migrate(app: AppHandle, url: Option<String>, enabled: Option<boo
     super::migrate(&app, url, enabled, auto_launch);
 }
 
-/// Empty or missing goes back to the default URL.
+/// Adds an Intiface server by address and connects to it. Returns its id.
 #[tauri::command]
-pub fn intiface_set_url(app: AppHandle, url: Option<String>) {
-    super::set_url(&app, url);
+pub fn intiface_add_server(app: AppHandle, label: String, host: String, port: u16) -> Result<String, String> {
+    super::add_server(&app, label, host, port)
+}
+
+/// Renames a server, or moves it to a new address.
+#[tauri::command]
+pub fn intiface_update_server(app: AppHandle, id: String, label: String, host: String, port: u16) -> Result<(), String> {
+    super::update_server(&app, &id, label, host, port)
+}
+
+#[tauri::command]
+pub fn intiface_remove_server(app: AppHandle, id: String) -> Result<(), String> {
+    super::remove_server(&app, &id)
 }
 
 #[tauri::command]

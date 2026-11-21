@@ -1,9 +1,10 @@
-import type { IntifaceDevice, IntifaceState, IntifaceStatus, ToyActuatorRef, ToyTouched } from '@renderer/lib/tauri-bridge'
-import { api } from '@renderer/lib/tauri-bridge'
+import type { IntifaceDevice, IntifaceServer, IntifaceState, ToyActuatorRef, ToyTouched } from '@renderer/lib/tauri-bridge'
+import { api, THIS_PC } from '@renderer/lib/tauri-bridge'
 import type { ComputedRef } from 'vue'
 import { computed, ref } from 'vue'
 
-export type { IntifaceActuator, IntifaceDevice, IntifaceStatus } from '@renderer/lib/tauri-bridge'
+export type { IntifaceActuator, IntifaceDevice, IntifaceServer, IntifaceStatus } from '@renderer/lib/tauri-bridge'
+export { THIS_PC } from '@renderer/lib/tauri-bridge'
 
 // Where the webview kept these before Rust took over (see src-tauri/src/intiface). Handed over
 // once, then removed.
@@ -11,12 +12,13 @@ const LEGACY_URL_KEY = 'intiface_url'
 const LEGACY_ENABLED_KEY = 'intiface_enabled'
 const LEGACY_AUTO_LAUNCH_KEY = 'intiface_autoLaunch'
 
-// The connection to Intiface runs in Rust (src-tauri/src/intiface), so toys keep their timing
-// while this window is hidden and keep going through a reload. Status, as Rust reports it:
+// The connections to Intiface run in Rust (src-tauri/src/intiface), one per server you added, so
+// toys keep their timing while this window is hidden and keep going through a reload. Each
+// server's status, as Rust reports it:
 // 'disabled': the Intiface toys add-on is off (Settings > Add-ons), the default.
 // 'connecting': a connection attempt is in flight, including retries.
 // 'connected': the handshake succeeded. Fail-closed: only this counts as available.
-// 'error': nothing is listening at the URL; a retry is still scheduled.
+// 'error': nothing is listening at the address; a retry is still scheduled.
 // 'refused': something is listening but wouldn't accept us (e.g. another app is connected).
 // 'busy': nothing is listening, but Intiface Central is running here: busy with another client,
 // or its server is stopped.
@@ -29,19 +31,23 @@ const state = ref<IntifaceState | null>(null)
 api.onIntifaceState((value) => (state.value = value))
 void api.intifaceState().then((value) => (state.value ??= value))
 
-// The actuators avatar touch drives right now ("device:actuator"). Viewers wait on them, so their
-// toy and pattern tiles read Paused.
+// A toy's key: indexes are only unique within one server. Refs saved before there were several
+// servers have none: this PC.
+export const toyKey = (server: string | undefined, deviceIndex: number): string => `${server ?? THIS_PC}:${deviceIndex}`
+
+// The actuators avatar touch drives right now. Viewers wait on them, so their toy and pattern
+// tiles read Paused.
 const touched = ref<Set<string>>(new Set())
-const touchKey = (deviceIndex: number, actuatorIndex: number): string => `${deviceIndex}:${actuatorIndex}`
+const touchKey = (server: string | undefined, deviceIndex: number, actuatorIndex: number): string => `${toyKey(server, deviceIndex)}:${actuatorIndex}`
 const setTouched = (list: ToyTouched[]): void => {
-  touched.value = new Set(list.map((actuator) => touchKey(actuator.deviceIndex, actuator.actuatorIndex)))
+  touched.value = new Set(list.map((actuator) => touchKey(actuator.server, actuator.deviceIndex, actuator.actuatorIndex)))
 }
 
 api.onToysState(({ touched }) => setTouched(touched))
 void api.toysTouched().then(setTouched)
 
 export const isTouched = (actuators: ToyActuatorRef[]): boolean =>
-  actuators.some((actuator) => touched.value.has(touchKey(actuator.deviceIndex, actuator.actuatorIndex)))
+  actuators.some((actuator) => touched.value.has(touchKey(actuator.server, actuator.deviceIndex, actuator.actuatorIndex)))
 
 const legacyUrl = localStorage.getItem(LEGACY_URL_KEY)
 const legacyEnabled = localStorage.getItem(LEGACY_ENABLED_KEY)
@@ -58,37 +64,55 @@ if (legacyUrl !== null || legacyEnabled !== null || legacyAutoLaunch !== null) {
     .catch((error) => console.error('Could not move the Intiface settings to the app:', error))
 }
 
-const url = computed(() => state.value?.url ?? '')
+const DEFAULT_PORT = 12345
+const MAX_LAUNCH_ATTEMPTS = 5
+
+// How a server is called everywhere: your name for it, else its address (the port only when it
+// isn't Intiface's default).
+export const serverName = (server: Pick<IntifaceServer, 'label' | 'host' | 'port'>): string =>
+  server.label || (server.port === (state.value?.defaultPort ?? DEFAULT_PORT) ? server.host : `${server.host}:${server.port}`)
+
 const enabled = computed(() => state.value?.enabled ?? false)
-const status = computed<IntifaceStatus>(() => state.value?.status ?? 'disabled')
-const devices = computed(() => new Map((state.value?.devices ?? []).map((device) => [device.index, device] as const)))
+const servers = computed(() => state.value?.servers ?? [])
+const serversById = computed(() => new Map(servers.value.map((server) => [server.id, server] as const)))
+const devices = computed(
+  () => new Map(servers.value.flatMap((server) => (server.status === 'connected' ? server.devices : [])).map((device) => [toyKey(device.server, device.index), device] as const))
+)
 const knownDevices = computed(() => state.value?.knownDevices ?? [])
 const installed = computed(() => state.value?.installed ?? false)
 const autoLaunch = computed(() => state.value?.autoLaunch ?? false)
-const launchAttempts = computed(() => state.value?.launchAttempts ?? 0)
-const refusedReason = computed(() => state.value?.refusedReason ?? '')
-const isAvailable = computed(() => status.value === 'connected')
+const isAvailable = computed(() => servers.value.some((server) => server.status === 'connected'))
+// Toys only say which server they're on once there's more than one to tell apart.
+const showServers = computed(() => servers.value.length > 1 || new Set(knownDevices.value.map((device) => device.server)).size > 1)
 
-const DEFAULT_INTIFACE_URL = 'ws://localhost:12345'
-const MAX_LAUNCH_ATTEMPTS = 5
+// The server a toy is on, by name, or '' while there's only one.
+const toyServerName = (server: string | undefined): string => {
+  if (!showServers.value) return ''
+  const found = serversById.value.get(server ?? THIS_PC)
+
+  return found ? serverName(found) : 'Removed server'
+}
 
 export function useIntiface(): {
-  url: ComputedRef<string>
-  defaultUrl: string
-  isCustomUrl: ComputedRef<boolean>
-  setUrl: (value?: string) => void
   enabled: ComputedRef<boolean>
-  status: ComputedRef<IntifaceStatus>
+  servers: ComputedRef<IntifaceServer[]>
+  defaultPort: number
+  addServer: (label: string, host: string, port: number) => Promise<string>
+  updateServer: (id: string, label: string, host: string, port: number) => Promise<void>
+  removeServer: (id: string) => Promise<void>
+  // At least one server is connected.
   isAvailable: ComputedRef<boolean>
-  devices: ComputedRef<Map<number, IntifaceDevice>>
+  // Every toy on a connected server now, by toyKey().
+  devices: ComputedRef<Map<string, IntifaceDevice>>
   knownDevices: ComputedRef<IntifaceDevice[]>
+  // Whether toys should say which server they're on (more than one server).
+  showServers: ComputedRef<boolean>
+  toyServerName: (server: string | undefined) => string
   installed: ComputedRef<boolean>
   launch: () => Promise<void>
   autoLaunch: ComputedRef<boolean>
   setAutoLaunch: (value: boolean) => void
-  launchAttempts: ComputedRef<number>
   maxLaunchAttempts: number
-  refusedReason: ComputedRef<string>
   setActuatorIntensity: (actuators: ToyActuatorRef[], value: number) => void
   // Stops every connected toy, not only the ones a control drives.
   stopAllDevices: () => void
@@ -103,28 +127,27 @@ export function useIntiface(): {
   }
 
   return {
-    url,
-    defaultUrl: state.value?.defaultUrl ?? DEFAULT_INTIFACE_URL,
-    isCustomUrl: computed(() => !!url.value),
-    // Reconnects against the new URL right away.
-    setUrl: (value) => void api.intifaceSetUrl(value?.trim() || null),
     enabled,
-    status,
+    servers,
+    defaultPort: state.value?.defaultPort ?? DEFAULT_PORT,
+    addServer: (label, host, port) => api.intifaceAddServer(label, host, port),
+    updateServer: (id, label, host, port) => api.intifaceUpdateServer(id, label, host, port),
+    removeServer: (id) => api.intifaceRemoveServer(id),
     isAvailable,
     devices,
     knownDevices,
+    showServers,
+    toyServerName,
     installed,
     launch,
     autoLaunch,
     // Turning it on gives a fresh 5 tries.
     setAutoLaunch: (value) => void api.intifaceSetAutoLaunch(value),
-    launchAttempts,
     maxLaunchAttempts: state.value?.maxLaunchAttempts ?? MAX_LAUNCH_ATTEMPTS,
-    refusedReason,
     // Only the plain fields go to Rust: a control's actuator refs also carry names.
     setActuatorIntensity: (actuators, value) =>
       void api.toysSet(
-        actuators.map(({ deviceIndex, actuatorIndex, actuatorType }) => ({ deviceIndex, actuatorIndex, actuatorType })),
+        actuators.map(({ server, deviceIndex, actuatorIndex, actuatorType }) => ({ server, deviceIndex, actuatorIndex, actuatorType })),
         value
       ),
     stopAllDevices: () => void api.toysStopAll()

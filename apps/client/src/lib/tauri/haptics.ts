@@ -65,6 +65,8 @@ export interface HapticsOwoTarget {
 // A toy motor, or with `bhaptics`, part of your bHaptics gear, or with `owo`, muscles of your OWO
 // Skin (then the other fields are unused).
 export interface HapticsActuator {
+  // The Intiface server the toy is on. Missing: this PC.
+  server?: string
   deviceIndex: number
   actuatorIndex: number
   actuatorType: string
@@ -109,6 +111,7 @@ export interface HapticsZone {
 }
 
 export interface HapticsOutputLevel {
+  server: string
   deviceIndex: number
   actuatorIndex: number
   bhaptics?: HapticsBhapticsTarget

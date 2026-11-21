@@ -20,6 +20,9 @@ use crate::state::AppState;
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActuatorRef {
+    /// The Intiface server the toy is on. Saved before there were several: this PC.
+    #[serde(default = "intiface::this_pc")]
+    pub server: String,
     pub device_index: u32,
     pub actuator_index: u32,
     pub actuator_type: String
@@ -27,11 +30,12 @@ pub struct ActuatorRef {
 
 impl ActuatorRef {
     fn key(&self) -> Key {
-        (self.device_index, self.actuator_index)
+        (self.server.clone(), self.device_index, self.actuator_index)
     }
 }
 
-type Key = (u32, u32);
+/// Server, toy, motor.
+type Key = (String, u32, u32);
 
 /// One actuator touch is driving or may drive, as `haptics` reports it each tick.
 #[derive(Debug, Clone)]
@@ -73,7 +77,7 @@ impl Arbiter {
         if self.sent.get(&key) == Some(&level) {
             return None;
         }
-        self.sent.insert(key, level);
+        self.sent.insert(key.clone(), level);
         Some((key, level))
     }
 
@@ -84,8 +88,8 @@ impl Arbiter {
     /// A control, pattern or automation asks for `level`. Held back while touch owns it.
     pub(super) fn request(&mut self, actuator: &ActuatorRef, level: f64) -> Option<Send> {
         let key = actuator.key();
-        self.types.insert(key, actuator.actuator_type.clone());
-        self.requested.insert(key, level);
+        self.types.insert(key.clone(), actuator.actuator_type.clone());
+        self.requested.insert(key.clone(), level);
         if self.owned(&key) { None } else { self.out(key, level) }
     }
 
@@ -94,7 +98,7 @@ impl Arbiter {
     pub(super) fn touch(&mut self, touches: &[Touch], priority: Priority, now: Instant) -> Vec<Send> {
         let mut sends = Vec::new();
 
-        let gone: Vec<Key> = self.touch.keys().filter(|key| !touches.iter().any(|t| t.actuator.key() == **key)).copied().collect();
+        let gone: Vec<Key> = self.touch.keys().filter(|key| !touches.iter().any(|t| t.actuator.key() == **key)).cloned().collect();
         for key in gone {
             if self.touch.remove(&key).is_some_and(|slot| slot.owns) {
                 let level = self.requested.get(&key).copied().unwrap_or(0.0);
@@ -105,8 +109,8 @@ impl Arbiter {
         for touch in touches {
             let key = touch.actuator.key();
             let level = touch.level.clamp(0.0, 1.0);
-            self.types.insert(key, touch.actuator.actuator_type.clone());
-            let slot = self.touch.entry(key).or_default();
+            self.types.insert(key.clone(), touch.actuator.actuator_type.clone());
+            let slot = self.touch.entry(key.clone()).or_default();
             let was_owned = slot.owns;
             if level > priority.threshold {
                 slot.until = Some(now + priority.grace);
@@ -140,7 +144,7 @@ impl Arbiter {
 
     /// The actuators touch drives right now.
     pub(super) fn touched(&self) -> Vec<Key> {
-        let mut keys: Vec<Key> = self.touch.iter().filter(|(_, slot)| slot.owns).map(|(key, _)| *key).collect();
+        let mut keys: Vec<Key> = self.touch.iter().filter(|(_, slot)| slot.owns).map(|(key, _)| key.clone()).collect();
         keys.sort_unstable();
         keys
     }
@@ -163,15 +167,23 @@ pub(super) fn forget_sent(app: &AppHandle) {
     toys(app).arbiter.lock().unwrap().forget_sent();
 }
 
-/// Sends these levels, grouped by device.
+/// One toy's motors to set: motor, level, actuator type.
+type Scalars = Vec<(u32, f64, String)>;
+
+/// Sends these levels: one batch per server, one ScalarCmd per toy.
 fn send(app: &AppHandle, arbiter: &Arbiter, sends: Vec<Send>) {
-    let mut by_device: BTreeMap<u32, Vec<(u32, f64, String)>> = BTreeMap::new();
-    for ((device, actuator), level) in sends {
-        by_device.entry(device).or_default().push((actuator, level, arbiter.actuator_type(&(device, actuator))));
+    let mut by_device: BTreeMap<(String, u32), Scalars> = BTreeMap::new();
+    for (key, level) in sends {
+        let actuator_type = arbiter.actuator_type(&key);
+        let (server, device, actuator) = key;
+        by_device.entry((server, device)).or_default().push((actuator, level, actuator_type));
     }
-    let messages: Vec<_> = by_device.iter().map(|(device, scalars)| protocol::scalar_cmd(*device, scalars)).collect();
-    if !messages.is_empty() {
-        intiface::send(app, messages);
+    let mut by_server: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
+    for ((server, device), scalars) in &by_device {
+        by_server.entry(server.clone()).or_default().push(protocol::scalar_cmd(*device, scalars));
+    }
+    for (server, messages) in by_server {
+        intiface::send(app, &server, messages);
     }
 }
 
@@ -185,7 +197,7 @@ pub fn set(app: &AppHandle, actuators: &[ActuatorRef], level: f64) {
     let mut arbiter = toys(app).arbiter.lock().unwrap();
     let sends = actuators
         .iter()
-        .filter(|actuator| intiface::has_device(app, actuator.device_index))
+        .filter(|actuator| intiface::has_device(app, &actuator.server, actuator.device_index))
         .filter_map(|actuator| arbiter.request(actuator, level))
         .collect();
     send(app, &arbiter, sends);
@@ -196,7 +208,7 @@ pub fn set_touch(app: &AppHandle, touches: Vec<Touch>, priority: Priority) {
     if !intiface::connected(app) {
         return;
     }
-    let touches: Vec<Touch> = touches.into_iter().filter(|touch| intiface::has_device(app, touch.actuator.device_index)).collect();
+    let touches: Vec<Touch> = touches.into_iter().filter(|touch| intiface::has_device(app, &touch.actuator.server, touch.actuator.device_index)).collect();
     let mut arbiter = toys(app).arbiter.lock().unwrap();
     let sends = arbiter.touch(&touches, priority, Instant::now());
     send(app, &arbiter, sends);
@@ -206,6 +218,7 @@ pub fn set_touch(app: &AppHandle, touches: Vec<Touch>, priority: Priority) {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Touched {
+    pub server: String,
     pub device_index: u32,
     pub actuator_index: u32
 }
@@ -217,14 +230,14 @@ pub fn touched(app: &AppHandle) -> Vec<Touched> {
         .unwrap()
         .touched()
         .into_iter()
-        .map(|(device_index, actuator_index)| Touched { device_index, actuator_index })
+        .map(|(server, device_index, actuator_index)| Touched { server, device_index, actuator_index })
         .collect()
 }
 
 /// Stops every connected toy, not only the ones a control drives.
 pub fn stop_all(app: &AppHandle) {
     toys(app).arbiter.lock().unwrap().stop_all();
-    intiface::send(app, vec![protocol::message("StopAllDevices", serde_json::json!({}))]);
+    intiface::send_all(app, vec![protocol::message("StopAllDevices", serde_json::json!({}))]);
 }
 
 #[cfg(test)]
@@ -234,11 +247,11 @@ mod tests {
     const PRIORITY: Priority = Priority { threshold: 0.02, grace: Duration::from_millis(1500) };
 
     fn lush() -> ActuatorRef {
-        ActuatorRef { device_index: 0, actuator_index: 0, actuator_type: "Vibrate".into() }
+        ActuatorRef { server: intiface::THIS_PC.into(), device_index: 0, actuator_index: 0, actuator_type: "Vibrate".into() }
     }
 
     fn edge() -> ActuatorRef {
-        ActuatorRef { device_index: 1, actuator_index: 0, actuator_type: "Vibrate".into() }
+        ActuatorRef { server: intiface::THIS_PC.into(), device_index: 1, actuator_index: 0, actuator_type: "Vibrate".into() }
     }
 
     fn touch(level: f64) -> Vec<Touch> {
@@ -248,9 +261,9 @@ mod tests {
     #[test]
     fn last_writer_wins_without_touch() {
         let mut arbiter = Arbiter::default();
-        assert_eq!(arbiter.request(&lush(), 0.4), Some(((0, 0), 0.4)));
+        assert_eq!(arbiter.request(&lush(), 0.4), Some(((intiface::THIS_PC.into(), 0, 0), 0.4)));
         assert_eq!(arbiter.request(&lush(), 0.4), None, "unchanged");
-        assert_eq!(arbiter.request(&lush(), 0.6), Some(((0, 0), 0.6)));
+        assert_eq!(arbiter.request(&lush(), 0.6), Some(((intiface::THIS_PC.into(), 0, 0), 0.6)));
     }
 
     #[test]
@@ -262,23 +275,23 @@ mod tests {
         // A pattern runs; touch is set up but nobody touches.
         arbiter.request(&lush(), 0.5);
         assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(0)), vec![]);
-        assert_eq!(arbiter.request(&lush(), 0.6), Some(((0, 0), 0.6)));
+        assert_eq!(arbiter.request(&lush(), 0.6), Some(((intiface::THIS_PC.into(), 0, 0), 0.6)));
 
         // Touch starts: the toy follows it, the pattern is held back.
-        assert_eq!(arbiter.touch(&touch(0.3), PRIORITY, at(2000)), vec![((0, 0), 0.3)]);
-        assert_eq!(arbiter.touched(), vec![(0, 0)]);
+        assert_eq!(arbiter.touch(&touch(0.3), PRIORITY, at(2000)), vec![((intiface::THIS_PC.into(), 0, 0), 0.3)]);
+        assert_eq!(arbiter.touched(), vec![(intiface::THIS_PC.to_owned(), 0, 0)]);
         assert_eq!(arbiter.request(&lush(), 0.7), None);
 
         // Touch stops: it keeps the toy at 0 for the grace.
         assert_eq!(arbiter.touch(&touch(0.3), PRIORITY, at(4950)), vec![]);
-        assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(5000)), vec![((0, 0), 0.0)]);
+        assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(5000)), vec![((intiface::THIS_PC.into(), 0, 0), 0.0)]);
         assert_eq!(arbiter.request(&lush(), 0.8), None);
         assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(6400)), vec![]);
 
         // Grace over: the toy rejoins the pattern where it is now.
-        assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(6550)), vec![((0, 0), 0.8)]);
+        assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(6550)), vec![((intiface::THIS_PC.into(), 0, 0), 0.8)]);
         assert!(arbiter.touched().is_empty());
-        assert_eq!(arbiter.request(&lush(), 0.9), Some(((0, 0), 0.9)));
+        assert_eq!(arbiter.request(&lush(), 0.9), Some(((intiface::THIS_PC.into(), 0, 0), 0.9)));
     }
 
     #[test]
@@ -291,7 +304,7 @@ mod tests {
         arbiter.touch(&touch(0.2), PRIORITY, at(1000));
         arbiter.touch(&touch(0.0), PRIORITY, at(1100));
         assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(2000)), vec![], "grace runs from 1000 ms");
-        assert_eq!(arbiter.touched(), vec![(0, 0)]);
+        assert_eq!(arbiter.touched(), vec![(intiface::THIS_PC.to_owned(), 0, 0)]);
         assert_eq!(arbiter.touch(&touch(0.0), PRIORITY, at(2600)), vec![], "back to the request: 0, already sent");
         assert!(arbiter.touched().is_empty());
     }
@@ -300,7 +313,16 @@ mod tests {
     fn toys_without_sources_are_never_touched() {
         let mut arbiter = Arbiter::default();
         arbiter.touch(&touch(0.5), PRIORITY, Instant::now());
-        assert_eq!(arbiter.request(&edge(), 0.25), Some(((1, 0), 0.25)));
+        assert_eq!(arbiter.request(&edge(), 0.25), Some(((intiface::THIS_PC.into(), 1, 0), 0.25)));
+    }
+
+    #[test]
+    fn the_same_index_on_another_server_is_another_toy() {
+        let mut arbiter = Arbiter::default();
+        let phone = ActuatorRef { server: "phone".into(), ..lush() };
+        arbiter.touch(&touch(0.5), PRIORITY, Instant::now());
+        assert_eq!(arbiter.request(&phone, 0.25), Some((("phone".into(), 0, 0), 0.25)), "touch on this PC's toy 0 doesn't hold the phone's");
+        assert_eq!(arbiter.request(&lush(), 0.25), None);
     }
 
     #[test]
@@ -308,7 +330,7 @@ mod tests {
         let mut arbiter = Arbiter::default();
         arbiter.request(&lush(), 0.3);
         arbiter.touch(&touch(0.6), PRIORITY, Instant::now());
-        assert_eq!(arbiter.touch(&[], PRIORITY, Instant::now()), vec![((0, 0), 0.3)]);
+        assert_eq!(arbiter.touch(&[], PRIORITY, Instant::now()), vec![((intiface::THIS_PC.into(), 0, 0), 0.3)]);
     }
 
     #[test]
@@ -319,6 +341,6 @@ mod tests {
         arbiter.stop_all();
         assert!(arbiter.touched().is_empty());
         assert_eq!(arbiter.touch(&[], PRIORITY, Instant::now()), vec![]);
-        assert_eq!(arbiter.request(&lush(), 0.0), Some(((0, 0), 0.0)));
+        assert_eq!(arbiter.request(&lush(), 0.0), Some(((intiface::THIS_PC.into(), 0, 0), 0.0)));
     }
 }

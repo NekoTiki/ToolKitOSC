@@ -150,6 +150,7 @@ pub fn devices_changed(app: &AppHandle) {
         .into_iter()
         .flat_map(|device| {
             device.actuators.into_iter().map(move |actuator| model::Actuator {
+                server: device.server.clone(),
                 device_index: device.index,
                 actuator_index: actuator.index,
                 actuator_type: actuator.actuator_type,
@@ -215,6 +216,7 @@ fn tick(app: &AppHandle) {
             .filter(|(output, _)| !output.sources.is_empty() && output.actuator.bhaptics.is_none() && output.actuator.owo.is_none())
             .map(|(output, level)| crate::toys::Touch {
                 actuator: crate::toys::ActuatorRef {
+                    server: output.actuator.server.clone(),
                     device_index: output.actuator.device_index,
                     actuator_index: output.actuator.actuator_index,
                     actuator_type: output.actuator.actuator_type.clone()

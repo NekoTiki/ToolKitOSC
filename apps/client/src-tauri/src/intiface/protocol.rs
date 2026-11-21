@@ -18,6 +18,9 @@ pub struct Actuator {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Device {
+    /// The Intiface server it's on (`super::Server::id`). Saved before there were several: this PC.
+    #[serde(default = "super::this_pc")]
+    pub server: String,
     pub index: u32,
     pub name: String,
     pub actuators: Vec<Actuator>,
@@ -55,7 +58,7 @@ struct DeviceMessages {
 }
 
 impl DeviceInfo {
-    pub fn to_device(&self) -> Device {
+    pub fn to_device(&self, server: &str) -> Device {
         let battery_sensor_index = self
             .device_messages
             .sensor_read_cmd
@@ -64,6 +67,7 @@ impl DeviceInfo {
             .map(|index| index as u32);
 
         Device {
+            server: server.to_owned(),
             index: self.device_index,
             name: self.device_name.clone(),
             actuators: self
@@ -213,7 +217,8 @@ mod tests {
                 "SensorReadCmd":[{"SensorType":"RSSI"},{"SensorType":"Battery"}]}}}]"#
         );
         let Incoming::DeviceAdded(info) = &incoming[0] else { panic!("{incoming:?}") };
-        let device = info.to_device();
+        let device = info.to_device("phone");
+        assert_eq!(device.server, "phone");
         assert_eq!(device.index, 3);
         assert_eq!(device.actuators[0].description, "Vibrate");
         assert_eq!(device.actuators[1].index, 1);

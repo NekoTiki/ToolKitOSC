@@ -1,8 +1,12 @@
 //! Intiface (Buttplug v3), run from Rust so toys keep their timing while the window is hidden and
-//! keep going through a webview reload. The connection, the device list, battery readings and
+//! keep going through a webview reload. The connections, the device lists, battery readings and
 //! auto-launching Intiface Central live here; what to send to the toys comes from `toys`.
 //!
-//! The settings (URL, auto-launch) are in `intiface.json`, copied once from the webview's
+//! You can connect to several Intiface servers at once (this PC, a phone running Intiface Central…),
+//! each by its address. Every toy carries the id of the server it's on: toy indexes are only unique
+//! within one server.
+//!
+//! The settings (servers, auto-launch) are in `intiface.json`, copied once from the webview's
 //! localStorage. It's an add-on (see `addons`): the registry turns it on and off.
 pub mod launch;
 mod link;
@@ -23,14 +27,22 @@ use crate::state::AppState;
 pub use protocol::Device;
 
 pub const DEFAULT_URL: &str = "ws://localhost:12345";
+pub const DEFAULT_PORT: u16 = 12345;
+/// The server everything saved before there were several points at: what used to be "the" URL.
+pub const THIS_PC: &str = "this-pc";
 const FILE: &str = "intiface.json";
 /// How many times auto-launch opens Intiface Central before giving up.
 pub const MAX_LAUNCH_ATTEMPTS: u32 = 5;
 
-/// The same names the webview has always used.
+/// For `#[serde(default = …)]` on toys saved before there were several servers.
+pub fn this_pc() -> String {
+    THIS_PC.to_owned()
+}
+
+/// The same names the webview has always used, now per server.
 /// - `connecting`: an attempt is in flight, retries included.
 /// - `connected`: the handshake (RequestServerInfo) succeeded. The only state toys work in.
-/// - `error`: nothing listens at the URL, and auto-launch didn't apply.
+/// - `error`: nothing listens at the address, and auto-launch didn't apply.
 /// - `refused`: something listens but wouldn't take us, e.g. another app is connected.
 /// - `busy`: nothing listens, but Intiface Central runs here: busy with another client, or its
 ///   server is stopped.
@@ -47,11 +59,43 @@ pub enum Status {
     Launching
 }
 
+/// An Intiface server you added, by address.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Server {
+    pub id: String,
+    /// Your name for it. Empty shows the address.
+    #[serde(default)]
+    pub label: String,
+    pub host: String,
+    pub port: u16,
+    /// wss://, only for an address saved that way before there were several servers.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub secure: bool
+}
+
+impl Server {
+    fn url(&self) -> String {
+        let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
+        format!("{}://{host}:{}", if self.secure { "wss" } else { "ws" }, self.port)
+    }
+
+    /// On this PC: the only kind auto-launch and the "is it running" check apply to.
+    fn local(&self) -> bool {
+        is_local(&self.host)
+    }
+}
+
+fn is_local(host: &str) -> bool {
+    ["localhost", "127.0.0.1", "::1"].contains(&host)
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Settings {
-    /// Empty for the default.
-    #[serde(default)]
+    /// The one URL from before there were several servers (empty for the default). Read once to
+    /// make the "this PC" server, never written.
+    #[serde(default, skip_serializing)]
     url: String,
     /// Set by the add-on registry. Only read from files written before the switch moved to
     /// `addons.json`.
@@ -59,10 +103,30 @@ struct Settings {
     enabled: bool,
     #[serde(default)]
     auto_launch: bool,
-    /// Every toy Intiface has listed, by index, so a control's toy list keeps the ones that are
-    /// off right now.
+    /// None in a file from before there were several servers (see `upgrade`).
+    #[serde(default)]
+    servers: Option<Vec<Server>>,
+    /// Every toy Intiface has listed, by server and index, so a control's toy list keeps the ones
+    /// that are off right now.
     #[serde(default)]
     known_devices: Vec<Device>
+}
+
+impl Settings {
+    fn servers(&self) -> &[Server] {
+        self.servers.as_deref().unwrap_or_default()
+    }
+
+    /// A file from before there were several servers: its URL becomes the "this PC" server.
+    fn upgrade(&mut self) {
+        if self.servers.is_some() {
+            return;
+        }
+        let url = if self.url.is_empty() { DEFAULT_URL } else { &self.url };
+        let (host, port) = protocol::target(url).unwrap_or_else(|| ("localhost".into(), DEFAULT_PORT));
+        let secure = url.starts_with("wss://");
+        self.servers = Some(vec![Server { id: THIS_PC.into(), label: String::new(), host, port, secure }]);
+    }
 }
 
 pub enum LinkCommand {
@@ -71,19 +135,33 @@ pub enum LinkCommand {
     Shutdown
 }
 
+/// One server's connection while the add-on is on.
+struct Link {
+    /// Which task this is: callbacks from a replaced one are ignored.
+    generation: u64,
+    url: String,
+    tx: mpsc::UnboundedSender<LinkCommand>,
+    status: Status,
+    devices: BTreeMap<u32, Device>,
+    /// Intiface's own error message when it refused the handshake.
+    refused_reason: String,
+    launch_attempts: u32,
+    last_launch: Option<Instant>
+}
+
 #[derive(Default)]
 struct Inner {
     loaded: bool,
     settings: Settings,
-    status: Option<Status>,
-    devices: BTreeMap<u32, Device>,
     installed: bool,
-    launch_attempts: u32,
-    last_launch: Option<Instant>,
-    /// Intiface's own error message when it refused the handshake.
-    refused_reason: String,
-    link: Option<(u64, mpsc::UnboundedSender<LinkCommand>)>,
-    next_link_id: u64
+    links: BTreeMap<String, Link>,
+    next_generation: u64
+}
+
+impl Inner {
+    fn current(&mut self, server: &str, generation: u64) -> Option<&mut Link> {
+        self.links.get_mut(server).filter(|link| link.generation == generation)
+    }
 }
 
 #[derive(Default)]
@@ -91,21 +169,30 @@ pub struct Intiface {
     inner: Mutex<Inner>
 }
 
+/// One server as the webview shows it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerView {
+    #[serde(flatten)]
+    server: Server,
+    local: bool,
+    status: Status,
+    devices: Vec<Device>,
+    refused_reason: String,
+    launch_attempts: u32
+}
+
 /// What the webview shows.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct View {
-    url: String,
-    default_url: &'static str,
     enabled: bool,
     auto_launch: bool,
-    status: Status,
-    devices: Vec<Device>,
+    servers: Vec<ServerView>,
     known_devices: Vec<Device>,
+    default_port: u16,
     installed: bool,
-    launch_attempts: u32,
-    max_launch_attempts: u32,
-    refused_reason: String
+    max_launch_attempts: u32
 }
 
 fn intiface(app: &AppHandle) -> &Intiface {
@@ -137,7 +224,7 @@ fn save_settings(app: &AppHandle, settings: &Settings) {
 }
 
 /// The add-on was turned on (or is on at launch): reads the settings once, looks for an Intiface
-/// Central install, and connects.
+/// Central install, and connects to every server.
 fn start(app: &AppHandle) {
     let installed = launch::available();
     ensure_loaded(app);
@@ -146,16 +233,15 @@ fn start(app: &AppHandle) {
         inner.settings.enabled = true;
         inner.installed = installed;
     }
-    reset_launch_attempts(app);
-    restart(app);
+    sync_links(app, |_| false);
 }
 
-/// The add-on was turned off: patterns and toys stop first, then the connection closes.
+/// The add-on was turned off: patterns and toys stop first, then the connections close.
 fn stop(app: &AppHandle) {
     crate::toys::patterns::stop_all(app);
     crate::toys::stop_all(app);
     intiface(app).inner.lock().unwrap().settings.enabled = false;
-    restart(app);
+    sync_links(app, |_| false);
 }
 
 /// Reads `intiface.json` the first time anything needs the settings. The switch isn't in it any
@@ -164,11 +250,21 @@ fn ensure_loaded(app: &AppHandle) {
     if intiface(app).inner.lock().unwrap().loaded {
         return;
     }
-    let settings = load_settings(app).unwrap_or_default();
-    let mut inner = intiface(app).inner.lock().unwrap();
-    if !inner.loaded {
+    let mut settings = load_settings(app).unwrap_or_default();
+    let upgraded = settings.servers.is_none();
+    settings.upgrade();
+    let saved = {
+        let mut inner = intiface(app).inner.lock().unwrap();
+        if inner.loaded {
+            return;
+        }
         inner.loaded = true;
         inner.settings = Settings { enabled: inner.settings.enabled, ..settings };
+        inner.settings.clone()
+    };
+    if upgraded && path(app).is_some_and(|path| path.exists()) {
+        tracing::info!("Intiface: your address is now the \"this PC\" server");
+        save_settings(app, &saved);
     }
 }
 
@@ -178,11 +274,12 @@ pub fn migrate(app: &AppHandle, url: Option<String>, enabled: Option<bool>, auto
     if load_settings(app).is_some() {
         return;
     }
-    ensure_loaded(app);
+    let mut settings = Settings { url: url.map(|url| url.trim().to_owned()).unwrap_or_default(), auto_launch: auto_launch.unwrap_or(false), ..Settings::default() };
+    settings.upgrade();
     let settings = {
         let mut inner = intiface(app).inner.lock().unwrap();
-        inner.settings.url = normalize_url(url.as_deref());
-        inner.settings.auto_launch = auto_launch.unwrap_or(false);
+        inner.loaded = true;
+        inner.settings = Settings { enabled: inner.settings.enabled, ..settings };
         inner.settings.clone()
     };
     save_settings(app, &settings);
@@ -190,48 +287,94 @@ pub fn migrate(app: &AppHandle, url: Option<String>, enabled: Option<bool>, auto
     if enabled.unwrap_or(false) {
         crate::addons::adopt(app, "intiface");
     } else if settings.enabled {
-        restart(app);
+        sync_links(app, |_| false);
     }
 }
 
-fn normalize_url(url: Option<&str>) -> String {
-    match url.map(str::trim) {
-        Some(url) if !url.is_empty() && url != DEFAULT_URL => url.to_owned(),
-        _ => String::new()
-    }
-}
-
-fn update_settings(app: &AppHandle, change: impl FnOnce(&mut Settings)) -> Settings {
+fn update_settings<T>(app: &AppHandle, change: impl FnOnce(&mut Settings) -> Result<T, String>) -> Result<T, String> {
     ensure_loaded(app);
-    let settings = {
+    let (result, settings) = {
         let mut inner = intiface(app).inner.lock().unwrap();
-        change(&mut inner.settings);
-        inner.settings.clone()
+        let result = change(&mut inner.settings)?;
+        (result, inner.settings.clone())
     };
     save_settings(app, &settings);
-    settings
+    Ok(result)
 }
 
-/// Reconnects against the new URL right away.
-pub fn set_url(app: &AppHandle, url: Option<String>) {
-    update_settings(app, |settings| settings.url = normalize_url(url.as_deref()));
-    reset_launch_attempts(app);
-    restart(app);
+/// "192.168.1.20", "ws://phone.local:12345/", "[::1]": the host on its own, lowercased.
+fn clean_host(host: &str) -> Result<String, String> {
+    let host = host.trim();
+    let host = host.strip_prefix("wss://").or_else(|| host.strip_prefix("ws://")).unwrap_or(host);
+    let host = host.split('/').next().unwrap_or_default().trim_start_matches('[').trim_end_matches(']');
+    if host.is_empty() || host.contains(char::is_whitespace) {
+        return Err("Enter the address of the device running Intiface".into());
+    }
+    Ok(host.to_lowercase())
 }
 
-/// Turning it on gives a fresh 5 tries, and retries right away if Intiface isn't running now.
+/// Adds a server and connects to it. Returns its id.
+pub fn add_server(app: &AppHandle, label: String, host: String, port: u16) -> Result<String, String> {
+    let host = clean_host(&host)?;
+    let id = update_settings(app, |settings| {
+        let servers = settings.servers.get_or_insert_with(Vec::new);
+        if servers.iter().any(|server| server.host == host && server.port == port) {
+            return Err(format!("{host}:{port} is already in your list"));
+        }
+        let id = format!("server-{:08x}", rand::random::<u32>());
+        servers.push(Server { id: id.clone(), label: label.trim().to_owned(), host, port, secure: false });
+        Ok(id)
+    })?;
+    sync_links(app, |_| false);
+    Ok(id)
+}
+
+/// Renames a server or moves it to a new address (reconnecting to it).
+pub fn update_server(app: &AppHandle, id: &str, label: String, host: String, port: u16) -> Result<(), String> {
+    let host = clean_host(&host)?;
+    update_settings(app, |settings| {
+        let servers = settings.servers.get_or_insert_with(Vec::new);
+        if servers.iter().any(|server| server.id != id && server.host == host && server.port == port) {
+            return Err(format!("{host}:{port} is already in your list"));
+        }
+        let server = servers.iter_mut().find(|server| server.id == id).ok_or("That server is gone")?;
+        let moved = server.host != host || server.port != port;
+        server.label = label.trim().to_owned();
+        if moved {
+            server.host = host;
+            server.port = port;
+            server.secure = false;
+        }
+        Ok(())
+    })?;
+    sync_links(app, |_| false);
+    Ok(())
+}
+
+/// Removes a server: its toys stop, and controls on them show as unavailable.
+pub fn remove_server(app: &AppHandle, id: &str) -> Result<(), String> {
+    stop_server(app, id);
+    update_settings(app, |settings| {
+        settings.servers.get_or_insert_with(Vec::new).retain(|server| server.id != id);
+        settings.known_devices.retain(|device| device.server != id);
+        Ok(())
+    })?;
+    sync_links(app, |_| false);
+    Ok(())
+}
+
+/// Turning it on gives a fresh 5 tries, and retries right away where Intiface isn't running now.
 pub fn set_auto_launch(app: &AppHandle, auto_launch: bool) {
-    update_settings(app, |settings| settings.auto_launch = auto_launch);
+    let _ = update_settings(app, |settings| {
+        settings.auto_launch = auto_launch;
+        Ok(())
+    });
     if !auto_launch {
         emit_state(app);
         return;
     }
     reset_launch_attempts(app);
-    if intiface(app).inner.lock().unwrap().status == Some(Status::Error) {
-        restart(app);
-    } else {
-        emit_state(app);
-    }
+    sync_links(app, |link| link.status == Status::Error);
 }
 
 /// Opens the local install. The connection loop picks it up once its server starts.
@@ -241,37 +384,59 @@ pub fn launch_now() -> Result<(), String> {
 
 fn reset_launch_attempts(app: &AppHandle) {
     let mut inner = intiface(app).inner.lock().unwrap();
-    inner.launch_attempts = 0;
-    inner.last_launch = None;
-    inner.refused_reason.clear();
+    for link in inner.links.values_mut() {
+        link.launch_attempts = 0;
+        link.last_launch = None;
+        link.refused_reason.clear();
+    }
 }
 
-/// Stops the current link and starts a new one when the switch is on.
-fn restart(app: &AppHandle) {
-    let (old, url) = {
+/// Brings the connections in line with the settings: one per server while the add-on is on, a new
+/// one where the address changed or `restart` says so. The others keep going untouched.
+fn sync_links(app: &AppHandle, restart: impl Fn(&Link) -> bool) {
+    let (closed, changed) = {
         let mut inner = intiface(app).inner.lock().unwrap();
-        let old = inner.link.take();
-        inner.devices.clear();
-        let url = inner.settings.enabled.then(|| {
-            if inner.settings.url.is_empty() { DEFAULT_URL.to_owned() } else { inner.settings.url.clone() }
-        });
-        if let Some(url) = &url {
-            inner.next_link_id += 1;
-            let id = inner.next_link_id;
-            inner.link = Some((id, link::spawn(app.clone(), id, url.clone())));
-            inner.status = Some(Status::Connecting);
+        let wanted: Vec<(String, String)> = if inner.settings.enabled {
+            inner.settings.servers().iter().map(|server| (server.id.clone(), server.url())).collect()
         } else {
-            inner.status = Some(Status::Disabled);
+            Vec::new()
+        };
+
+        let stale: Vec<String> = inner
+            .links
+            .iter()
+            .filter(|(id, link)| restart(link) || !wanted.iter().any(|(wanted_id, url)| wanted_id == *id && *url == link.url))
+            .map(|(id, _)| id.clone())
+            .collect();
+        let mut closed = Vec::new();
+        for id in &stale {
+            if let Some(link) = inner.links.remove(id) {
+                closed.push(link.tx);
+            }
         }
-        (old, url)
+
+        let mut changed = !stale.is_empty();
+        for (id, url) in wanted {
+            if inner.links.contains_key(&id) {
+                continue;
+            }
+            inner.next_generation += 1;
+            let generation = inner.next_generation;
+            let tx = link::spawn(app.clone(), id.clone(), generation, url.clone());
+            inner.links.insert(
+                id,
+                Link { generation, url, tx, status: Status::Connecting, devices: BTreeMap::new(), refused_reason: String::new(), launch_attempts: 0, last_launch: None }
+            );
+            changed = true;
+        }
+        (closed, changed)
     };
-    if let Some((_, tx)) = old {
+    for tx in closed {
         let _ = tx.send(LinkCommand::Shutdown);
     }
-    if url.is_none() {
-        tracing::debug!("Intiface is off");
+    if changed {
+        crate::toys::devices_changed(app);
     }
-    crate::toys::devices_changed(app);
     emit_state(app);
 }
 
@@ -279,17 +444,28 @@ pub fn view(app: &AppHandle) -> View {
     ensure_loaded(app);
     let inner = intiface(app).inner.lock().unwrap();
     View {
-        url: inner.settings.url.clone(),
-        default_url: DEFAULT_URL,
         enabled: inner.settings.enabled,
         auto_launch: inner.settings.auto_launch,
-        status: inner.status.unwrap_or(Status::Disabled),
-        devices: inner.devices.values().cloned().collect(),
+        servers: inner
+            .settings
+            .servers()
+            .iter()
+            .map(|server| {
+                let link = inner.links.get(&server.id);
+                ServerView {
+                    local: server.local(),
+                    status: link.map_or(Status::Disabled, |link| link.status),
+                    devices: link.map(|link| link.devices.values().cloned().collect()).unwrap_or_default(),
+                    refused_reason: link.map(|link| link.refused_reason.clone()).unwrap_or_default(),
+                    launch_attempts: link.map_or(0, |link| link.launch_attempts),
+                    server: server.clone()
+                }
+            })
+            .collect(),
         known_devices: inner.settings.known_devices.clone(),
+        default_port: DEFAULT_PORT,
         installed: inner.installed,
-        launch_attempts: inner.launch_attempts,
-        max_launch_attempts: MAX_LAUNCH_ATTEMPTS,
-        refused_reason: inner.refused_reason.clone()
+        max_launch_attempts: MAX_LAUNCH_ATTEMPTS
     }
 }
 
@@ -298,28 +474,23 @@ fn emit_state(app: &AppHandle) {
     crate::addons::changed(app);
 }
 
-fn is_current(inner: &Inner, id: u64) -> bool {
-    inner.link.as_ref().is_some_and(|(link_id, _)| *link_id == id)
-}
-
-/// Whether the handshake is done and toys can be sent to.
+/// Whether at least one server is connected, so toys can be sent to.
 pub fn connected(app: &AppHandle) -> bool {
-    intiface(app).inner.lock().unwrap().status == Some(Status::Connected)
+    intiface(app).inner.lock().unwrap().links.values().any(|link| link.status == Status::Connected)
 }
 
-/// The devices Intiface has now, by index.
-pub fn has_device(app: &AppHandle, index: u32) -> bool {
-    intiface(app).inner.lock().unwrap().devices.contains_key(&index)
+/// Whether that server is connected and has that toy now.
+pub fn has_device(app: &AppHandle, server: &str, index: u32) -> bool {
+    intiface(app).inner.lock().unwrap().links.get(server).is_some_and(|link| link.status == Status::Connected && link.devices.contains_key(&index))
 }
 
-/// Every motor of every toy Intiface has now, for automation steps on all toys.
+/// Every motor of every toy on every server now, for automation steps on all toys.
 pub fn actuators(app: &AppHandle) -> Vec<crate::toys::ActuatorRef> {
-    let inner = intiface(app).inner.lock().unwrap();
-    inner
-        .devices
-        .values()
+    devices(app)
+        .iter()
         .flat_map(|device| {
             device.actuators.iter().map(|actuator| crate::toys::ActuatorRef {
+                server: device.server.clone(),
                 device_index: device.index,
                 actuator_index: actuator.index,
                 actuator_type: actuator.actuator_type.clone()
@@ -328,47 +499,60 @@ pub fn actuators(app: &AppHandle) -> Vec<crate::toys::ActuatorRef> {
         .collect()
 }
 
-/// Sends Buttplug messages when connected. Dropped otherwise, as the webview's socket did.
-pub fn send(app: &AppHandle, messages: Vec<Value>) {
+/// Sends Buttplug messages to that server when it's connected. Dropped otherwise, as the webview's
+/// socket did.
+pub fn send(app: &AppHandle, server: &str, messages: Vec<Value>) {
     let inner = intiface(app).inner.lock().unwrap();
-    if inner.status != Some(Status::Connected) {
-        return;
-    }
-    if let Some((_, tx)) = &inner.link {
-        let _ = tx.send(LinkCommand::Send(messages));
+    if let Some(link) = inner.links.get(server).filter(|link| link.status == Status::Connected) {
+        let _ = link.tx.send(LinkCommand::Send(messages));
     }
 }
 
-// Called by the link task `id`. Each one is ignored once that task has been replaced.
+/// Sends the same messages to every connected server (Stop everything).
+pub fn send_all(app: &AppHandle, messages: Vec<Value>) {
+    let inner = intiface(app).inner.lock().unwrap();
+    for link in inner.links.values().filter(|link| link.status == Status::Connected) {
+        let _ = link.tx.send(LinkCommand::Send(messages.clone()));
+    }
+}
 
-fn set_status(app: &AppHandle, id: u64, status: Status) {
+/// Stops that server's toys before it goes away.
+fn stop_server(app: &AppHandle, server: &str) {
+    send(app, server, vec![protocol::message("StopAllDevices", serde_json::json!({}))]);
+}
+
+// Called by the link task (`server`, `generation`). Each one is ignored once that task has been
+// replaced.
+
+fn set_status(app: &AppHandle, server: &str, generation: u64, status: Status) {
     {
         let mut inner = intiface(app).inner.lock().unwrap();
-        if !is_current(&inner, id) {
-            return;
-        }
+        let Some(link) = inner.current(server, generation) else { return };
         if status == Status::Connected {
-            inner.launch_attempts = 0;
-            inner.last_launch = None;
-            inner.refused_reason.clear();
+            link.launch_attempts = 0;
+            link.last_launch = None;
+            link.refused_reason.clear();
         }
-        inner.status = Some(status);
+        link.status = status;
     }
     emit_state(app);
 }
 
-fn set_devices(app: &AppHandle, id: u64, change: impl FnOnce(&mut BTreeMap<u32, Device>)) {
+/// What a link last showed, so a retry doesn't flicker through `connecting`.
+fn shown_status(app: &AppHandle, server: &str, generation: u64) -> Option<Status> {
+    intiface(app).inner.lock().unwrap().current(server, generation).map(|link| link.status)
+}
+
+fn set_devices(app: &AppHandle, server: &str, generation: u64, change: impl FnOnce(&mut BTreeMap<u32, Device>)) {
     ensure_loaded(app);
     let (learned, events) = {
         let mut inner = intiface(app).inner.lock().unwrap();
-        if !is_current(&inner, id) {
-            return;
-        }
-        let before = inner.devices.clone();
-        change(&mut inner.devices);
-        let events = toy_events(&before, &inner.devices);
-        let Inner { settings, devices, .. } = &mut *inner;
-        (remember(&mut settings.known_devices, devices.values()).then(|| settings.clone()), events)
+        let Some(link) = inner.current(server, generation) else { return };
+        let before = link.devices.clone();
+        change(&mut link.devices);
+        let events = toy_events(&before, &link.devices);
+        let devices: Vec<Device> = link.devices.values().cloned().collect();
+        (remember(&mut inner.settings.known_devices, &devices).then(|| inner.settings.clone()), events)
     };
     if let Some(settings) = learned {
         save_settings(app, &settings);
@@ -381,7 +565,7 @@ fn set_devices(app: &AppHandle, id: u64, change: impl FnOnce(&mut BTreeMap<u32, 
     emit_state(app);
 }
 
-/// What automations hear about a change of the device list: toys that came, went or ran low.
+/// What automations hear about a change of one server's device list: toys that came, went or ran low.
 fn toy_events(before: &BTreeMap<u32, Device>, after: &BTreeMap<u32, Device>) -> Vec<crate::automations::model::ToyEvent> {
     use crate::automations::model::{ToyEvent, LOW_BATTERY};
     let low = |device: &Device| device.battery.is_some_and(|level| level < LOW_BATTERY);
@@ -398,12 +582,12 @@ fn toy_events(before: &BTreeMap<u32, Device>, after: &BTreeMap<u32, Device>) -> 
     events
 }
 
-/// Adds or refreshes `devices` in `known`, kept by index. Whether anything changed.
+/// Adds or refreshes `devices` in `known`, kept by server then index. Whether anything changed.
 fn remember<'a>(known: &mut Vec<Device>, devices: impl IntoIterator<Item = &'a Device>) -> bool {
     let mut changed = false;
     for device in devices {
         let device = Device { battery: None, ..device.clone() };
-        match known.binary_search_by_key(&device.index, |known| known.index) {
+        match known.binary_search_by(|known| (known.server.as_str(), known.index).cmp(&(device.server.as_str(), device.index))) {
             Ok(at) if known[at] == device => {}
             Ok(at) => {
                 known[at] = device;
@@ -418,8 +602,15 @@ fn remember<'a>(known: &mut Vec<Device>, devices: impl IntoIterator<Item = &'a D
     changed
 }
 
+/// Every toy on every server now.
 pub(crate) fn devices(app: &AppHandle) -> Vec<Device> {
-    intiface(app).inner.lock().unwrap().devices.values().cloned().collect()
+    let inner = intiface(app).inner.lock().unwrap();
+    inner.links.values().filter(|link| link.status == Status::Connected).flat_map(|link| link.devices.values().cloned()).collect()
+}
+
+/// One server's toys now, for its battery reads.
+fn server_devices(app: &AppHandle, server: &str) -> Vec<Device> {
+    intiface(app).inner.lock().unwrap().links.get(server).map(|link| link.devices.values().cloned().collect()).unwrap_or_default()
 }
 
 /// A connection attempt failed before the handshake finished: works out why, and launches
@@ -429,11 +620,11 @@ pub(crate) fn devices(app: &AppHandle) -> Vec<Device> {
 /// - Nothing listens, but Intiface Central runs: busy, or its server is stopped (`busy`).
 /// - Not running: launch it if auto-launch is on (`launching`), else `error`.
 ///
-/// Only a local URL gets the process check and auto-launch: what runs here says nothing about an
-/// Intiface on another machine.
-async fn diagnose(app: &AppHandle, id: u64, url: &str, handshake_error: String) {
+/// Only a local address gets the process check and auto-launch: what runs here says nothing about
+/// an Intiface on another machine.
+async fn diagnose(app: &AppHandle, server: &str, generation: u64, url: &str, handshake_error: String) {
     let target = protocol::target(url);
-    let local = target.as_ref().is_some_and(|(host, _)| ["localhost", "127.0.0.1", "::1"].contains(&host.as_str()));
+    let local = target.as_ref().is_some_and(|(host, _)| is_local(host));
     let port_open = match &target {
         Some((host, port)) => launch::port_open(host, *port).await,
         None => false
@@ -442,7 +633,8 @@ async fn diagnose(app: &AppHandle, id: u64, url: &str, handshake_error: String) 
         .inner
         .lock()
         .unwrap()
-        .last_launch
+        .current(server, generation)
+        .and_then(|link| link.last_launch)
         .is_some_and(|at| at.elapsed() < link::LAUNCH_RETRY_DELAY);
     let running = !port_open && !launch_pending && local && {
         // Unknown counts as running: never risk opening a second copy.
@@ -455,7 +647,7 @@ async fn diagnose(app: &AppHandle, id: u64, url: &str, handshake_error: String) 
         Status::Launching
     } else if running {
         Status::Busy
-    } else if local && maybe_auto_launch(app, id) {
+    } else if local && maybe_auto_launch(app, server, generation) {
         Status::Launching
     } else {
         Status::Error
@@ -463,31 +655,57 @@ async fn diagnose(app: &AppHandle, id: u64, url: &str, handshake_error: String) 
 
     {
         let mut inner = intiface(app).inner.lock().unwrap();
-        if !is_current(&inner, id) {
-            return;
-        }
-        inner.refused_reason = if port_open { handshake_error } else { String::new() };
+        let Some(link) = inner.current(server, generation) else { return };
+        link.refused_reason = if port_open { handshake_error } else { String::new() };
     }
-    set_status(app, id, status);
+    set_status(app, server, generation, status);
 }
 
-fn maybe_auto_launch(app: &AppHandle, id: u64) -> bool {
+fn maybe_auto_launch(app: &AppHandle, server: &str, generation: u64) -> bool {
     {
         let mut inner = intiface(app).inner.lock().unwrap();
-        if !is_current(&inner, id)
-            || !inner.settings.auto_launch
-            || !inner.installed
-            || inner.launch_attempts >= MAX_LAUNCH_ATTEMPTS
-        {
+        let (auto_launch, installed) = (inner.settings.auto_launch, inner.installed);
+        let Some(link) = inner.current(server, generation) else { return false };
+        if !auto_launch || !installed || link.launch_attempts >= MAX_LAUNCH_ATTEMPTS {
             return false;
         }
-        inner.launch_attempts += 1;
-        inner.last_launch = Some(Instant::now());
+        link.launch_attempts += 1;
+        link.last_launch = Some(Instant::now());
     }
     if let Err(err) = launch::start() {
         tracing::error!("Failed to launch Intiface Central: {err}");
     }
     true
+}
+
+/// The add-on card's line: all servers summed up, or the one server's own state.
+fn summary(statuses: &[(Status, usize)]) -> crate::addons::Status {
+    use crate::addons::{State, Status as S};
+    let toys: usize = statuses.iter().filter(|(status, _)| *status == Status::Connected).map(|(_, toys)| toys).sum();
+    let connected = statuses.iter().filter(|(status, _)| *status == Status::Connected).count();
+    let toys_text = match toys {
+        0 => "no toys yet".to_owned(),
+        1 => "1 toy".to_owned(),
+        n => format!("{n} toys")
+    };
+    match statuses {
+        [] => S::new(State::Warn, "No Intiface server added"),
+        _ if connected == statuses.len() && connected > 1 => S::new(State::Ok, format!("{connected} servers · {toys_text}")),
+        [(Status::Connected, _)] => S::new(State::Ok, format!("Connected · {toys_text}")),
+        // Toys work as soon as one server is connected: green, and the count says the rest.
+        _ if connected > 0 => S::new(State::Ok, format!("{connected} of {} servers connected · {toys_text}", statuses.len())),
+        [(status, _)] => match status {
+            Status::Disabled => S::new(State::Off, "Off"),
+            Status::Connecting => S::new(State::Busy, "Connecting…"),
+            Status::Launching => S::new(State::Busy, "Starting Intiface Central…"),
+            Status::Error => S::new(State::Warn, "Intiface Central isn't running"),
+            Status::Busy => S::new(State::Warn, "Intiface Central is busy, or its server is stopped"),
+            Status::Refused => S::new(State::Error, "Intiface Central refused the connection"),
+            Status::Connected => unreachable!()
+        },
+        _ if statuses.iter().any(|(status, _)| matches!(status, Status::Connecting | Status::Launching)) => S::new(State::Busy, "Connecting…"),
+        _ => S::new(State::Warn, "No Intiface server reachable")
+    }
 }
 
 /// Intiface toys as an add-on (see `crate::addons`). It also owns the toys and patterns in
@@ -520,23 +738,21 @@ impl crate::addons::Addon for Addon {
     }
 
     fn status(&self, app: &AppHandle) -> crate::addons::Status {
-        use crate::addons::{State, Status as S};
         let inner = intiface(app).inner.lock().unwrap();
-        let toys = inner.devices.len();
-        match inner.status.unwrap_or(Status::Disabled) {
-            Status::Disabled => S::new(State::Off, "Off"),
-            Status::Connecting => S::new(State::Busy, "Connecting…"),
-            Status::Launching => S::new(State::Busy, "Starting Intiface Central…"),
-            Status::Connected if toys == 0 => S::new(State::Ok, "Connected · no toys yet"),
-            Status::Connected => S::new(State::Ok, format!("Connected · {toys} toy{}", if toys == 1 { "" } else { "s" })),
-            Status::Error => S::new(State::Warn, "Intiface Central isn't running"),
-            Status::Busy => S::new(State::Warn, "Intiface Central is busy, or its server is stopped"),
-            Status::Refused => S::new(State::Error, "Intiface Central refused the connection")
+        if !inner.settings.enabled {
+            return crate::addons::Status::new(crate::addons::State::Off, "Off");
         }
+        let statuses: Vec<(Status, usize)> = inner
+            .settings
+            .servers()
+            .iter()
+            .map(|server| inner.links.get(&server.id).map_or((Status::Connecting, 0), |link| (link.status, link.devices.len())))
+            .collect();
+        summary(&statuses)
     }
 
     fn devices(&self, app: &AppHandle) -> Option<usize> {
-        Some(intiface(app).inner.lock().unwrap().devices.len())
+        Some(devices(app).len())
     }
 
     fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
@@ -554,16 +770,16 @@ impl crate::addons::Addon for Addon {
 mod tests {
     use super::*;
 
-    fn toy(index: u32, name: &str) -> Device {
-        Device { index, name: name.into(), actuators: Vec::new(), battery_sensor_index: None, battery: Some(0.5) }
+    fn toy(server: &str, index: u32, name: &str) -> Device {
+        Device { server: server.into(), index, name: name.into(), actuators: Vec::new(), battery_sensor_index: None, battery: Some(0.5) }
     }
 
     #[test]
     fn toy_events_for_automations() {
         use crate::automations::model::ToyEvent;
-        let before = BTreeMap::from([(0, toy(0, "Lush"))]);
+        let before = BTreeMap::from([(0, toy(THIS_PC, 0, "Lush"))]);
         let mut after = before.clone();
-        after.insert(1, toy(1, "Edge"));
+        after.insert(1, toy(THIS_PC, 1, "Edge"));
         assert_eq!(toy_events(&before, &after), vec![ToyEvent::Connected]);
         after.remove(&0);
         assert_eq!(toy_events(&before, &after), vec![ToyEvent::Connected, ToyEvent::Disconnected]);
@@ -574,13 +790,57 @@ mod tests {
     }
 
     #[test]
-    fn remember_adds_new_and_renamed_toys_only() {
+    fn remember_keeps_toys_apart_by_server() {
         let mut known = Vec::new();
-        assert!(remember(&mut known, &[toy(2, "Edge"), toy(0, "Lush")]));
+        assert!(remember(&mut known, &[toy(THIS_PC, 2, "Edge"), toy(THIS_PC, 0, "Lush")]));
         assert_eq!(known.iter().map(|d| d.index).collect::<Vec<_>>(), [0, 2]);
         assert_eq!(known[0].battery, None);
-        assert!(!remember(&mut known, &[toy(0, "Lush")]));
-        assert!(remember(&mut known, &[toy(2, "Max")]));
+        assert!(!remember(&mut known, &[toy(THIS_PC, 0, "Lush")]));
+        assert!(remember(&mut known, &[toy(THIS_PC, 2, "Max")]));
         assert_eq!(known[1].name, "Max");
+        // Same index on another server: a different toy.
+        assert!(remember(&mut known, &[toy("phone", 0, "Gush")]));
+        assert_eq!(known.len(), 3);
+        assert_eq!(known.iter().filter(|d| d.index == 0).count(), 2);
+    }
+
+    #[test]
+    fn an_old_file_becomes_the_this_pc_server() {
+        let mut settings: Settings = serde_json::from_str(r#"{"url":"ws://192.168.1.5:12346","autoLaunch":true}"#).unwrap();
+        settings.upgrade();
+        assert_eq!(settings.servers(), [Server { id: THIS_PC.into(), label: String::new(), host: "192.168.1.5".into(), port: 12346, secure: false }]);
+
+        let mut default: Settings = serde_json::from_str("{}").unwrap();
+        default.upgrade();
+        assert_eq!(default.servers()[0].url(), DEFAULT_URL);
+
+        // Once it has a list, even an empty one, it's left alone.
+        let mut emptied: Settings = serde_json::from_str(r#"{"servers":[]}"#).unwrap();
+        emptied.upgrade();
+        assert!(emptied.servers().is_empty());
+    }
+
+    #[test]
+    fn saved_toys_without_a_server_are_on_this_pc() {
+        let device: Device = serde_json::from_str(r#"{"index":1,"name":"Lush","actuators":[]}"#).unwrap();
+        assert_eq!(device.server, THIS_PC);
+    }
+
+    #[test]
+    fn hosts_are_cleaned_up() {
+        assert_eq!(clean_host(" ws://Phone.local/ ").unwrap(), "phone.local");
+        assert_eq!(clean_host("[::1]").unwrap(), "::1");
+        assert!(clean_host("  ").is_err());
+        assert_eq!(Server { id: "x".into(), label: String::new(), host: "::1".into(), port: 1, secure: false }.url(), "ws://[::1]:1");
+    }
+
+    #[test]
+    fn summary_reads_well() {
+        assert_eq!(summary(&[(Status::Connected, 2)]).text, "Connected · 2 toys");
+        assert_eq!(summary(&[(Status::Connected, 1), (Status::Connected, 0)]).text, "2 servers · 1 toy");
+        assert_eq!(summary(&[(Status::Connected, 0), (Status::Error, 0)]).text, "1 of 2 servers connected · no toys yet");
+        assert_eq!(summary(&[(Status::Connected, 0), (Status::Error, 0)]).state, crate::addons::State::Ok, "one connected is enough");
+        assert_eq!(summary(&[(Status::Error, 0)]).text, "Intiface Central isn't running");
+        assert_eq!(summary(&[]).text, "No Intiface server added");
     }
 }
