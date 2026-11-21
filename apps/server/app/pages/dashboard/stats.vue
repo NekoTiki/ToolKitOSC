@@ -104,6 +104,8 @@ function updateStatsFromAttempt(attempt: Attempt): void {
 
     <AdminAppVersionsCard />
 
+    <AdminAddonStatsCard />
+
     <RecentGenerationsCard
       @generation-logged="updateStatsFromAttempt"
       @reconnected="refreshStats"

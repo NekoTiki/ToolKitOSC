@@ -14,6 +14,10 @@ export interface AccessEntry {
   // Their own daily pool; null uses the server setting.
   dailyCredits: number | null
   credits: { remaining: number; daily: number } | null
+  // Ids of the add-ons their app has on (only in GET /api/admin/users).
+  addons?: string[]
+  // When their app connected, while it's connected (only in GET /api/admin/users).
+  onlineSince?: number | null
 }
 
 export const accessEntryName = (entry: Pick<AccessEntry, 'displayName' | 'username'>): string => entry.displayName || entry.username || 'Unknown'

@@ -1,33 +1,17 @@
 <script setup lang="ts">
-import type { ControlStatsResult, StatsResult } from '~/types/adminStats'
-import { DAY_RANGES } from '~/types/adminStats'
+import type { NavigationMenuItem } from '@nuxt/ui'
 
-interface UserRow {
-  discordId: string
-  username: string | null
-  displayName: string | null
-  avatarUrl: string | null
-  lastSeenAt: string
-  suspendedUntil: string | null
-  suspendReason: string | null
-  appVersion: string | null
-  os: string | null
-}
+import type { UserStatsResponse } from '~/types/adminStats'
 
-interface UserStatsResponse {
-  user: UserRow
-  ai: StatsResult
-  controls: ControlStatsResult
-  shareLinks: { main: string | null; custom: string | null }
-}
-
+// One account: the header and the section links here, each section a subpage (user/[discordId]/*)
+// that gets the data fetched here as props.
 const route = useRoute()
 const discordId = route.params.discordId as string
 
 const { redirectIfUnauthorized } = useAdminApi()
 
 // Same SSR reasoning as dashboard/stats.vue - useFetch (not adminFetch/onMounted) so the initial
-// HTML an admin gets already has real data in it.
+// HTML an admin gets already has real data in it. `days` is the Usage subpage's date range.
 const days = ref(14)
 const { data: userStats, error: statsError, refresh } = await useFetch<UserStatsResponse>(`/api/admin/users/${discordId}/stats`, { query: { days } })
 
@@ -39,13 +23,18 @@ const name = computed(() => userStats.value?.user.displayName || userStats.value
 
 useHead({ title: () => `${name.value} · Dashboard` })
 
-const log = useTemplateRef<{ refresh: () => Promise<void> }>('log')
+const onlineFor = useOnlineFor()
 
-// An action shows up in the log below as well.
-const refreshAll = (): void => {
-  void refresh()
-  void log.value?.refresh()
-}
+const base = `/dashboard/user/${discordId}`
+// `active` set by hand: the Account link is the parent path, which every subpage starts with.
+const sections = computed<NavigationMenuItem[]>(() =>
+  [
+    { label: 'Account', icon: 'i-lucide-user-cog', to: base },
+    { label: 'Add-ons', icon: 'i-lucide-puzzle', to: `${base}/addons` },
+    { label: 'Usage', icon: 'i-lucide-chart-column', to: `${base}/usage` },
+    { label: 'Admin log', icon: 'i-lucide-scroll-text', to: `${base}/log` }
+  ].map((item) => ({ ...item, active: route.path.replace(/\/$/, '') === item.to }))
+)
 </script>
 
 <template>
@@ -86,10 +75,15 @@ const refreshAll = (): void => {
           </h1>
           <p class="truncate font-mono text-xs text-muted">
             {{ discordId }}<template v-if="userStats">
-              · last seen <NuxtTime
-                :datetime="userStats.user.lastSeenAt"
-                relative
-              />
+              <template v-if="userStats.onlineSince">
+                · <span class="text-success">online for {{ onlineFor(userStats.onlineSince) }}</span>
+              </template>
+              <template v-else>
+                · last seen <NuxtTime
+                  :datetime="userStats.user.lastSeenAt"
+                  relative
+                />
+              </template>
               <template v-if="userStats.user.appVersion">
                 · app {{ userStats.user.appVersion }}{{ userStats.user.os ? ` on ${userStats.user.os}` : '' }}
               </template>
@@ -98,54 +92,23 @@ const refreshAll = (): void => {
         </div>
       </div>
 
-      <AdminAccountPanel
-        v-if="userStats"
-        :discord-id="discordId"
-        :suspended-until="userStats.user.suspendedUntil"
-        :suspend-reason="userStats.user.suspendReason"
-        @changed="refreshAll"
-        @deleted="navigateTo('/dashboard/users')"
-      />
-
-      <AdminUserAccessPanel :discord-id="discordId" />
-
-      <AdminShareLinkPanel
-        v-if="userStats"
-        :discord-id="discordId"
-        :links="userStats.shareLinks"
-        @changed="refreshAll"
-      />
-
-      <div class="flex flex-wrap items-center gap-2.5">
-        <h2 class="flex-1 text-lg font-semibold text-highlighted">
-          Usage
-        </h2>
-        <AdminSegmented
-          v-model="days"
-          :items="DAY_RANGES"
-          label="Date range"
+      <!-- Scrolls sideways on a phone, never up and down. -->
+      <div class="overflow-x-auto overflow-y-hidden">
+        <UNavigationMenu
+          :items="sections"
+          variant="link"
+          highlight
+          aria-label="User sections"
+          class="w-max min-w-full border-b border-default"
         />
       </div>
 
-      <AdminUsageStats
-        :ai="userStats?.ai"
-        :controls="userStats?.controls"
-        :days="days"
-        daily-title="AI generations per day"
-      />
-
-      <RecentGenerationsCard
+      <NuxtPage
+        v-if="userStats"
+        v-model:days="days"
         :discord-id="discordId"
-        :limit="5"
-      />
-
-      <h2 class="text-lg font-semibold text-highlighted">
-        Admin actions
-      </h2>
-      <AdminLogList
-        ref="log"
-        :discord-id="discordId"
-        :limit="20"
+        :user-stats="userStats"
+        @changed="refresh()"
       />
     </template>
   </div>

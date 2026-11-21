@@ -3,6 +3,8 @@ import { eq } from 'drizzle-orm'
 import { getDb } from '~~/server/db'
 import { users } from '~~/server/db/schema'
 import { existingShareLinks } from '~~/server/db/shareLinks'
+import { hostList } from '~~/server/routes/host'
+import { userAddonUsage } from '~~/server/utils/addonStats'
 import { queryStats } from '~~/server/utils/ai/generationLog'
 import { statsQuerySchema } from '~~/server/utils/ai/schemas'
 import { queryUserControlStats } from '~~/server/utils/controlStats'
@@ -19,14 +21,18 @@ export default defineEventHandler(async (event) => {
 
   const { days } = await getValidatedQuery(event, statsQuerySchema.parse)
 
-  const [[user], ai, controls, shareLinks] = await Promise.all([
+  const [[user], ai, controls, shareLinks, addons] = await Promise.all([
     getDb().select().from(users).where(eq(users.discordId, discordId)).limit(1),
     queryStats(days, discordId),
     queryUserControlStats(discordId, days),
-    existingShareLinks(discordId)
+    existingShareLinks(discordId),
+    userAddonUsage(discordId)
   ])
 
   if (!user) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
-  return { user, ai, controls, shareLinks }
+  // When their app connected, while it's connected.
+  const onlineSince = hostList.get(discordId)?.connectedAt ?? null
+
+  return { user, ai, controls, shareLinks, addons, onlineSince }
 })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AccessEntry } from '~/composables/useAdminUserAccess'
 import { accessEntryName } from '~/composables/useAdminUserAccess'
+import { addonInfo } from '~/types/adminStats'
 
 // Every account that has ever signed in, with its AI access at a glance. Managing one account
 // (credits, model choice, note, revoke) happens on its own page; granting access - including to
@@ -26,6 +27,15 @@ const filteredUsers = computed(() => {
     (user) => (filter.value === 'all' || (filter.value === 'access') === user.hasAccess) && (!q || matches(user, q))
   )
 })
+
+// The add-ons column fits 5 icons: past that, 4 and a "+N".
+const ADDON_ICONS = 5
+const shownAddons = (user: AccessEntry): string[] => {
+  const addons = user.addons ?? []
+
+  return addons.length > ADDON_ICONS ? addons.slice(0, ADDON_ICONS - 1) : addons
+}
+const hiddenAddons = (user: AccessEntry): string[] => (user.addons ?? []).slice(shownAddons(user).length)
 
 const accessCount = computed(() => users.value.filter((user) => user.hasAccess).length)
 
@@ -213,7 +223,7 @@ const submitGrant = async (): Promise<void> => {
           v-for="user in filteredUsers"
           :key="user.discordId"
           :to="`/dashboard/user/${user.discordId}`"
-          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-2.5 transition-colors hover:bg-(--aurora-glass) md:grid-cols-[auto_minmax(0,1fr)_9rem_7rem_8rem_auto]"
+          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-2.5 transition-colors hover:bg-(--aurora-glass) md:grid-cols-[auto_minmax(0,1fr)_7.5rem_9rem_7rem_8rem_auto]"
         >
           <UAvatar
             :src="user.avatarUrl ?? undefined"
@@ -224,13 +234,42 @@ const submitGrant = async (): Promise<void> => {
             <b class="truncate font-medium text-highlighted">{{ accessEntryName(user) }}</b>
             <small class="truncate font-mono text-[11.5px] text-muted">{{ user.discordId }}</small>
           </span>
+          <span
+            class="flex items-center gap-1 text-muted max-md:hidden"
+            :aria-label="user.addons?.length ? `Add-ons: ${user.addons.map((id) => addonInfo(id).name).join(', ')}` : 'No add-ons'"
+          >
+            <UIcon
+              v-for="id in shownAddons(user)"
+              :key="id"
+              :name="addonInfo(id).icon"
+              class="size-4 shrink-0"
+              :title="addonInfo(id).name"
+            />
+            <UBadge
+              v-if="hiddenAddons(user).length"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              class="tabular-nums"
+              :title="hiddenAddons(user).map((id) => addonInfo(id).name).join(', ')"
+            >
+              +{{ hiddenAddons(user).length }}
+            </UBadge>
+          </span>
+          <UBadge
+            v-if="user.onlineSince"
+            color="success"
+            variant="subtle"
+            icon="i-lucide-radio"
+            class="w-fit max-md:hidden"
+          >
+            Live now
+          </UBadge>
           <NuxtTime
+            v-else
             class="text-sm text-muted max-md:hidden"
             :datetime="user.lastSeenAt"
-            day="numeric"
-            month="short"
-            hour="2-digit"
-            minute="2-digit"
+            relative
           />
           <UBadge
             :color="user.hasAccess ? 'success' : 'neutral'"
