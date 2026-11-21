@@ -6,6 +6,7 @@ import { useIntifaceControl } from '~/composables/useIntifaceControl'
 import { useIntifacePatternControl } from '~/composables/useIntifacePatternControl'
 import { useOpenShockControl } from '~/composables/useOpenShockControl'
 import { useOwoControl } from '~/composables/useOwoControl'
+import { useVoiceFxControl } from '~/composables/useVoiceFxControl'
 
 export function useWebsocketClient(roomId: string) {
   const sendMessage = (type: string, message: unknown) => {
@@ -25,6 +26,7 @@ export function useWebsocketClient(roomId: string) {
   const { setValue: setIntifaceValue } = useIntifaceControl()
   const { setState: setBhapticsState } = useBhapticsControl()
   const { setState: setOwoState } = useOwoControl()
+  const { setControls: setVoiceFxControls } = useVoiceFxControl()
   const { setValue: setIntifacePatternValue } = useIntifacePatternControl()
   const { setTheme } = useClientTheme()
   const controlGroups = ref<ControlGroup[]>([])
@@ -90,6 +92,8 @@ export function useWebsocketClient(roomId: string) {
         setBhapticsState({ playing: data.message.playing ?? {}, touched: data.message.touched ?? [] })
       } else if (data.type === 'owo-value-update') {
         setOwoState({ playing: data.message.playing ?? {}, touched: data.message.touched ?? [] })
+      } else if (data.type === 'voicefx-value-update') {
+        setVoiceFxControls(data.message.controls ?? {})
       } else if (data.type === 'client-invalid') {
         // The wire type is the full ClientType union ('everyone' | 'username' | 'discord'), but
         // checkClient() (see apps/client/src/utils/checkClient.ts) never fails validation when

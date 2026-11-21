@@ -427,7 +427,7 @@ impl crate::addons::Addon for Addon {
         crate::addons::Manifest {
             id: "leash",
             name: "Avatar leash",
-            group: "movement",
+            group: "avatar",
             pitch: "Someone pulls the leash on your avatar and you walk toward them, like OSCLeash",
             platforms: &["windows", "linux"],
             badges: &[],

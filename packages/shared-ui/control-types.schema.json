@@ -2144,6 +2144,182 @@
             "type"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cooldown": {
+              "type": "number"
+            },
+            "createdBy": {
+              "additionalProperties": false,
+              "properties": {
+                "assistant": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "assistant",
+                "at"
+              ],
+              "type": "object"
+            },
+            "effect": {
+              "enum": [
+                "muffled",
+                "underwater",
+                "radio",
+                "soft-mute"
+              ],
+              "type": "string"
+            },
+            "effects": {
+              "items": {
+                "enum": [
+                  "muffled",
+                  "underwater",
+                  "radio",
+                  "soft-mute"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "groupRules": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "properties": {
+                  "limits": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "disabledOptions": {
+                        "items": {
+                          "type": [
+                            "string",
+                            "number"
+                          ]
+                        },
+                        "type": "array"
+                      },
+                      "max": {
+                        "type": "number"
+                      },
+                      "min": {
+                        "type": "number"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "locked": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "toggle",
+                "timed",
+                "pick"
+              ],
+              "type": "string"
+            },
+            "level": {
+              "type": "number"
+            },
+            "limits": {
+              "additionalProperties": false,
+              "properties": {
+                "disabledOptions": {
+                  "items": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "max": {
+                  "type": "number"
+                },
+                "min": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "locked": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "paused": {
+              "type": "boolean"
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "seconds": {
+              "type": "number"
+            },
+            "size": {
+              "enum": [
+                "normal",
+                "wide"
+              ],
+              "type": "string"
+            },
+            "type": {
+              "const": "voice-fx",
+              "type": "string"
+            },
+            "unavailable": {
+              "type": "boolean"
+            },
+            "unavailableReason": {
+              "type": "string"
+            },
+            "viaGroup": {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "color"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "cooldown",
+            "effect",
+            "effects",
+            "id",
+            "kind",
+            "level",
+            "name",
+            "seconds",
+            "type"
+          ],
+          "type": "object"
         }
       ]
     }

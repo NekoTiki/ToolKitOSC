@@ -298,6 +298,8 @@ export default defineWebSocketHandler({
       sendToEveryoneInRoom(roomId!, message.text())
     } else if (data.type === 'owo-value-update') {
       sendToEveryoneInRoom(roomId!, message.text())
+    } else if (data.type === 'voicefx-value-update') {
+      sendToEveryoneInRoom(roomId!, message.text())
     } else if (data.type === 'client-invalid') {
       sendToClient(roomId!, data.message.peerId, message.text())
     } else if (data.type === 'client-banned') {

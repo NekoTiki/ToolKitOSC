@@ -2,6 +2,7 @@
 import BhapticsStepFields from '@renderer/components/automations/BhapticsStepFields.vue'
 import OwoStepFields from '@renderer/components/automations/OwoStepFields.vue'
 import ToyStepFields from '@renderer/components/automations/ToyStepFields.vue'
+import VoiceFxStepFields from '@renderer/components/automations/VoiceFxStepFields.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
 import { useAddons } from '@renderer/composables/useAddons'
@@ -425,6 +426,7 @@ const leashValue = computed({
 
 const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
 const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value : null))
+const voiceFxStep = computed(() => (step.value.kind === 'voice-fx' ? step.value : null))
 const moreStep = computed(() =>
   step.value.kind === 'automation-enabled' || step.value.kind === 'vr-toast' || step.value.kind === 'one-of' || step.value.kind === 'osc-message'
     ? step.value
@@ -1005,6 +1007,11 @@ const toInt = (value: number | string): number =>
     <OwoStepFields
       v-else-if="owoStep"
       :model-value="owoStep"
+    />
+
+    <VoiceFxStepFields
+      v-else-if="voiceFxStep"
+      :model-value="voiceFxStep"
     />
 
     <ToyStepFields

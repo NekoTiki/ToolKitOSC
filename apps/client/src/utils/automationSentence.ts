@@ -9,7 +9,7 @@ import type {
   ParameterValueType
 } from '@renderer/lib/tauri-bridge'
 import type { DescribeContext } from '@renderer/utils/automations'
-import { CONDITIONS, formatClock, formatMinutes, parameterName, toysLabel, triggerCondition, WEEKDAYS } from '@renderer/utils/automations'
+import { CONDITIONS, describeVoiceFxStep, describeVoiceFxWhen, formatClock, formatMinutes, parameterName, toysLabel, triggerCondition, WEEKDAYS } from '@renderer/utils/automations'
 import { builtinGuardText, builtinWhenText } from '@renderer/utils/builtinParameters'
 import type { ControlType } from '@toolkitosc/shared-ui'
 import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, isOpenShockControl, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
@@ -95,6 +95,8 @@ export const sentenceWhen = (when: AutomationTrigger, context?: DescribeContext)
         : when.event === 'running'
           ? rich`your leash is pulled to running`
           : rich`your leash is let go`
+    case 'voice-fx':
+      return [{ text: describeVoiceFxWhen(when) }]
     case 'avatar-changed':
       return when.avatarId ? rich`you put on ${strong(when.avatarName ?? 'an avatar')}` : rich`you switch avatar`
     case 'every':
@@ -262,6 +264,8 @@ export const sentenceStep = (step: AutomationStep, context?: DescribeContext): R
       return [strong('stop everything')]
     case 'leash-enabled':
       return rich`turn ${strong('Leash moves me')} ${strong(step.enabled ? 'on' : 'off')}`
+    case 'voice-fx':
+      return [{ text: describeVoiceFxStep(step) }]
     case 'bhaptics-pulse':
       return rich`buzz your bHaptics ${strong(BHAPTICS_LAYOUT[step.position].label.toLowerCase())} at ${strong(pct(step.intensity))} for ${strong(seconds(step.ms))}`
     case 'bhaptics-effect':

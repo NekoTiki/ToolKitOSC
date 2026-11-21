@@ -20,6 +20,7 @@ export type ControlTypes =
   | 'preset'
   | 'bhaptics'
   | 'owo'
+  | 'voice-fx'
 
 // Nuxt UI's default semantic color palette - Badge/etc. accept any of these as `color`.
 export type UiColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -49,7 +50,8 @@ export const CONTROL_TYPE_LABELS: Record<ControlTypes, string> = {
   'intiface-pattern': 'Toy Pattern',
   preset: 'Preset',
   bhaptics: 'bHaptics',
-  owo: 'OWO'
+  owo: 'OWO',
+  'voice-fx': 'Voice Effect'
 }
 
 export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
@@ -74,7 +76,9 @@ export const CONTROL_TYPE_COLORS: Record<ControlTypes, UiColor> = {
   // A body to touch, like the toy it shares a color with.
   bhaptics: 'success',
   // Electrical, like the shocker.
-  owo: 'error'
+  owo: 'error',
+  // A switch with something to say about it, like Toggle Logic.
+  'voice-fx': 'info'
 }
 
 // Every control type this build of shared-ui's Control.vue can render - derived from
@@ -477,6 +481,39 @@ export interface OwoControl extends BaseControl {
   signedInOnly: boolean
 }
 
+// The voice effects, as the client's src-tauri/src/voicefx/model.rs names them, in the order of
+// TKOSC/VoiceFXEffect (1 to 4).
+export type VoiceFxEffect = 'muffled' | 'underwater' | 'radio' | 'soft-mute'
+
+export const VOICE_FX_EFFECTS: { id: VoiceFxEffect; label: string; icon: string; description: string }[] = [
+  { id: 'muffled', label: 'Muffled', icon: 'i-lucide-mic-off', description: 'Cuts the highs and lowers the volume, like through a wall or a gag.' },
+  { id: 'underwater', label: 'Underwater', icon: 'i-lucide-waves', description: 'Muffled, with a slow wobble in volume and tone.' },
+  { id: 'radio', label: 'Radio', icon: 'i-lucide-radio', description: 'Thin and a bit crackly, like a cheap walkie-talkie.' },
+  { id: 'soft-mute', label: 'Soft mute', icon: 'i-lucide-volume-x', description: 'Fades your voice out. The strength sets how far.' }
+]
+
+export const voiceFxEffect = (id: string | undefined): (typeof VOICE_FX_EFFECTS)[number] => VOICE_FX_EFFECTS.find((effect) => effect.id === id) ?? VOICE_FX_EFFECTS[0]!
+
+// The longest a timed Voice effects control plays, and waits before it can be used again.
+export const VOICE_FX_MAX_SECONDS = 600
+
+// Puts an effect on the wearer's voice (the client's voice effects add-on). One effect plays at a
+// time: the newest thing holding one on wins.
+//   'toggle' - on until turned off, with `effect` and `level`.
+//   'timed'  - on for `seconds`, then `cooldown` seconds before it can be used again.
+//   'pick'   - all in one: whoever uses it picks one of `effects` and a strength, then turns it on
+//              until turned off or for `seconds`. The profile's range applies to the strength.
+export interface VoiceFxControl extends BaseControl {
+  type: 'voice-fx'
+  kind: 'toggle' | 'timed' | 'pick'
+  effect: VoiceFxEffect
+  // 0-1.
+  level: number
+  seconds: number
+  cooldown: number
+  effects: VoiceFxEffect[]
+}
+
 export type ControlType =
   | BooleanControl
   | BooleanGroupControl
@@ -491,6 +528,7 @@ export type ControlType =
   | PresetControl
   | BhapticsControl
   | OwoControl
+  | VoiceFxControl
 
 export const isOpenShockControl = (control: ControlType | null | undefined): control is OpenShockControl => isOpenShockType(control?.type)
 
@@ -589,6 +627,16 @@ export interface OwoControlCommand extends BaseControlCommand {
   level?: number
 }
 
+// Turns a Voice effects control on or off. Only 'pick' controls read `effect`, `level` (0-1) and
+// `timed` (for the control's `seconds` rather than until turned off).
+export interface VoiceFxControlCommand extends BaseControlCommand {
+  type: 'voice-fx'
+  value: boolean
+  effect?: VoiceFxEffect
+  level?: number
+  timed?: boolean
+}
+
 export type ControlCommand =
   | BooleanControlCommand
   | BooleanGroupControlCommand
@@ -603,6 +651,7 @@ export type ControlCommand =
   | PresetControlCommand
   | BhapticsControlCommand
   | OwoControlCommand
+  | VoiceFxControlCommand
 
 export type CommandWithoutIds =
   | Omit<BooleanControlCommand, 'groupId' | 'controlId'>
@@ -618,6 +667,7 @@ export type CommandWithoutIds =
   | Omit<PresetControlCommand, 'groupId' | 'controlId'>
   | Omit<BhapticsControlCommand, 'groupId' | 'controlId'>
   | Omit<OwoControlCommand, 'groupId' | 'controlId'>
+  | Omit<VoiceFxControlCommand, 'groupId' | 'controlId'>
 
 export interface ControlGroup {
   id: string

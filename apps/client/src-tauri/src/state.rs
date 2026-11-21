@@ -26,6 +26,7 @@ use crate::toys::patterns::Patterns;
 use crate::toys::saved::Saved;
 use crate::toys::Toys;
 use crate::types::{AvatarDetails, OscMessage};
+use crate::voicefx::VoiceFx;
 
 pub struct AppState {
     /// Last-known value of every OSC address for the current avatar. Mirrors the original's
@@ -96,7 +97,9 @@ pub struct AppState {
     /// Toasts in the headset (see `overlay`).
     pub overlay: Overlay,
     /// The MCP server AI assistants connect to (see `mcp`).
-    pub mcp: Mcp
+    pub mcp: Mcp,
+    /// Your microphone on its way to VRChat, and the effects held on it (see `voicefx`).
+    pub voicefx: VoiceFx
 }
 
 impl Default for AppState {
@@ -129,7 +132,8 @@ impl Default for AppState {
             bhaptics: Bhaptics::default(),
             owo: Owo::default(),
             overlay: Overlay::default(),
-            mcp: Mcp::default()
+            mcp: Mcp::default(),
+            voicefx: VoiceFx::default()
         }
     }
 }

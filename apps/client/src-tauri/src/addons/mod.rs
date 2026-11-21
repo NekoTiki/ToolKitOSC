@@ -92,7 +92,7 @@ pub trait Addon: Sync {
 }
 
 /// Every add-on, in the order the Add-ons page lists them.
-static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::bhaptics::Addon, &crate::owo::Addon, &crate::boards::Addon, &crate::overlay::Addon, &crate::mcp::Addon];
+static ADDONS: &[&dyn Addon] = &[&crate::openshock::Addon, &crate::intiface::Addon, &crate::haptics::Addon, &crate::leash::Addon, &crate::voicefx::Addon, &crate::bhaptics::Addon, &crate::owo::Addon, &crate::boards::Addon, &crate::overlay::Addon, &crate::mcp::Addon];
 
 /// Whether it runs on this OS. One that doesn't is left out everywhere: never listed, offered or
 /// started (bHaptics on Linux, where there's no bHaptics Player).
@@ -475,6 +475,7 @@ mod tests {
             Addon::manifest(&crate::intiface::Addon),
             Addon::manifest(&crate::haptics::Addon),
             Addon::manifest(&crate::leash::Addon),
+            Addon::manifest(&crate::voicefx::Addon),
             Addon::manifest(&crate::bhaptics::Addon),
             Addon::manifest(&crate::owo::Addon),
             Addon::manifest(&crate::boards::Addon),
@@ -497,6 +498,8 @@ mod tests {
         assert_eq!(find_control_type(real(), "intiface-pattern").map(|m| m.id), Some("intiface"));
         assert_eq!(find_control_type(real(), "bhaptics").map(|m| m.id), Some("bhaptics"));
         assert_eq!(find_control_type(real(), "owo").map(|m| m.id), Some("owo"));
+        assert_eq!(find_control_type(real(), "voice-fx").map(|m| m.id), Some("voicefx"));
+        assert_eq!(find_automation_kind(real(), "voice-fx").map(|m| m.id), Some("voicefx"));
         assert!(find_control_type(real(), "slider").is_none());
         assert_eq!(find_automation_kind(real(), "board-output").map(|m| m.id), Some("boards"));
         assert_eq!(find_automation_kind(real(), "leash-enabled").map(|m| m.id), Some("leash"));

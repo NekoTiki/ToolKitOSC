@@ -399,5 +399,35 @@
     "control": { "id": "c", "name": "C", "type": "owo", "muscles": ["PectoralL", "LumbarR", "LumbarL"], "maxIntensity": 0.3, "maxDurationMs": 500, "sensations": ["tap", "pulse", "made-up"], "cooldown": 2000, "signedInOnly": true },
     "command": { "type": "owo", "value": "made-up", "muscles": ["LumbarR"] },
     "expected": null
+  },
+  {
+    "name": "voice-fx: a toggle keeps only on or off",
+    "control": { "id": "c", "name": "C", "type": "voice-fx", "kind": "toggle", "effect": "muffled", "level": 0.7, "seconds": 20, "cooldown": 0, "effects": ["muffled"] },
+    "command": { "type": "voice-fx", "value": true, "effect": "radio", "level": 1, "timed": true },
+    "expected": { "type": "voice-fx", "value": true }
+  },
+  {
+    "name": "voice-fx: turning off needs nothing else",
+    "control": { "id": "c", "name": "C", "type": "voice-fx", "kind": "pick", "effect": "muffled", "level": 0.7, "seconds": 20, "cooldown": 0, "effects": ["muffled", "radio"] },
+    "command": { "type": "voice-fx", "value": false },
+    "expected": { "type": "voice-fx", "value": false }
+  },
+  {
+    "name": "voice-fx: all in one takes an offered effect, within the profile's range",
+    "control": { "id": "c", "name": "C", "type": "voice-fx", "kind": "pick", "effect": "muffled", "level": 0.7, "seconds": 20, "cooldown": 0, "effects": ["muffled", "radio"], "limits": { "max": 0.6 } },
+    "command": { "type": "voice-fx", "value": true, "effect": "radio", "level": 0.9, "timed": true, "extra": "x" },
+    "expected": { "type": "voice-fx", "value": true, "effect": "radio", "level": 0.6, "timed": true }
+  },
+  {
+    "name": "voice-fx drops an effect the control doesn't offer",
+    "control": { "id": "c", "name": "C", "type": "voice-fx", "kind": "pick", "effect": "muffled", "level": 0.7, "seconds": 20, "cooldown": 0, "effects": ["muffled", "radio"] },
+    "command": { "type": "voice-fx", "value": true, "effect": "underwater", "level": 0.5 },
+    "expected": null
+  },
+  {
+    "name": "voice-fx drops all in one without a strength",
+    "control": { "id": "c", "name": "C", "type": "voice-fx", "kind": "pick", "effect": "muffled", "level": 0.7, "seconds": 20, "cooldown": 0, "effects": ["muffled", "radio"] },
+    "command": { "type": "voice-fx", "value": true, "effect": "radio" },
+    "expected": null
   }
 ]

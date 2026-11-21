@@ -77,6 +77,9 @@ export const describeCommand = (control: ControlType | undefined, type: ControlT
       if (value === 'effect') return 'played an effect'
       break
 
+    case 'voice-fx':
+      return value === true ? 'turned it on' : 'turned it off'
+
     case 'owo': {
       const sensation = OWO_SENSATIONS.find((s) => s.id === value)
 

@@ -21,7 +21,7 @@ runs:
       shell: bash
       run: |
         apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-        packages="libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf"
+        packages="libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libasound2-dev patchelf"
         install() {
           sudo timeout 3m apt-get $apt_opts update -q &&
             sudo DEBIAN_FRONTEND=noninteractive timeout 10m apt-get $apt_opts install -y -q --no-install-recommends $packages

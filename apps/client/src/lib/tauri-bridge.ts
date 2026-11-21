@@ -18,6 +18,7 @@ import { owoApi } from './tauri/owo'
 import { serverApi } from './tauri/server'
 import { setupApi } from './tauri/setup'
 import { toysApi } from './tauri/toys'
+import { voicefxApi } from './tauri/voicefx'
 
 export type * from './tauri/addons'
 export type * from './tauri/app'
@@ -36,6 +37,7 @@ export type * from './tauri/server'
 export type * from './tauri/setup'
 export type * from './tauri/toys'
 export { THIS_PC } from './tauri/toys'
+export type * from './tauri/voicefx'
 
 export const api = {
   ...appApi,
@@ -53,7 +55,8 @@ export const api = {
   ...bhapticsApi,
   ...owoApi,
   ...overlayApi,
-  ...mcpApi
+  ...mcpApi,
+  ...voicefxApi
 }
 
 export type TauriApiType = typeof api
