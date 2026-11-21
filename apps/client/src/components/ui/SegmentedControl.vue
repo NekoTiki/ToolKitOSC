@@ -13,7 +13,7 @@ const model = defineModel<T>({ required: true })
 
 <template>
   <div
-    class="flex shrink-0 gap-0.5 rounded-[calc(var(--ui-radius)*4)] glass p-1"
+    class="flex shrink-0 gap-1 rounded-[calc(var(--ui-radius)*4)] glass p-1"
     role="group"
     :aria-label="ariaLabel"
   >
@@ -27,7 +27,7 @@ const model = defineModel<T>({ required: true })
           ? accent
             ? 'bg-primary text-inverted'
             : 'bg-accented text-highlighted'
-          : 'text-muted hover:text-default'
+          : 'text-muted hover:bg-black/5 hover:text-default dark:hover:bg-white/10'
       "
       :aria-pressed="model === item.value"
       :title="item.title ?? item.label"

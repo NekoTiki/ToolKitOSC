@@ -90,102 +90,90 @@ const canLaunch = (addon: Addon): boolean =>
     @update:open="finishSetup(true)"
   />
 
-  <!-- A grid of groups, as many columns as fit (the Add-ons section takes the whole width, see
-       SettingsPage); each group lays its cards two by two once it has the room. -->
-  <div class="grid grid-cols-[repeat(auto-fill,minmax(min(40rem,100%),1fr))] items-start gap-x-6 gap-y-5">
-    <section
-      v-for="group in groups"
-      :key="group.key"
-      class="@container grid min-w-0 gap-2.5"
-    >
-      <h2 class="font-mono text-[11.5px] tracking-widest text-muted uppercase">
-        {{ group.label }}
-      </h2>
-      <div class="grid gap-2.5 @[38rem]:grid-cols-2">
-        <article
-          v-for="addon in group.items"
-          :key="addon.id"
-          class="grid content-start gap-2.5 rounded-panel border p-4.5 transition-colors"
-          :class="addon.enabled ? 'border-primary/45 bg-primary/10' : 'border-transparent glass'"
-        >
-          <div class="flex items-center justify-between gap-3">
+  <!-- A list per group, one line per add-on: its name and badges, what it does (or its status
+       while on), then Set up and the switch. Add-ons this OS can't run aren't listed at all. -->
+  <section
+    v-for="group in groups"
+    :key="group.key"
+    class="grid gap-2"
+  >
+    <h2 class="font-mono text-[11.5px] tracking-widest text-muted uppercase">
+      {{ group.label }}
+    </h2>
+    <div class="divide-y divide-default overflow-hidden rounded-panel glass">
+      <article
+        v-for="addon in group.items"
+        :key="addon.id"
+        class="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4.5 py-3.5 transition-colors"
+        :class="addon.enabled ? 'bg-primary/10' : undefined"
+      >
+        <div class="grid min-w-0 flex-1 basis-64 gap-1">
+          <div class="flex flex-wrap items-center gap-2">
             <b class="text-[15.5px] font-semibold text-highlighted">{{ addon.name }}</b>
-            <USwitch
-              :model-value="addon.enabled"
-              :loading="switching === addon.id"
-              :aria-label="`${addon.name} on or off`"
-              size="xl"
-              @update:model-value="toggle(addon, !!$event)"
+            <UBadge
+              v-if="leftForLater(addon)"
+              label="Needs setup"
+              color="warning"
+              variant="subtle"
+              class="rounded-full"
+            />
+            <UBadge
+              v-for="badge in addon.badges"
+              :key="badge"
+              :label="BADGES[badge]?.label ?? badge"
+              :color="BADGES[badge]?.color ?? 'neutral'"
+              variant="subtle"
+              class="rounded-full"
             />
           </div>
-
-          <!-- The status (or what it does, while off), with its badge on the right. Add-ons this OS can't run aren't listed at all. -->
-          <div class="flex items-start justify-between gap-3">
-            <div
-              v-if="addon.enabled"
-              class="flex min-w-0 items-center gap-2 text-[13px] text-muted"
-            >
-              <span
-                class="size-2.5 shrink-0 rounded-full"
-                :class="DOT[addon.status.state]"
-              />
-              <span :class="addon.status.state === 'error' ? 'text-error' : undefined">{{ addon.status.text }}</span>
-            </div>
-            <p
-              v-else
-              class="min-w-0 text-[13px] text-muted"
-            >
-              {{ addon.pitch }}
-            </p>
-
-            <div
-              v-if="addon.badges.length || leftForLater(addon)"
-              class="flex shrink-0 flex-wrap justify-end gap-1.5"
-            >
-              <UBadge
-                v-if="leftForLater(addon)"
-                label="Needs setup"
-                color="warning"
-                variant="subtle"
-                class="rounded-full"
-              />
-              <UBadge
-                v-for="badge in addon.badges"
-                :key="badge"
-                :label="BADGES[badge]?.label ?? badge"
-                :color="BADGES[badge]?.color ?? 'neutral'"
-                variant="subtle"
-                class="rounded-full"
-              />
-            </div>
-          </div>
-
           <div
             v-if="addon.enabled"
-            class="flex flex-wrap gap-2"
+            class="flex min-w-0 items-center gap-2 text-[13px] text-muted"
           >
-            <UButton
-              :to="ADDON_SETUP[addon.id] ?? '/settings/addons'"
-              icon="i-lucide-settings-2"
-              color="neutral"
-              variant="subtle"
-              class="rounded-2xl"
-            >
-              Set up
-            </UButton>
-            <UButton
-              v-if="canLaunch(addon)"
-              icon="i-lucide-rocket"
-              color="neutral"
-              variant="subtle"
-              class="rounded-2xl"
-              @click="launchIntiface"
-            >
-              Launch it
-            </UButton>
+            <span
+              class="size-2.5 shrink-0 rounded-full"
+              :class="DOT[addon.status.state]"
+            />
+            <span :class="addon.status.state === 'error' ? 'text-error' : undefined">{{ addon.status.text }}</span>
           </div>
-        </article>
-      </div>
-    </section>
-  </div>
+          <p
+            v-else
+            class="text-[13px] text-muted"
+          >
+            {{ addon.pitch }}
+          </p>
+        </div>
+
+        <div class="ml-auto flex shrink-0 items-center gap-2">
+          <UButton
+            v-if="canLaunch(addon)"
+            icon="i-lucide-rocket"
+            color="neutral"
+            variant="subtle"
+            class="rounded-2xl"
+            @click="launchIntiface"
+          >
+            Launch it
+          </UButton>
+          <UButton
+            v-if="addon.enabled"
+            :to="ADDON_SETUP[addon.id] ?? '/settings/addons'"
+            icon="i-lucide-settings-2"
+            color="neutral"
+            variant="subtle"
+            class="rounded-2xl"
+          >
+            Set up
+          </UButton>
+          <USwitch
+            :model-value="addon.enabled"
+            :loading="switching === addon.id"
+            :aria-label="`${addon.name} on or off`"
+            size="xl"
+            @update:model-value="toggle(addon, !!$event)"
+          />
+        </div>
+      </article>
+    </div>
+  </section>
 </template>

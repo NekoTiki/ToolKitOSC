@@ -195,6 +195,7 @@ const savePort = (): void => {
           </div>
           <SegmentedControl
             :model-value="settings.levels[level.key]"
+            class="*:flex-auto"
             :items="PERMISSIONS"
             :aria-label="`${level.label} permission`"
             accent
