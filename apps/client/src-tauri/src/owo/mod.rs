@@ -557,6 +557,11 @@ impl crate::addons::Addon for Addon {
         }
     }
 
+    /// The suit the OWO app connects: one or none.
+    fn devices(&self, app: &AppHandle) -> Option<usize> {
+        Some(usize::from(owo(app).inner.lock().unwrap().status == Some(Status::Connected)))
+    }
+
     fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
         stop_all(app);
         Box::pin(async { Ok(()) })

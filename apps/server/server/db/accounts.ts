@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm'
 
 import { getDb } from './index'
 import {
+  addonUsage,
   aiAccess,
   aiAccessRequests,
   aiCreditBonus,
@@ -82,6 +83,7 @@ export async function deleteAccountData(discordId: string): Promise<void> {
     db.delete(aiGenerationLog).where(eq(aiGenerationLog.discordId, discordId)),
     db.delete(controlInventory).where(eq(controlInventory.discordId, discordId)),
     db.delete(controlActivationDaily).where(eq(controlActivationDaily.discordId, discordId)),
+    db.delete(addonUsage).where(eq(addonUsage.discordId, discordId)),
     // Last: the rows above point at it.
     db.delete(users).where(eq(users.discordId, discordId))
   ])

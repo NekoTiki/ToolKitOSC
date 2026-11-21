@@ -535,6 +535,10 @@ impl crate::addons::Addon for Addon {
         }
     }
 
+    fn devices(&self, app: &AppHandle) -> Option<usize> {
+        Some(intiface(app).inner.lock().unwrap().devices.len())
+    }
+
     fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
         crate::toys::patterns::stop_all(app);
         crate::toys::stop_all(app);

@@ -33,6 +33,7 @@ import {
   showViewers,
   viewerCount
 } from '~~/server/routes/ws/[ws]'
+import { parseAddonStats, recordAddonUsage } from '~~/server/utils/addonStats'
 import { getAiAccess } from '~~/server/utils/ai/access'
 import { recordControlInventory, scheduleControlActivation } from '~~/server/utils/controlStats'
 import { roomsChanged } from '~~/server/utils/liveRooms'
@@ -262,6 +263,10 @@ export default defineWebSocketHandler({
       // changed) - viewers don't need, and shouldn't rely on, which avatar these came from. Each
       // viewer gets their own copy, with what their viewer groups give them.
       sendControlsToRoom(roomId!)
+    } else if (data.type === 'addon-stats') {
+      void recordAddonUsage(roomId, parseAddonStats(data.message)).catch((error) =>
+        console.error('[addons] failed to record usage:', error)
+      )
     } else if (data.type === 'viewer-groups') {
       const { groups, members } = data.message
 

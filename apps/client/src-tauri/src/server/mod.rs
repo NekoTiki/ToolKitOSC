@@ -356,6 +356,7 @@ fn on_message(app: &AppHandle, id: u64, text: String) -> After {
     }
     if kind.as_deref() == Some("auth-success") {
         crate::setup::sync(app, true);
+        crate::addons::send_stats(app, true);
     }
 
     if kind.as_deref() == Some("command") {

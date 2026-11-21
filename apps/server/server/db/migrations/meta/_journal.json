@@ -99,6 +99,13 @@
       "when": 1792881456279,
       "tag": "0013_plain_madame_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1795279434886,
+      "tag": "0014_addon_usage",
+      "breakpoints": true
     }
   ]
 }

@@ -182,6 +182,21 @@ export const controlInventory = sqliteTable(
   (t) => [primaryKey({ columns: [t.discordId, t.avatarId, t.type] })]
 )
 
+// Which add-ons the host's app has on and how many devices each has, replaced wholesale on every
+// `addon-stats` (see utils/addonStats.ts). Ids and counts only. One row per add-on the app can run
+// on its OS, on or off, so "of the users who could, how many turned it on" can be answered.
+export const addonUsage = sqliteTable(
+  'addon_usage',
+  {
+    discordId: text('discord_id').notNull(),
+    addonId: text('addon_id').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+    devices: integer('devices'),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+  },
+  (t) => [primaryKey({ columns: [t.discordId, t.addonId] })]
+)
+
 // Day-partitioned (UTC calendar day) activation counters, one row per (discordId, type, day) -
 // same reasoning as ai_credit_usage above. `discordId` here is the *host's* room id (whoever owns
 // the control panel a command executed on), not the viewer who sent it - see routes/ws/[ws].ts,

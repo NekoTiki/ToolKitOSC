@@ -659,6 +659,10 @@ impl crate::addons::Addon for Addon {
         }
     }
 
+    fn devices(&self, app: &AppHandle) -> Option<usize> {
+        Some(bhaptics(app).inner.lock().unwrap().player.connected_positions.len())
+    }
+
     fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
         stop_all(app);
         Box::pin(async { Ok(()) })

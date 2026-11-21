@@ -708,6 +708,10 @@ impl crate::addons::Addon for Addon {
         }
     }
 
+    fn devices(&self, app: &AppHandle) -> Option<usize> {
+        Some(openshock(app).inner.lock().unwrap().hubs.iter().map(|hub| hub.shockers.len()).sum())
+    }
+
     fn stop_everything(&self, app: &AppHandle) -> crate::addons::StopFuture {
         let app = app.clone();
         Box::pin(async move { stop_all(&app).await })
