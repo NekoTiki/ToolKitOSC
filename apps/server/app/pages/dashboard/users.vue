@@ -28,6 +28,15 @@ const filteredUsers = computed(() => {
   )
 })
 
+// The add-ons column fits 5 icons: past that, 4 and a "+N".
+const ADDON_ICONS = 5
+const shownAddons = (user: AccessEntry): string[] => {
+  const addons = user.addons ?? []
+
+  return addons.length > ADDON_ICONS ? addons.slice(0, ADDON_ICONS - 1) : addons
+}
+const hiddenAddons = (user: AccessEntry): string[] => (user.addons ?? []).slice(shownAddons(user).length)
+
 const accessCount = computed(() => users.value.filter((user) => user.hasAccess).length)
 
 const filterItems = computed(() => [
@@ -226,16 +235,21 @@ const submitGrant = async (): Promise<void> => {
             <small class="truncate font-mono text-[11.5px] text-muted">{{ user.discordId }}</small>
           </span>
           <span
-            class="flex flex-wrap gap-1 text-muted max-md:hidden"
+            class="flex items-center gap-1 text-muted max-md:hidden"
             :aria-label="user.addons?.length ? `Add-ons: ${user.addons.map((id) => addonInfo(id).name).join(', ')}` : 'No add-ons'"
           >
             <UIcon
-              v-for="id in user.addons"
+              v-for="id in shownAddons(user)"
               :key="id"
               :name="addonInfo(id).icon"
-              class="size-4"
+              class="size-4 shrink-0"
               :title="addonInfo(id).name"
             />
+            <span
+              v-if="hiddenAddons(user).length"
+              class="font-mono text-[11px] tabular-nums"
+              :title="hiddenAddons(user).map((id) => addonInfo(id).name).join(', ')"
+            >+{{ hiddenAddons(user).length }}</span>
           </span>
           <NuxtTime
             class="text-sm text-muted max-md:hidden"
