@@ -12,7 +12,12 @@ export interface IntifaceActuator {
   actuatorType: string
 }
 
+// The server everything saved before there were several Intiface servers is on.
+export const THIS_PC = 'this-pc'
+
 export interface IntifaceDevice {
+  // The Intiface server it's on (IntifaceServer.id).
+  server: string
   index: number
   name: string
   actuators: IntifaceActuator[]
@@ -21,25 +26,37 @@ export interface IntifaceDevice {
   battery: number | null
 }
 
-export interface IntifaceState {
-  // Empty for the default.
-  url: string
-  defaultUrl: string
-  enabled: boolean
-  autoLaunch: boolean
+// One Intiface server you added, by address, with its connection.
+export interface IntifaceServer {
+  id: string
+  // Your name for it. Empty shows the address.
+  label: string
+  host: string
+  port: number
+  // On this PC: auto-launch applies.
+  local: boolean
   status: IntifaceStatus
   devices: IntifaceDevice[]
-  // Every toy Intiface has listed, connected now or not.
-  knownDevices: IntifaceDevice[]
-  // Whether a local Intiface Central install was found.
-  installed: boolean
-  launchAttempts: number
-  maxLaunchAttempts: number
   // Intiface's own message when it refused the handshake.
   refusedReason: string
+  launchAttempts: number
+}
+
+export interface IntifaceState {
+  enabled: boolean
+  autoLaunch: boolean
+  servers: IntifaceServer[]
+  // Every toy Intiface has listed, on any server, connected now or not.
+  knownDevices: IntifaceDevice[]
+  defaultPort: number
+  // Whether a local Intiface Central install was found.
+  installed: boolean
+  maxLaunchAttempts: number
 }
 
 export interface ToyActuatorRef {
+  // Missing: this PC.
+  server?: string
   deviceIndex: number
   actuatorIndex: number
   actuatorType: string
@@ -62,6 +79,7 @@ export interface SavedPatternData {
 
 // An actuator avatar touch is driving right now (see src-tauri/src/haptics).
 export interface ToyTouched {
+  server: string
   deviceIndex: number
   actuatorIndex: number
 }
@@ -77,8 +95,13 @@ export const toysApi = {
   // Once, from the settings the webview used to keep in localStorage.
   intifaceMigrate: (url: string | null, enabled: boolean | null, autoLaunch: boolean | null): Promise<void> =>
     invoke('intiface_migrate', { url, enabled, autoLaunch }),
-  // Empty goes back to the default URL. Reconnects right away.
-  intifaceSetUrl: (url: string | null): Promise<void> => invoke('intiface_set_url', { url }),
+  // Adds a server and connects to it. Resolves to its id; rejects with a message for a bad or
+  // duplicate address.
+  intifaceAddServer: (label: string, host: string, port: number): Promise<string> => invoke('intiface_add_server', { label, host, port }),
+  // Renames a server, or moves it to a new address (reconnecting).
+  intifaceUpdateServer: (id: string, label: string, host: string, port: number): Promise<void> =>
+    invoke('intiface_update_server', { id, label, host, port }),
+  intifaceRemoveServer: (id: string): Promise<void> => invoke('intiface_remove_server', { id }),
   intifaceSetAutoLaunch: (autoLaunch: boolean): Promise<void> => invoke('intiface_set_auto_launch', { autoLaunch }),
   // Opens the local Intiface Central install. Rejects with a message when it isn't found.
   intifaceLaunch: (): Promise<void> => invoke('intiface_launch'),

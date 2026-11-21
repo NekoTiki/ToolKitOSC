@@ -306,11 +306,11 @@ impl resolve::Live for AppLive<'_> {
     fn intiface_connected(&self) -> bool {
         crate::intiface::connected(self.app)
     }
-    fn has_device(&self, index: u64) -> bool {
-        u32::try_from(index).is_ok_and(|index| crate::intiface::has_device(self.app, index))
+    fn has_device(&self, server: &str, index: u64) -> bool {
+        u32::try_from(index).is_ok_and(|index| crate::intiface::has_device(self.app, server, index))
     }
-    fn touched(&self, device_index: u64, actuator_index: u64) -> bool {
-        self.touched.iter().any(|touched| u64::from(touched.device_index) == device_index && u64::from(touched.actuator_index) == actuator_index)
+    fn touched(&self, server: &str, device_index: u64, actuator_index: u64) -> bool {
+        self.touched.iter().any(|touched| touched.server == server && u64::from(touched.device_index) == device_index && u64::from(touched.actuator_index) == actuator_index)
     }
     fn preset_exists(&self, id: &str) -> bool {
         self.presets

@@ -1280,6 +1280,9 @@
                   },
                   "deviceName": {
                     "type": "string"
+                  },
+                  "server": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -1443,6 +1446,9 @@
                     "type": "number"
                   },
                   "deviceName": {
+                    "type": "string"
+                  },
+                  "server": {
                     "type": "string"
                   }
                 },

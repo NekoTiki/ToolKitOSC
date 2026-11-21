@@ -35,6 +35,7 @@ export type * from './tauri/owo'
 export type * from './tauri/server'
 export type * from './tauri/setup'
 export type * from './tauri/toys'
+export { THIS_PC } from './tauri/toys'
 
 export const api = {
   ...appApi,

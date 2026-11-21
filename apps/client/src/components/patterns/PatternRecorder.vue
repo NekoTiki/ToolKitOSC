@@ -23,7 +23,7 @@ const PREVIEW_ID = 'pattern-preview'
 // A built-in pattern has no length of its own; the graph shows this much of it.
 const BUILTIN_WINDOW_MS = 8000
 
-const { devices, setActuatorIntensity } = useIntiface()
+const { devices, setActuatorIntensity, toyServerName } = useIntiface()
 const { playDefinition, playPattern, releaseActuators } = useIntifacePatterns()
 const { controlValue: patternValues } = useIntifacePatternControl()
 const { paused } = useStopEverything()
@@ -34,7 +34,11 @@ const recorder = useTemplateRef<InstanceType<typeof PatternRecorderBase>>('recor
 const toy = ref<string>('none')
 
 const toyItems = computed(() => [
-  ...Array.from(devices.value.values()).map((device) => ({ value: String(device.index), label: device.name })),
+  ...Array.from(devices.value.entries()).map(([key, device]) => {
+    const server = toyServerName(device.server)
+
+    return { value: key, label: server ? `${device.name} · ${server}` : device.name }
+  }),
   { value: 'none', label: 'No toy' }
 ])
 
@@ -55,10 +59,11 @@ const pickToy = (value: string): void => {
 }
 
 const actuators = computed<IntifaceActuatorRef[]>(() => {
-  const device = toy.value === 'none' ? undefined : devices.value.get(Number(toy.value))
+  const device = toy.value === 'none' ? undefined : devices.value.get(toy.value)
 
   return (
     device?.actuators.map((actuator) => ({
+      server: device.server,
       deviceIndex: device.index,
       deviceName: device.name,
       actuatorIndex: actuator.index,

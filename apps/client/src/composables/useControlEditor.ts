@@ -1,6 +1,6 @@
 import { useAvatarDetails } from '@renderer/composables/useAvatarDetails'
 import { useControls } from '@renderer/composables/useControls'
-import { useIntiface } from '@renderer/composables/useIntiface'
+import { toyKey, useIntiface } from '@renderer/composables/useIntiface'
 import { useOpenShock } from '@renderer/composables/useOpenShock'
 import { usePresets } from '@renderer/composables/usePresets'
 import { isNoisyAddress } from '@renderer/utils/addressFilter'
@@ -236,7 +236,7 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
   )
 
   const intifaceUnavailable = computed(
-    () => !intifaceAvailable.value || (model.value.actuators ?? []).every((actuator) => !intifaceDevices.value.has(actuator.deviceIndex))
+    () => !intifaceAvailable.value || (model.value.actuators ?? []).every((actuator) => !intifaceDevices.value.has(toyKey(actuator.server, actuator.deviceIndex)))
   )
 
   const previewUnavailable = computed(

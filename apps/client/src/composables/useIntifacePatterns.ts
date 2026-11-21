@@ -118,7 +118,7 @@ export interface PlayOptions {
 
 // Only the fields Rust needs: a control's actuator refs also carry names.
 const toRefs = (actuators: IntifaceActuatorRef[]): ToyActuatorRef[] =>
-  actuators.map(({ deviceIndex, actuatorIndex, actuatorType }) => ({ deviceIndex, actuatorIndex, actuatorType }))
+  actuators.map(({ server, deviceIndex, actuatorIndex, actuatorType }) => ({ server, deviceIndex, actuatorIndex, actuatorType }))
 
 const { setValue: setPatternValue } = useIntifacePatternControl()
 

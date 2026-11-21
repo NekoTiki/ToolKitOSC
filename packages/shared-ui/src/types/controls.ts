@@ -260,6 +260,9 @@ export interface OpenShockControl extends BaseControl {
 // control itself). `actuatorType` (Buttplug's "Vibrate"/"Rotate"/"Oscillate"/...) is likewise kept
 // on the control - it has to be sent back verbatim in the ScalarCmd for this actuator.
 export interface IntifaceActuatorRef {
+  // The Intiface server the toy is on (toy indexes are only unique within one server). Missing on
+  // controls saved before there were several: "this-pc".
+  server?: string
   deviceIndex: number
   deviceName: string
   actuatorIndex: number

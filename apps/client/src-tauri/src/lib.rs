@@ -211,7 +211,9 @@ pub fn run() {
             // Intiface, toys and patterns
             intiface::commands::intiface_state,
             intiface::commands::intiface_migrate,
-            intiface::commands::intiface_set_url,
+            intiface::commands::intiface_add_server,
+            intiface::commands::intiface_update_server,
+            intiface::commands::intiface_remove_server,
             intiface::commands::intiface_set_auto_launch,
             intiface::commands::intiface_launch,
             toys::commands::toys_set,

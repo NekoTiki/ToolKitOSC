@@ -139,7 +139,7 @@ fn emit_value(app: &AppHandle, control_id: &str, value: &str, info: Option<Info>
 }
 
 fn overlaps(a: &[ActuatorRef], b: &[ActuatorRef]) -> bool {
-    a.iter().any(|x| b.iter().any(|y| x.device_index == y.device_index && x.actuator_index == y.actuator_index))
+    a.iter().any(|x| b.iter().any(|y| x.server == y.server && x.device_index == y.device_index && x.actuator_index == y.actuator_index))
 }
 
 /// Stops a control's runner without touching its toys or its value. Returns whether one ran.

@@ -27,6 +27,7 @@ pub struct ZoneView {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputLevel {
+    pub server: String,
     pub device_index: u32,
     pub actuator_index: u32,
     /// Set for a part of your bHaptics gear.
@@ -116,6 +117,7 @@ impl Engine {
                     .collect();
                 let strongest = sources.iter().copied().fold(0.0, f64::max);
                 OutputLevel {
+                    server: output.actuator.server.clone(),
                     device_index: output.actuator.device_index,
                     actuator_index: output.actuator.actuator_index,
                     bhaptics: output.actuator.bhaptics,

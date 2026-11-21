@@ -16,8 +16,8 @@ pub trait Live {
     /// Whether every hub these shockers are paired to is offline (false while that isn't known).
     fn hubs_offline(&self, shocker_ids: &[String]) -> bool;
     fn intiface_connected(&self) -> bool;
-    fn has_device(&self, index: u64) -> bool;
-    fn touched(&self, device_index: u64, actuator_index: u64) -> bool;
+    fn has_device(&self, server: &str, index: u64) -> bool;
+    fn touched(&self, server: &str, device_index: u64, actuator_index: u64) -> bool;
     fn preset_exists(&self, id: &str) -> bool;
     fn bhaptics_connected(&self) -> bool;
     fn owo_connected(&self) -> bool;
@@ -32,13 +32,18 @@ fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
 }
 
-fn actuators(control: &Value) -> impl Iterator<Item = (u64, u64)> + '_ {
+/// Each toy motor a control drives: server (this PC when it was saved before there were several),
+/// toy, motor.
+fn actuators(control: &Value) -> impl Iterator<Item = (&str, u64, u64)> + '_ {
     control
         .get("actuators")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|actuator| Some((actuator.get("deviceIndex")?.as_u64()?, actuator.get("actuatorIndex")?.as_u64()?)))
+        .filter_map(|actuator| {
+            let server = text(actuator, "server").unwrap_or(crate::intiface::THIS_PC);
+            Some((server, actuator.get("deviceIndex")?.as_u64()?, actuator.get("actuatorIndex")?.as_u64()?))
+        })
 }
 
 fn strings(control: &Value, key: &str) -> Vec<String> {
@@ -79,7 +84,7 @@ fn unavailable(control: &Value, live: &impl Live) -> (bool, Option<String>) {
             (!live.openshock_available() || offline, offline.then(|| "Hub offline".to_owned()))
         }
         // A control on several toys stays available while one of them is there.
-        "intiface-toy" | "intiface-pattern" => (!live.intiface_connected() || actuators(control).all(|(device, _)| !live.has_device(device)), None),
+        "intiface-toy" | "intiface-pattern" => (!live.intiface_connected() || actuators(control).all(|(server, device, _)| !live.has_device(server, device)), None),
         "preset" => (!live.preset_exists(text(control, "presetId").unwrap_or_default()), None),
         "bhaptics" => (!live.bhaptics_connected(), None),
         "owo" => (!live.owo_connected(), None),
@@ -106,7 +111,7 @@ fn resolve_control(control: &Value, profile: Option<&Profile>, live: &impl Live)
     let id = text(&control, "id").unwrap_or_default().to_owned();
     let kind = text(&control, "type").unwrap_or_default().to_owned();
     let (is_unavailable, reason) = unavailable(&control, live);
-    let paused = matches!(kind.as_str(), "intiface-toy" | "intiface-pattern") && actuators(&control).any(|(device, actuator)| live.touched(device, actuator));
+    let paused = matches!(kind.as_str(), "intiface-toy" | "intiface-pattern") && actuators(&control).any(|(server, device, actuator)| live.touched(server, device, actuator));
     let group_rules: Map<String, Value> = profile
         .map(|profile| {
             profile
@@ -187,11 +192,12 @@ mod tests {
         fn intiface_connected(&self) -> bool {
             self.intiface
         }
-        fn has_device(&self, index: u64) -> bool {
-            self.devices.contains(&index)
+        // The fake's toys are all on this PC.
+        fn has_device(&self, server: &str, index: u64) -> bool {
+            server == crate::intiface::THIS_PC && self.devices.contains(&index)
         }
-        fn touched(&self, device: u64, actuator: u64) -> bool {
-            self.touched.contains(&(device, actuator))
+        fn touched(&self, server: &str, device: u64, actuator: u64) -> bool {
+            server == crate::intiface::THIS_PC && self.touched.contains(&(device, actuator))
         }
         fn preset_exists(&self, id: &str) -> bool {
             self.presets.contains(&id)
@@ -252,6 +258,9 @@ mod tests {
         assert_eq!(one(toy.clone(), None, &Fake { intiface: true, devices: vec![2], ..Default::default() })["unavailable"], json!(false));
         let touched = one(toy, None, &Fake { intiface: true, devices: vec![1], touched: vec![(1, 0)], ..Default::default() });
         assert_eq!(touched["paused"], json!(true));
+        // The same index on another server is another toy.
+        let phone = json!({ "id": "p", "type": "intiface-toy", "actuators": [{ "server": "phone", "deviceIndex": 2, "actuatorIndex": 0 }] });
+        assert_eq!(one(phone, None, &Fake { intiface: true, devices: vec![2], ..Default::default() })["unavailable"], json!(true));
 
         let shocker = json!({ "id": "s", "type": "open-shock-shocker", "shockers": ["x"] });
         assert_eq!(one(shocker.clone(), None, &Fake::default())["unavailable"], json!(true));

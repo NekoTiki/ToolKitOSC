@@ -497,6 +497,9 @@ pub const PLACEHOLDERS: [&str; 4] = ["{viewer}", "{control}", "{value}", "{avata
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ToyMotor {
+    /// The Intiface server the toy is on. Saved before there were several: this PC.
+    #[serde(default = "crate::intiface::this_pc")]
+    pub server: String,
     pub device_index: u32,
     #[serde(default)]
     pub device_name: String,
