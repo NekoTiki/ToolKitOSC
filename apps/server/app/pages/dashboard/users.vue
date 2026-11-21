@@ -256,13 +256,20 @@ const submitGrant = async (): Promise<void> => {
               +{{ hiddenAddons(user).length }}
             </UBadge>
           </span>
+          <UBadge
+            v-if="user.onlineSince"
+            color="success"
+            variant="subtle"
+            icon="i-lucide-radio"
+            class="w-fit max-md:hidden"
+          >
+            Live now
+          </UBadge>
           <NuxtTime
+            v-else
             class="text-sm text-muted max-md:hidden"
             :datetime="user.lastSeenAt"
-            day="numeric"
-            month="short"
-            hour="2-digit"
-            minute="2-digit"
+            relative
           />
           <UBadge
             :color="user.hasAccess ? 'success' : 'neutral'"
