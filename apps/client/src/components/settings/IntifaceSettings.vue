@@ -4,7 +4,7 @@ import type { StatusInfo } from '@renderer/components/settings/StatusLine.vue'
 import StatusLine from '@renderer/components/settings/StatusLine.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import { useAreYouSureModal } from '@renderer/composables/useAreYouSureModal'
-import type { IntifaceServer } from '@renderer/composables/useIntiface'
+import type { IntifaceNetworkDevice, IntifaceServer } from '@renderer/composables/useIntiface'
 import { serverName, useIntiface } from '@renderer/composables/useIntiface'
 import { computed, ref } from 'vue'
 
@@ -15,6 +15,13 @@ const {
   addServer,
   updateServer,
   removeServer,
+  networkDevices,
+  discoverOnly,
+  setDiscoverOnly,
+  found,
+  addFound,
+  renameDevice,
+  removeDevice,
   devices,
   showServers,
   toyServerName,
@@ -30,6 +37,36 @@ const { openModal: confirm } = useAreYouSureModal()
 const editing = ref<string | null>(null)
 
 const hasLocal = computed(() => servers.value.some((server) => server.local))
+
+// Renaming a device in place: its id and the name being typed.
+const renaming = ref<{ id: string; label: string } | null>(null)
+
+const saveName = async (): Promise<void> => {
+  if (!renaming.value) return
+  await renameDevice(renaming.value.id, renaming.value.label)
+  renaming.value = null
+}
+
+const forget = async (device: IntifaceNetworkDevice): Promise<void> => {
+  const ok = await confirm({
+    title: `Remove ${serverName(device)}?`,
+    message: "Its toys stop, and controls and automations on them show as unavailable. It won't be added again on its own: it shows under Found on your network, where you can add it back.",
+    confirmText: 'Remove'
+  })
+
+  if (ok) await removeDevice(device.id)
+}
+
+const adding = ref<string | null>(null)
+
+const add = async (hostname: string): Promise<void> => {
+  adding.value = hostname
+  try {
+    await addFound(hostname)
+  } finally {
+    adding.value = null
+  }
+}
 
 const remove = async (server: IntifaceServer): Promise<void> => {
   const ok = await confirm({
@@ -145,7 +182,7 @@ const batteryTone = (level: number): string => (level <= 15 ? 'bg-error/15 text-
           >
             <span class="grid size-10 shrink-0 place-items-center rounded-md bg-(--aurora-well) text-muted">
               <UIcon
-                :name="server.local ? 'i-lucide-monitor' : 'i-lucide-smartphone'"
+                :name="server.local ? 'i-lucide-monitor' : 'i-lucide-server'"
                 class="size-5"
               />
             </span>
@@ -225,7 +262,143 @@ const batteryTone = (level: number): string => (level <= 15 ? 'bg-error/15 text-
     </FormSection>
 
     <FormSection
-      v-if="servers.some((server) => server.status === 'connected')"
+      title="Devices"
+      description="Phones and PCs running Intiface that announce themselves on your network (mDNS broadcast, in Intiface Central's settings). Each is known by its name, so it's found again when its address changes."
+    >
+      <USwitch
+        :model-value="!discoverOnly"
+        label="Add devices found on your network"
+        description="Off: they're listed under Found on your network, and you add the ones you want."
+        @update:model-value="setDiscoverOnly(!$event)"
+      />
+
+      <div
+        v-if="networkDevices.length"
+        class="grid divide-y divide-(--ui-border)"
+      >
+        <div
+          v-for="device in networkDevices"
+          :key="device.id"
+          class="grid gap-2.5 py-3 first:pt-0 last:pb-0"
+        >
+          <form
+            v-if="renaming?.id === device.id"
+            class="flex flex-wrap items-end gap-2 rounded-lg bg-(--aurora-well) p-3.5"
+            @submit.prevent="saveName"
+          >
+            <UFormField
+              label="Name"
+              :description="`Leave empty to show ${device.hostname}.`"
+              class="min-w-48 flex-1"
+            >
+              <UInput
+                v-model="renaming.label"
+                :placeholder="device.hostname"
+                class="w-full"
+                autocomplete="off"
+                :maxlength="60"
+                autofocus
+              />
+            </UFormField>
+            <UButton type="submit">
+              Save
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="subtle"
+              @click="renaming = null"
+            >
+              Cancel
+            </UButton>
+          </form>
+          <div
+            v-else
+            class="flex items-center gap-3"
+          >
+            <span class="grid size-10 shrink-0 place-items-center rounded-md bg-(--aurora-well) text-muted">
+              <UIcon
+                name="i-lucide-smartphone"
+                class="size-5"
+              />
+            </span>
+            <div class="grid min-w-0 flex-1 gap-0.5">
+              <b class="truncate font-medium text-highlighted">{{ serverName(device) }}</b>
+              <small class="truncate font-mono text-xs text-muted"><template v-if="device.label">{{ device.hostname }} · </template>{{ device.host }}:{{ device.port }}</small>
+              <StatusLine :status="statusInfo(device)" />
+            </div>
+            <UButton
+              icon="i-lucide-pencil"
+              color="neutral"
+              variant="subtle"
+              :aria-label="`Rename ${serverName(device)}`"
+              @click="renaming = { id: device.id, label: device.label }"
+            >
+              Rename
+            </UButton>
+            <UButton
+              icon="i-lucide-trash-2"
+              color="neutral"
+              variant="subtle"
+              :aria-label="`Remove ${serverName(device)}`"
+              @click="forget(device)"
+            >
+              Remove
+            </UButton>
+          </div>
+          <UAlert
+            v-if="device.status === 'refused'"
+            color="error"
+            variant="subtle"
+            icon="i-lucide-ban"
+            title="Intiface refused the connection"
+            :description="device.refusedReason || 'Another app may already be connected to it. Disconnect it in Intiface.'"
+          />
+        </div>
+      </div>
+
+      <div class="grid gap-2">
+        <h3 class="text-sm font-medium text-highlighted">
+          Found on your network
+        </h3>
+        <p
+          v-if="!found.length"
+          class="text-sm text-muted"
+        >
+          {{ discoverOnly ? 'Looking for devices… Make sure Intiface is running there and on the same Wi-Fi as this PC.' : 'Nothing waiting to be added.' }}
+        </p>
+        <div
+          v-else
+          class="grid divide-y divide-(--ui-border)"
+        >
+          <div
+            v-for="device in found"
+            :key="device.hostname"
+            class="flex min-h-13 items-center gap-3"
+          >
+            <span class="grid size-10 shrink-0 place-items-center rounded-md bg-(--aurora-well) text-muted">
+              <UIcon
+                name="i-lucide-smartphone"
+                class="size-5"
+              />
+            </span>
+            <div class="grid min-w-0 flex-1 gap-0.5">
+              <b class="truncate font-medium text-highlighted">{{ device.hostname }}</b>
+              <small class="truncate font-mono text-xs text-muted">{{ device.host }}:{{ device.port }}</small>
+            </div>
+            <UButton
+              icon="i-lucide-plus"
+              :loading="adding === device.hostname"
+              @click="add(device.hostname)"
+            >
+              Add
+            </UButton>
+          </div>
+        </div>
+      </div>
+    </FormSection>
+
+    <FormSection
+      v-if="[...servers, ...networkDevices].some((server) => server.status === 'connected')"
       title="Toys"
       :description="`${deviceList.length} connected`"
     >

@@ -100,7 +100,12 @@ const onFinish = (kept: boolean): void => {
 
 // --- Play on <toy> ---
 
-const previewing = computed(() => patternValues.value.get(PREVIEW_ID) === PREVIEW_ID)
+// Rust reports the pattern playing under the preview: a take's id, or a built-in's own.
+const previewing = computed(() => {
+  const value = patternValues.value.get(PREVIEW_ID)
+
+  return !!value && value !== INTIFACE_PATTERN_OFF_ID
+})
 // The toy the preview started on, which is the one to stop even after you pick another.
 let previewActuators: IntifaceActuatorRef[] = []
 
@@ -114,7 +119,8 @@ const togglePreview = (): void => {
   const pattern = props.builtin ?? toDefinition({ id: PREVIEW_ID, name: 'Preview', samples: samples.value })
 
   previewActuators = actuators.value
-  playDefinition(PREVIEW_ID, { ...pattern, id: PREVIEW_ID }, previewActuators)
+  // A built-in keeps its own id: without samples, Rust plays the pattern by it.
+  playDefinition(PREVIEW_ID, pattern, previewActuators)
   // The playhead starts over with the toy, so what you see is what it plays.
   recorder.value?.restartLoop()
 }

@@ -1,9 +1,9 @@
-import type { IntifaceDevice, IntifaceServer, IntifaceState, ToyActuatorRef, ToyTouched } from '@renderer/lib/tauri-bridge'
+import type { IntifaceDevice, IntifaceFound, IntifaceNetworkDevice, IntifaceServer, IntifaceState, ToyActuatorRef, ToyTouched } from '@renderer/lib/tauri-bridge'
 import { api, THIS_PC } from '@renderer/lib/tauri-bridge'
 import type { ComputedRef } from 'vue'
 import { computed, ref } from 'vue'
 
-export type { IntifaceActuator, IntifaceDevice, IntifaceServer, IntifaceStatus } from '@renderer/lib/tauri-bridge'
+export type { IntifaceActuator, IntifaceDevice, IntifaceFound, IntifaceNetworkDevice, IntifaceServer, IntifaceStatus } from '@renderer/lib/tauri-bridge'
 export { THIS_PC } from '@renderer/lib/tauri-bridge'
 
 // Where the webview kept these before Rust took over (see src-tauri/src/intiface). Handed over
@@ -67,23 +67,29 @@ if (legacyUrl !== null || legacyEnabled !== null || legacyAutoLaunch !== null) {
 const DEFAULT_PORT = 12345
 const MAX_LAUNCH_ATTEMPTS = 5
 
-// How a server is called everywhere: your name for it, else its address (the port only when it
-// isn't Intiface's default).
-export const serverName = (server: Pick<IntifaceServer, 'label' | 'host' | 'port'>): string =>
-  server.label || (server.port === (state.value?.defaultPort ?? DEFAULT_PORT) ? server.host : `${server.host}:${server.port}`)
+// How a server or device is called everywhere: your name for it, else a device's hostname or a
+// server's address (the port only when it isn't Intiface's default).
+export const serverName = (server: Pick<IntifaceServer, 'label' | 'host' | 'port'> & { hostname?: string }): string =>
+  server.label ||
+  server.hostname ||
+  (server.port === (state.value?.defaultPort ?? DEFAULT_PORT) ? server.host : `${server.host}:${server.port}`)
 
 const enabled = computed(() => state.value?.enabled ?? false)
 const servers = computed(() => state.value?.servers ?? [])
-const serversById = computed(() => new Map(servers.value.map((server) => [server.id, server] as const)))
+const networkDevices = computed(() => state.value?.networkDevices ?? [])
+// Servers and devices alike: everything toys can be on.
+const connections = computed<IntifaceServer[]>(() => [...servers.value, ...networkDevices.value])
+const serversById = computed(() => new Map(connections.value.map((server) => [server.id, server] as const)))
 const devices = computed(
-  () => new Map(servers.value.flatMap((server) => (server.status === 'connected' ? server.devices : [])).map((device) => [toyKey(device.server, device.index), device] as const))
+  () =>
+    new Map(connections.value.flatMap((server) => (server.status === 'connected' ? server.devices : [])).map((device) => [toyKey(device.server, device.index), device] as const))
 )
 const knownDevices = computed(() => state.value?.knownDevices ?? [])
 const installed = computed(() => state.value?.installed ?? false)
 const autoLaunch = computed(() => state.value?.autoLaunch ?? false)
-const isAvailable = computed(() => servers.value.some((server) => server.status === 'connected'))
+const isAvailable = computed(() => connections.value.some((server) => server.status === 'connected'))
 // Toys only say which server they're on once there's more than one to tell apart.
-const showServers = computed(() => servers.value.length > 1 || new Set(knownDevices.value.map((device) => device.server)).size > 1)
+const showServers = computed(() => connections.value.length > 1 || new Set(knownDevices.value.map((device) => device.server)).size > 1)
 
 // The server a toy is on, by name, or '' while there's only one.
 const toyServerName = (server: string | undefined): string => {
@@ -100,6 +106,16 @@ export function useIntiface(): {
   addServer: (label: string, host: string, port: number) => Promise<string>
   updateServer: (id: string, label: string, host: string, port: number) => Promise<void>
   removeServer: (id: string) => Promise<void>
+  // Found over mDNS and added (on their own, unless you opted out).
+  networkDevices: ComputedRef<IntifaceNetworkDevice[]>
+  // Opted out of adding devices found on the network.
+  discoverOnly: ComputedRef<boolean>
+  setDiscoverOnly: (value: boolean) => void
+  // Announced on the network now, and not added.
+  found: ComputedRef<IntifaceFound[]>
+  addFound: (hostname: string) => Promise<void>
+  renameDevice: (id: string, label: string) => Promise<void>
+  removeDevice: (id: string) => Promise<void>
   // At least one server is connected.
   isAvailable: ComputedRef<boolean>
   // Every toy on a connected server now, by toyKey().
@@ -133,6 +149,13 @@ export function useIntiface(): {
     addServer: (label, host, port) => api.intifaceAddServer(label, host, port),
     updateServer: (id, label, host, port) => api.intifaceUpdateServer(id, label, host, port),
     removeServer: (id) => api.intifaceRemoveServer(id),
+    networkDevices,
+    discoverOnly: computed(() => state.value?.discoverOnly ?? false),
+    setDiscoverOnly: (value) => void api.intifaceSetDiscoverOnly(value),
+    found: computed(() => state.value?.found ?? []),
+    addFound: (hostname) => api.intifaceAddFound(hostname),
+    renameDevice: (id, label) => api.intifaceRenameDevice(id, label),
+    removeDevice: (id) => api.intifaceRemoveDevice(id),
     isAvailable,
     devices,
     knownDevices,
