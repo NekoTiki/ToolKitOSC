@@ -41,3 +41,22 @@ export interface AddonUsage {
   enabled: boolean
   devices: number | null
 }
+
+// GET /api/admin/users/:id/stats, shared by a user's page and its subpages.
+export interface UserStatsResponse {
+  user: {
+    discordId: string
+    username: string | null
+    displayName: string | null
+    avatarUrl: string | null
+    lastSeenAt: string
+    suspendedUntil: string | null
+    suspendReason: string | null
+    appVersion: string | null
+    os: string | null
+  }
+  ai: StatsResult
+  controls: ControlStatsResult
+  shareLinks: { main: string | null; custom: string | null }
+  addons: AddonUsage[]
+}
