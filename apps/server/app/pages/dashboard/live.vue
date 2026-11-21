@@ -15,6 +15,17 @@ const rooms = computed(() =>
   [...(data.value?.rooms ?? [])].sort((a, b) => Number(b.online) - Number(a.online) || b.viewers - a.viewers)
 )
 
+// "Online for 2 h 15 min", ticking once a minute.
+const now = useNow({ interval: 60_000 })
+const onlineFor = (since: number): string => {
+  const minutes = Math.max(0, Math.floor((now.value.getTime() - since) / 60_000))
+  const hours = Math.floor(minutes / 60)
+
+  if (!hours) return minutes ? `${minutes} min` : 'less than a minute'
+
+  return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`
+}
+
 const totals = computed(() => ({
   hosts: rooms.value.filter((room) => room.online).length,
   viewers: rooms.value.reduce((sum, room) => sum + room.viewers, 0)
@@ -77,11 +88,7 @@ const stop = async (room: LiveRoom): Promise<void> => {
               <b class="truncate font-medium text-highlighted hover:underline">{{ room.name ?? room.discordId }}</b>
               <small class="truncate text-[12px] text-muted">
                 <template v-if="room.online && room.onlineSince">
-                  Online since <NuxtTime
-                    :datetime="room.onlineSince"
-                    hour="2-digit"
-                    minute="2-digit"
-                  />
+                  Online for {{ onlineFor(room.onlineSince) }}
                 </template>
                 <template v-else>Host offline, viewers waiting</template>
                 <template v-if="room.lastActionAt">
