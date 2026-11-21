@@ -245,11 +245,16 @@ const submitGrant = async (): Promise<void> => {
               class="size-4 shrink-0"
               :title="addonInfo(id).name"
             />
-            <span
+            <UBadge
               v-if="hiddenAddons(user).length"
-              class="font-mono text-[11px] tabular-nums"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              class="tabular-nums"
               :title="hiddenAddons(user).map((id) => addonInfo(id).name).join(', ')"
-            >+{{ hiddenAddons(user).length }}</span>
+            >
+              +{{ hiddenAddons(user).length }}
+            </UBadge>
           </span>
           <NuxtTime
             class="text-sm text-muted max-md:hidden"
