@@ -36,8 +36,8 @@ export type * from './tauri/owo'
 export type * from './tauri/server'
 export type * from './tauri/setup'
 export type * from './tauri/toys'
-export type * from './tauri/voicefx'
 export { THIS_PC } from './tauri/toys'
+export type * from './tauri/voicefx'
 
 export const api = {
   ...appApi,

@@ -21,7 +21,7 @@ const EMPTY_STATE: VoiceFxState = {
   vr: false,
   peak: 0,
   sockets: [],
-  mouthSocket: null
+  mouthSockets: []
 }
 
 // Module-scope singletons, shared by the page and the tiles.

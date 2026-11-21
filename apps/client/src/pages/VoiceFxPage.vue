@@ -47,7 +47,7 @@ const who = (hold: VoiceFxHold): { name: string; via: string } => {
     case 'avatar':
       return { name: 'Your avatar', via: 'TKOSC/VoiceFX' }
     case 'mouth':
-      return { name: 'Mouth socket', via: state.value.mouthSocket ?? 'Your avatar' }
+      return { name: 'Mouth socket', via: state.value.mouthSockets.join(', ') || 'Your avatar' }
     case 'automation':
       return { name: 'Automation', via: 'A Voice effects step' }
     case 'control':
@@ -173,20 +173,16 @@ const release = computed({
   set: (value) => change((target) => (target.mouth.releaseMs = Number(value)))
 })
 
-const AUTO_SOCKET = 'auto'
-const socketItems = computed(() => [
-  { value: AUTO_SOCKET, label: 'Find it for me' },
-  ...withSaved(
-    state.value.sockets.map((socket) => socket.name),
-    settings.value?.mouth.socket
-  ).map((name) => ({ value: name, label: name }))
-])
-const socket = computed({
-  get: () => settings.value?.mouth.socket ?? AUTO_SOCKET,
-  set: (value) => change((target) => (target.mouth.socket = value === AUTO_SOCKET ? null : value))
-})
+const SOCKET_MODES = [
+  { value: 'auto' as const, label: 'Auto' },
+  { value: 'custom' as const, label: 'Custom' }
+]
+// Ticked sockets this avatar doesn't have stay listed, so they can be unticked.
+const socketNames = computed(() => [...new Set([...state.value.sockets.map((socket) => socket.name), ...(settings.value?.mouth.sockets ?? [])])])
+const tickSocket = (name: string, on: boolean): void =>
+  change((target) => (target.mouth.sockets = on ? [...target.mouth.sockets, name] : target.mouth.sockets.filter((other) => other !== name)))
 
-const mouthDepth = computed(() => state.value.sockets.find((socket) => socket.name === state.value.mouthSocket)?.depth ?? 0)
+const mouthDepth = computed(() => Math.max(0, ...state.value.sockets.filter((socket) => state.value.mouthSockets.includes(socket.name)).map((socket) => socket.depth)))
 const mouthHold = computed(() => state.value.holds.find((hold) => hold.source.kind === 'mouth'))
 </script>
 
@@ -235,6 +231,7 @@ const mouthHold = computed(() => state.value.holds.find((hold) => hold.source.ki
     >
       <SegmentedControl
         v-model="tab"
+        class="w-full *:flex-1"
         :items="TABS"
         accent
         aria-label="Voice effects sections"
@@ -468,6 +465,7 @@ const mouthHold = computed(() => state.value.holds.find((hold) => hold.source.ki
               <span class="text-[13px] text-toned">Microphone (what the app listens to)</span>
               <SegmentedControl
                 :model-value="settings.micMode"
+                class="w-full *:flex-1"
                 :items="MIC_MODES"
                 aria-label="Microphone mode"
                 @update:model-value="change((target) => (target.micMode = $event))"
@@ -602,16 +600,31 @@ const mouthHold = computed(() => state.value.holds.find((hold) => hold.source.ki
             </template>
 
             <div class="grid gap-1.5">
-              <span class="text-[13px] text-toned">Socket</span>
+              <span class="text-[13px] text-toned">Sockets</span>
               <SegmentedControl
-                v-model="socket"
-                :items="socketItems"
-                aria-label="Socket"
+                :model-value="settings.mouth.custom ? 'custom' : 'auto'"
+                class="w-full *:flex-1"
+                :items="SOCKET_MODES"
+                aria-label="Sockets"
+                @update:model-value="change((target) => (target.mouth.custom = $event === 'custom'))"
               />
+              <div
+                v-if="settings.mouth.custom && socketNames.length"
+                class="flex flex-wrap gap-1.5"
+              >
+                <CheckChip
+                  v-for="(name, index) in socketNames"
+                  :id="`voicefx-socket-${index}`"
+                  :key="name"
+                  :model-value="settings.mouth.sockets.includes(name)"
+                  :label="name"
+                  @update:model-value="tickSocket(name, $event)"
+                />
+              </div>
               <small class="text-xs text-muted">
-                <template v-if="state.mouthSocket">Following <b class="text-default">{{ state.mouthSocket }}</b>.</template>
-                <template v-else-if="settings.mouth.socket">This avatar hasn't shown a socket called {{ settings.mouth.socket }} yet.</template>
-                <template v-else>No socket named like a mouth (Blowjob, BJ, Mouth, Oral) seen yet. Sockets show up here the first time something touches them.</template>
+                <template v-if="state.mouthSockets.length">Following <b class="text-default">{{ state.mouthSockets.join(', ') }}</b>. The deepest sets the strength.</template>
+                <template v-else-if="settings.mouth.custom">{{ socketNames.length ? 'Tick the sockets to follow.' : "This avatar's sockets show here once it loads." }}</template>
+                <template v-else>This avatar has no socket named like a mouth (Blowjob, BJ, Mouth, Oral). Pick them in Custom.</template>
               </small>
             </div>
 
@@ -720,7 +733,7 @@ const mouthHold = computed(() => state.value.holds.find((hold) => hold.source.ki
                     ? mouthHold.playing
                       ? `${voiceFxEffect(mouthHold.effect).label} is on your voice.`
                       : 'Held, waiting behind a newer effect.'
-                    : state.mouthSocket
+                    : state.mouthSockets.length
                       ? 'Waiting for something in the socket.'
                       : 'Waiting for the socket to show up.'
               }}

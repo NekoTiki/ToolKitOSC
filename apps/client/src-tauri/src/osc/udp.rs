@@ -142,7 +142,7 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
     crate::automations::avatar_changed(app);
     crate::haptics::avatar_changed(app);
     crate::leash::avatar_changed(app);
-    crate::voicefx::avatar_changed(app);
+    crate::voicefx::avatar_changed(app, &details);
     crate::bhaptics::avatar_changed(app);
     crate::owo::avatar_changed(app);
     *state.unresolved_avatar.lock().unwrap() = None;

@@ -6,8 +6,10 @@ import type { VoiceFxControlState, VoiceFxEffect } from '@toolkitosc/shared-ui'
 
 export interface VoiceFxMouth {
   enabled: boolean
-  // The socket's name. null: the one whose name looks like a mouth.
-  socket: string | null
+  // Follows the ticked sockets. Otherwise every socket whose name looks like a mouth.
+  custom: boolean
+  // Kept while custom is off.
+  sockets: string[]
   others: boolean
   own: boolean
   hands: boolean
@@ -57,7 +59,8 @@ export interface VoiceFxState {
   vr: boolean
   peak: number
   sockets: { name: string; depth: number }[]
-  mouthSocket: string | null
+  // The sockets the mouth link follows.
+  mouthSockets: string[]
 }
 
 export interface VoiceFxDevices {

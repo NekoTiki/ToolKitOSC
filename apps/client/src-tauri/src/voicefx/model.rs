@@ -87,8 +87,11 @@ impl Default for Settings {
 #[serde(rename_all = "camelCase", default)]
 pub struct Mouth {
     pub enabled: bool,
-    /// The socket's name. `None`: the one whose name looks like a mouth (see `looks_like_mouth`).
-    pub socket: Option<String>,
+    /// Follows the sockets in `sockets`. Otherwise every socket named like a mouth (see
+    /// `looks_like_mouth`).
+    pub custom: bool,
+    /// Socket names; the deepest of them sets the strength. Kept while `custom` is off.
+    pub sockets: Vec<String>,
     pub others: bool,
     pub own: bool,
     pub hands: bool,
@@ -102,7 +105,7 @@ pub struct Mouth {
 
 impl Default for Mouth {
     fn default() -> Self {
-        Self { enabled: false, socket: None, others: true, own: false, hands: false, effect: Effect::Muffled, tip: 0.3, deep: 1.0, release_ms: 1000 }
+        Self { enabled: false, custom: false, sockets: Vec::new(), others: true, own: false, hands: false, effect: Effect::Muffled, tip: 0.3, deep: 1.0, release_ms: 1000 }
     }
 }
 

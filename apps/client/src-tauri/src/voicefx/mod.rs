@@ -28,7 +28,7 @@ use tokio::sync::Notify;
 use crate::automations::model::{Action, VoiceFxEvent, VoiceFxRun, VoiceFxSource};
 use crate::haptics::zones::{self, Contact, ZoneId, ZoneKind};
 use crate::state::AppState;
-use crate::types::{OscArg, OscCommand, OscMessage};
+use crate::types::{AvatarDetails, OscArg, OscCommand, OscMessage};
 use holds::{Holds, Source};
 use model::{Effect, MicMode, Settings};
 
@@ -161,8 +161,8 @@ pub struct View {
     /// How loud the microphone is, 0 to 1.
     pub peak: f64,
     pub sockets: Vec<SocketView>,
-    /// The socket the mouth link follows, when the avatar has it.
-    pub mouth_socket: Option<String>
+    /// The avatar's sockets the mouth link follows.
+    pub mouth_sockets: Vec<String>
 }
 
 fn epoch_ms(at: Instant) -> u64 {
@@ -211,12 +211,9 @@ fn sockets(run: &Run, mouth: &model::Mouth) -> Vec<SocketView> {
     depths.into_iter().map(|(name, depth)| SocketView { name: name.to_owned(), depth: round(depth) }).collect()
 }
 
-fn mouth_socket(sockets: &[SocketView], mouth: &model::Mouth) -> Option<String> {
-    match &mouth.socket {
-        Some(picked) => sockets.iter().find(|socket| socket.name == *picked),
-        None => sockets.iter().find(|socket| model::looks_like_mouth(&socket.name))
-    }
-    .map(|socket| socket.name.clone())
+/// The sockets the mouth link follows, of `sockets`.
+fn followed<'a>(sockets: &'a [SocketView], mouth: &'a model::Mouth) -> impl Iterator<Item = &'a SocketView> {
+    sockets.iter().filter(|socket| if mouth.custom { mouth.sockets.contains(&socket.name) } else { model::looks_like_mouth(&socket.name) })
 }
 
 pub fn view(app: &AppHandle) -> View {
@@ -270,7 +267,7 @@ pub fn view(app: &AppHandle) -> View {
         mic_fallback: audio.fallback,
         vr: settings.last_vr,
         peak: f64::from((v.shared.take_peak() * 20.0).round() / 20.0),
-        mouth_socket: mouth_socket(&sockets, &settings.mouth),
+        mouth_sockets: followed(&sockets, &settings.mouth).map(|socket| socket.name.clone()).collect(),
         sockets
     }
 }
@@ -327,12 +324,22 @@ pub fn on_parameter(app: &AppHandle, message: &OscMessage) {
     v.wake.notify_one();
 }
 
-/// Another avatar: its sockets start from nothing, and it hears whether an effect plays.
-pub fn avatar_changed(app: &AppHandle) {
+/// The avatar's sockets from its OSC config, so they show before anything touches them.
+fn add_sockets(run: &mut Run, details: Option<&AvatarDetails>) {
+    for parameter in details.into_iter().flat_map(|details| &details.parameters) {
+        if let Some((id, _)) = zones::parse(&parameter.name).filter(|(id, _)| id.kind == ZoneKind::Socket) {
+            run.sockets.entry(id).or_default();
+        }
+    }
+}
+
+/// Another avatar: its sockets start from its config, and it hears whether an effect plays.
+pub fn avatar_changed(app: &AppHandle, details: &AvatarDetails) {
     let v = voicefx(app);
     {
         let mut run = v.run.lock().unwrap();
         run.sockets.clear();
+        add_sockets(&mut run, Some(details));
         run.avatar = AvatarInput::default();
         run.holds.release(&Source::Avatar);
         run.holds.release(&Source::Mouth);
@@ -517,10 +524,7 @@ fn tick(app: &AppHandle) -> bool {
     // The mouth socket.
     let mouth = &settings.mouth;
     let sockets = sockets(&run, mouth);
-    let inside = mouth_socket(&sockets, mouth)
-        .and_then(|name| sockets.iter().find(|socket| socket.name == name))
-        .map(|socket| socket.depth)
-        .filter(|depth| mouth.enabled && *depth > INSIDE);
+    let inside = Some(followed(&sockets, mouth).map(|socket| socket.depth).fold(0.0, f64::max)).filter(|depth| mouth.enabled && *depth > INSIDE);
     match inside {
         Some(depth) => {
             run.mouth_inside = Some(now);
@@ -601,6 +605,8 @@ fn start(app: &AppHandle) {
     if task.is_some() {
         return;
     }
+    let details = app.state::<AppState>().avatar_details.lock().unwrap().clone();
+    add_sockets(&mut voicefx(app).run.lock().unwrap(), details.as_ref());
     let app = app.clone();
     *task = Some(tauri::async_runtime::spawn(async move {
         loop {
@@ -694,5 +700,33 @@ impl crate::addons::Addon for Addon {
 
     fn was_in_use(&self, _app: &AppHandle) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::AvatarParameter;
+
+    #[test]
+    fn sockets_come_from_the_avatar_config() {
+        let parameter = |name: &str| AvatarParameter { name: name.into(), input: None, output: None };
+        let names = ["OGB/Orf/Blowjob/PenOthersNewTip", "OGB/Orf/Blowjob/PenSelfNewTip", "OGB/Pen/Penis/Others", "VF69_Blowjob"];
+        let details = AvatarDetails { id: "avtr_x".into(), name: "x".into(), hash: 0, parameters: names.map(parameter).to_vec() };
+        let mut run = Run::default();
+        add_sockets(&mut run, Some(&details));
+        let found = sockets(&run, &model::Mouth::default());
+        assert_eq!(found.iter().map(|socket| socket.name.as_str()).collect::<Vec<_>>(), ["Blowjob"]);
+        assert_eq!(found[0].depth, 0.0);
+    }
+
+    #[test]
+    fn auto_follows_mouths_and_custom_follows_the_ticked() {
+        let socket = |name: &str| SocketView { name: name.into(), depth: 0.0 };
+        let sockets = [socket("Blowjob"), socket("Mouth 2"), socket("Vagina")];
+        let names = |mouth: &model::Mouth| followed(&sockets, mouth).map(|socket| socket.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&model::Mouth::default()), ["Blowjob", "Mouth 2"]);
+        let custom = model::Mouth { custom: true, sockets: vec!["Vagina".into(), "Gone".into()], ..Default::default() };
+        assert_eq!(names(&custom), ["Vagina"]);
     }
 }
