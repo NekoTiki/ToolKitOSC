@@ -6,8 +6,12 @@
 //! each by its address. Every toy carries the id of the server it's on: toy indexes are only unique
 //! within one server.
 //!
-//! The settings (servers, auto-launch) are in `intiface.json`, copied once from the webview's
+//! Devices running Intiface that announce themselves over mDNS (see `discovery`) are added on their
+//! own unless you opt out, known by their hostname, and followed when their address changes.
+//!
+//! The settings (servers, devices, auto-launch) are in `intiface.json`, copied once from the webview's
 //! localStorage. It's an add-on (see `addons`): the registry turns it on and off.
+mod discovery;
 pub mod launch;
 mod link;
 pub mod protocol;
@@ -90,6 +94,29 @@ fn is_local(host: &str) -> bool {
     ["localhost", "127.0.0.1", "::1"].contains(&host)
 }
 
+/// A device running Intiface found over mDNS (a phone, another PC). Known by its hostname: when it
+/// shows up at a new address, the connection follows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetDevice {
+    pub id: String,
+    /// Your name for it. Empty shows the hostname.
+    #[serde(default)]
+    pub label: String,
+    /// Without `.local`.
+    pub hostname: String,
+    /// Where it was last announced.
+    pub host: String,
+    pub port: u16
+}
+
+impl NetDevice {
+    /// Connected like any server, at its last known address.
+    fn as_server(&self) -> Server {
+        Server { id: self.id.clone(), label: self.label.clone(), host: self.host.clone(), port: self.port, secure: false }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Settings {
@@ -106,6 +133,14 @@ struct Settings {
     /// None in a file from before there were several servers (see `upgrade`).
     #[serde(default)]
     servers: Option<Vec<Server>>,
+    #[serde(default)]
+    devices: Vec<NetDevice>,
+    /// Opted out of adding devices found on the network: they're listed, and you add them.
+    #[serde(default)]
+    discover_only: bool,
+    /// Hostnames of devices you removed, so they aren't added again on their own.
+    #[serde(default)]
+    ignored: Vec<String>,
     /// Every toy Intiface has listed, by server and index, so a control's toy list keeps the ones
     /// that are off right now.
     #[serde(default)]
@@ -115,6 +150,11 @@ struct Settings {
 impl Settings {
     fn servers(&self) -> &[Server] {
         self.servers.as_deref().unwrap_or_default()
+    }
+
+    /// Everything to connect to: the servers you added, then the devices.
+    fn connections(&self) -> Vec<Server> {
+        self.servers().iter().cloned().chain(self.devices.iter().map(NetDevice::as_server)).collect()
     }
 
     /// A file from before there were several servers: its URL becomes the "this PC" server.
@@ -155,7 +195,11 @@ struct Inner {
     settings: Settings,
     installed: bool,
     links: BTreeMap<String, Link>,
-    next_generation: u64
+    next_generation: u64,
+    /// Browsing for devices while the add-on is on.
+    discovery: Option<mdns_sd::ServiceDaemon>,
+    /// Announced now and not added: opted out of adding them, or removed before.
+    found: Vec<discovery::Found>
 }
 
 impl Inner {
@@ -182,6 +226,15 @@ pub struct ServerView {
     launch_attempts: u32
 }
 
+/// A device as the webview shows it: its connection, and the hostname it's known by.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetDeviceView {
+    #[serde(flatten)]
+    connection: ServerView,
+    hostname: String
+}
+
 /// What the webview shows.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -189,6 +242,9 @@ pub struct View {
     enabled: bool,
     auto_launch: bool,
     servers: Vec<ServerView>,
+    network_devices: Vec<NetDeviceView>,
+    discover_only: bool,
+    found: Vec<discovery::Found>,
     known_devices: Vec<Device>,
     default_port: u16,
     installed: bool,
@@ -234,13 +290,23 @@ fn start(app: &AppHandle) {
         inner.installed = installed;
     }
     sync_links(app, |_| false);
+    let daemon = discovery::start(app.clone());
+    intiface(app).inner.lock().unwrap().discovery = daemon;
 }
 
 /// The add-on was turned off: patterns and toys stop first, then the connections close.
 fn stop(app: &AppHandle) {
     crate::toys::patterns::stop_all(app);
     crate::toys::stop_all(app);
-    intiface(app).inner.lock().unwrap().settings.enabled = false;
+    let daemon = {
+        let mut inner = intiface(app).inner.lock().unwrap();
+        inner.settings.enabled = false;
+        inner.found.clear();
+        inner.discovery.take()
+    };
+    if let Some(Err(err)) = daemon.map(|daemon| daemon.shutdown()) {
+        tracing::debug!("mDNS for Intiface didn't shut down cleanly: {err}");
+    }
     sync_links(app, |_| false);
 }
 
@@ -397,7 +463,7 @@ fn sync_links(app: &AppHandle, restart: impl Fn(&Link) -> bool) {
     let (closed, changed) = {
         let mut inner = intiface(app).inner.lock().unwrap();
         let wanted: Vec<(String, String)> = if inner.settings.enabled {
-            inner.settings.servers().iter().map(|server| (server.id.clone(), server.url())).collect()
+            inner.settings.connections().iter().map(|server| (server.id.clone(), server.url())).collect()
         } else {
             Vec::new()
         };
@@ -443,30 +509,176 @@ fn sync_links(app: &AppHandle, restart: impl Fn(&Link) -> bool) {
 pub fn view(app: &AppHandle) -> View {
     ensure_loaded(app);
     let inner = intiface(app).inner.lock().unwrap();
+    let connection = |server: Server| {
+        let link = inner.links.get(&server.id);
+        ServerView {
+            local: server.local(),
+            status: link.map_or(Status::Disabled, |link| link.status),
+            devices: link.map(|link| link.devices.values().cloned().collect()).unwrap_or_default(),
+            refused_reason: link.map(|link| link.refused_reason.clone()).unwrap_or_default(),
+            launch_attempts: link.map_or(0, |link| link.launch_attempts),
+            server
+        }
+    };
     View {
         enabled: inner.settings.enabled,
         auto_launch: inner.settings.auto_launch,
-        servers: inner
+        servers: inner.settings.servers().iter().cloned().map(connection).collect(),
+        network_devices: inner
             .settings
-            .servers()
+            .devices
             .iter()
-            .map(|server| {
-                let link = inner.links.get(&server.id);
-                ServerView {
-                    local: server.local(),
-                    status: link.map_or(Status::Disabled, |link| link.status),
-                    devices: link.map(|link| link.devices.values().cloned().collect()).unwrap_or_default(),
-                    refused_reason: link.map(|link| link.refused_reason.clone()).unwrap_or_default(),
-                    launch_attempts: link.map_or(0, |link| link.launch_attempts),
-                    server: server.clone()
-                }
-            })
+            .map(|device| NetDeviceView { connection: connection(device.as_server()), hostname: device.hostname.clone() })
             .collect(),
+        discover_only: inner.settings.discover_only,
+        found: inner.found.clone(),
         known_devices: inner.settings.known_devices.clone(),
         default_port: DEFAULT_PORT,
         installed: inner.installed,
         max_launch_attempts: MAX_LAUNCH_ATTEMPTS
     }
+}
+
+/// What to do with a device announced on the network.
+#[derive(Debug, PartialEq)]
+enum Seen {
+    /// Already added, at the same address.
+    Known,
+    /// Already added: it moved, follow it.
+    Moved(usize),
+    /// Not added: add it.
+    Add,
+    /// Not added, and not to be added on its own (opted out, or you removed it): list it.
+    List,
+    /// The same address as a server you added by hand.
+    Duplicate
+}
+
+fn seen(settings: &Settings, found: &discovery::Found) -> Seen {
+    if let Some(at) = settings.devices.iter().position(|device| device.hostname == found.hostname) {
+        let device = &settings.devices[at];
+        return if device.host == found.host && device.port == found.port { Seen::Known } else { Seen::Moved(at) };
+    }
+    if settings.servers().iter().any(|server| server.host == found.host && server.port == found.port) {
+        return Seen::Duplicate;
+    }
+    if settings.discover_only || settings.ignored.contains(&found.hostname) { Seen::List } else { Seen::Add }
+}
+
+fn new_device(found: &discovery::Found) -> NetDevice {
+    NetDevice { id: format!("device-{}", found.hostname), label: String::new(), hostname: found.hostname.clone(), host: found.host.clone(), port: found.port }
+}
+
+/// A device announced itself (see `discovery`).
+fn found(app: &AppHandle, found: discovery::Found) {
+    ensure_loaded(app);
+    let saved = {
+        let mut inner = intiface(app).inner.lock().unwrap();
+        if !inner.settings.enabled {
+            return;
+        }
+        inner.found.retain(|known| known.hostname != found.hostname);
+        match seen(&inner.settings, &found) {
+            Seen::Known | Seen::Duplicate => None,
+            Seen::Moved(at) => {
+                let device = &mut inner.settings.devices[at];
+                tracing::info!("Intiface on {} moved to {}:{}", device.hostname, found.host, found.port);
+                device.host = found.host.clone();
+                device.port = found.port;
+                Some(inner.settings.clone())
+            }
+            Seen::Add => {
+                tracing::info!("Added Intiface on {} ({}:{})", found.hostname, found.host, found.port);
+                inner.settings.devices.push(new_device(&found));
+                Some(inner.settings.clone())
+            }
+            Seen::List => {
+                inner.found.push(found);
+                None
+            }
+        }
+    };
+    match saved {
+        Some(settings) => {
+            save_settings(app, &settings);
+            sync_links(app, |_| false);
+        }
+        None => emit_state(app),
+    }
+}
+
+/// A device stopped announcing itself. An added one stays: it's tried at its last address.
+fn lost(app: &AppHandle, fullname: &str) {
+    let changed = {
+        let mut inner = intiface(app).inner.lock().unwrap();
+        let before = inner.found.len();
+        inner.found.retain(|found| found.fullname != fullname);
+        inner.found.len() != before
+    };
+    if changed {
+        emit_state(app);
+    }
+}
+
+/// Adds a device listed as found on the network.
+pub fn add_found(app: &AppHandle, hostname: &str) -> Result<(), String> {
+    let found = {
+        let mut inner = intiface(app).inner.lock().unwrap();
+        let at = inner.found.iter().position(|found| found.hostname == hostname).ok_or("That device isn't on the network any more")?;
+        inner.found.remove(at)
+    };
+    update_settings(app, |settings| {
+        settings.ignored.retain(|ignored| ignored != hostname);
+        if !settings.devices.iter().any(|device| device.hostname == hostname) {
+            settings.devices.push(new_device(&found));
+        }
+        Ok(())
+    })?;
+    sync_links(app, |_| false);
+    Ok(())
+}
+
+/// Your name for a device. Empty shows its hostname.
+pub fn rename_device(app: &AppHandle, id: &str, label: String) -> Result<(), String> {
+    update_settings(app, |settings| {
+        let device = settings.devices.iter_mut().find(|device| device.id == id).ok_or("That device is gone")?;
+        device.label = label.trim().to_owned();
+        Ok(())
+    })?;
+    sync_links(app, |_| false);
+    Ok(())
+}
+
+/// Removes a device: its toys stop, and it isn't added again on its own (it's listed as found).
+pub fn remove_device(app: &AppHandle, id: &str) -> Result<(), String> {
+    stop_server(app, id);
+    update_settings(app, |settings| {
+        if let Some(device) = settings.devices.iter().find(|device| device.id == id) {
+            let hostname = device.hostname.clone();
+            if !settings.ignored.contains(&hostname) {
+                settings.ignored.push(hostname);
+            }
+        }
+        settings.devices.retain(|device| device.id != id);
+        settings.known_devices.retain(|device| device.server != id);
+        Ok(())
+    })?;
+    sync_links(app, |_| false);
+    Ok(())
+}
+
+/// Opting back in adds what's on the network now, except devices you removed.
+pub fn set_discover_only(app: &AppHandle, discover_only: bool) {
+    let found = std::mem::take(&mut intiface(app).inner.lock().unwrap().found);
+    let _ = update_settings(app, |settings| {
+        settings.discover_only = discover_only;
+        Ok(())
+    });
+    // Sorted out again under the new setting.
+    for device in found {
+        self::found(app, device);
+    }
+    sync_links(app, |_| false);
 }
 
 fn emit_state(app: &AppHandle) {
@@ -744,7 +956,7 @@ impl crate::addons::Addon for Addon {
         }
         let statuses: Vec<(Status, usize)> = inner
             .settings
-            .servers()
+            .connections()
             .iter()
             .map(|server| inner.links.get(&server.id).map_or((Status::Connecting, 0), |link| (link.status, link.devices.len())))
             .collect();
@@ -832,6 +1044,31 @@ mod tests {
         assert_eq!(clean_host("[::1]").unwrap(), "::1");
         assert!(clean_host("  ").is_err());
         assert_eq!(Server { id: "x".into(), label: String::new(), host: "::1".into(), port: 1, secure: false }.url(), "ws://[::1]:1");
+    }
+
+    fn announced(hostname: &str, host: &str) -> discovery::Found {
+        discovery::Found { hostname: hostname.into(), host: host.into(), port: DEFAULT_PORT, fullname: String::new() }
+    }
+
+    #[test]
+    fn devices_found_on_the_network() {
+        let mut settings = Settings::default();
+        settings.upgrade();
+        assert_eq!(seen(&settings, &announced("pixel-7", "192.168.1.20")), Seen::Add, "added on its own by default");
+
+        settings.devices.push(new_device(&announced("pixel-7", "192.168.1.20")));
+        assert_eq!(seen(&settings, &announced("pixel-7", "192.168.1.20")), Seen::Known);
+        assert_eq!(seen(&settings, &announced("pixel-7", "192.168.1.31")), Seen::Moved(0), "same hostname, new address: followed");
+
+        settings.servers.as_mut().unwrap().push(Server { id: "s".into(), label: String::new(), host: "192.168.1.40".into(), port: DEFAULT_PORT, secure: false });
+        assert_eq!(seen(&settings, &announced("tablet", "192.168.1.40")), Seen::Duplicate, "already added by address");
+
+        settings.ignored.push("laptop".into());
+        assert_eq!(seen(&settings, &announced("laptop", "192.168.1.50")), Seen::List, "removed before: not added again");
+
+        settings.discover_only = true;
+        assert_eq!(seen(&settings, &announced("ipad", "192.168.1.60")), Seen::List, "opted out: only listed");
+        assert_eq!(new_device(&announced("ipad", "192.168.1.60")).as_server().url(), "ws://192.168.1.60:12345");
     }
 
     #[test]

@@ -42,10 +42,28 @@ export interface IntifaceServer {
   launchAttempts: number
 }
 
+// A device running Intiface found over mDNS (a phone, another PC): connected like a server, and
+// known by its hostname, so the connection follows it to a new address.
+export interface IntifaceNetworkDevice extends IntifaceServer {
+  // Without ".local". Shown when you haven't named it.
+  hostname: string
+}
+
+// Announced on the network now, and not added.
+export interface IntifaceFound {
+  hostname: string
+  host: string
+  port: number
+}
+
 export interface IntifaceState {
   enabled: boolean
   autoLaunch: boolean
   servers: IntifaceServer[]
+  networkDevices: IntifaceNetworkDevice[]
+  // Opted out of adding devices found on the network: they're listed in `found` instead.
+  discoverOnly: boolean
+  found: IntifaceFound[]
   // Every toy Intiface has listed, on any server, connected now or not.
   knownDevices: IntifaceDevice[]
   defaultPort: number
@@ -102,6 +120,13 @@ export const toysApi = {
   intifaceUpdateServer: (id: string, label: string, host: string, port: number): Promise<void> =>
     invoke('intiface_update_server', { id, label, host, port }),
   intifaceRemoveServer: (id: string): Promise<void> => invoke('intiface_remove_server', { id }),
+  // Adds a device listed as found on the network.
+  intifaceAddFound: (hostname: string): Promise<void> => invoke('intiface_add_found', { hostname }),
+  // Empty shows its hostname.
+  intifaceRenameDevice: (id: string, label: string): Promise<void> => invoke('intiface_rename_device', { id, label }),
+  // It isn't added again on its own; it's listed as found instead.
+  intifaceRemoveDevice: (id: string): Promise<void> => invoke('intiface_remove_device', { id }),
+  intifaceSetDiscoverOnly: (discoverOnly: boolean): Promise<void> => invoke('intiface_set_discover_only', { discoverOnly }),
   intifaceSetAutoLaunch: (autoLaunch: boolean): Promise<void> => invoke('intiface_set_auto_launch', { autoLaunch }),
   // Opens the local Intiface Central install. Rejects with a message when it isn't found.
   intifaceLaunch: (): Promise<void> => invoke('intiface_launch'),

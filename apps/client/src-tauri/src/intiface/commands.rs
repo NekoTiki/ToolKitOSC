@@ -40,3 +40,26 @@ pub fn intiface_set_auto_launch(app: AppHandle, auto_launch: bool) {
 pub fn intiface_launch() -> Result<(), String> {
     super::launch_now()
 }
+
+/// Adds a device listed as found on the network.
+#[tauri::command]
+pub fn intiface_add_found(app: AppHandle, hostname: String) -> Result<(), String> {
+    super::add_found(&app, &hostname)
+}
+
+/// Your name for a device found on the network. Empty shows its hostname.
+#[tauri::command]
+pub fn intiface_rename_device(app: AppHandle, id: String, label: String) -> Result<(), String> {
+    super::rename_device(&app, &id, label)
+}
+
+#[tauri::command]
+pub fn intiface_remove_device(app: AppHandle, id: String) -> Result<(), String> {
+    super::remove_device(&app, &id)
+}
+
+/// Opted out of adding devices found on the network: they're only listed.
+#[tauri::command]
+pub fn intiface_set_discover_only(app: AppHandle, discover_only: bool) {
+    super::set_discover_only(&app, discover_only);
+}
