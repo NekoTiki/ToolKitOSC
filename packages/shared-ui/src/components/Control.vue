@@ -15,6 +15,7 @@ import ControlOwo from './ControlOwo.vue'
 import ControlPreset from './ControlPreset.vue'
 import ControlSlider from './ControlSlider.vue'
 import ControlStepEnum from './ControlStepEnum.vue'
+import ControlVoiceFx from './ControlVoiceFx.vue'
 import type { TileBadge } from './tileBadges'
 import { TILE_BADGES } from './tileBadges'
 
@@ -64,7 +65,8 @@ const UNAVAILABLE_REASON: Partial<Record<ControlType['type'], string>> = {
   'intiface-pattern': 'Intiface or its toys are offline',
   preset: 'This preset no longer exists',
   bhaptics: "bHaptics Player isn't connected",
-  owo: "The OWO app isn't connected"
+  owo: "The OWO app isn't connected",
+  'voice-fx': 'Voice effects are off'
 }
 
 const unavailableReason = computed(
@@ -214,6 +216,12 @@ const blocker = computed<{ icon: string; label: string } | null>(() => {
       :control="control"
       :limits="limits"
       :signed-out="signedOut"
+      @command="$emit('command', $event)"
+    />
+    <control-voice-fx
+      v-else-if="control.type === 'voice-fx'"
+      :control="control"
+      :limits="limits"
       @command="$emit('command', $event)"
     />
 

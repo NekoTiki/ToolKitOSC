@@ -68,6 +68,7 @@ export const router = createRouter({
       component: () => import('@renderer/pages/HapticsPage.vue'),
       meta: { addon: 'haptics', instance: 'haptics' }
     },
+    { path: '/voicefx', name: 'voicefx', component: () => import('@renderer/pages/VoiceFxPage.vue'), meta: { addon: 'voicefx' } },
     { path: '/leash', name: 'leash', component: () => import('@renderer/pages/LeashPage.vue'), meta: { addon: 'leash' } },
     {
       path: '/leash/setup',

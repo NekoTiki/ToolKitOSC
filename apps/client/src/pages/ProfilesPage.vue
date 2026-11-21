@@ -211,7 +211,8 @@ const setLimits = (control: ControlType, limits: ControlLimits | undefined): voi
   else delete draft.value.limits[control.id]
 }
 
-const hasRange = (control: ControlType): boolean => control.type === 'slider' || control.type === 'intiface-toy'
+const hasRange = (control: ControlType): boolean =>
+  control.type === 'slider' || control.type === 'intiface-toy' || (control.type === 'voice-fx' && control.kind === 'pick')
 
 const rangeOf = (control: ControlType): number[] => {
   const { min, max } = limitRange(limitsOf(control))

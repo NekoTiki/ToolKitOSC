@@ -4,6 +4,7 @@ import AutomationStepCard from '@renderer/components/automations/AutomationStepC
 import AutomationTimeline from '@renderer/components/automations/AutomationTimeline.vue'
 import ConditionExtraFields from '@renderer/components/automations/ConditionExtraFields.vue'
 import AutomationEasyEditor from '@renderer/components/automations/easy/AutomationEasyEditor.vue'
+import VoiceFxWhenFields from '@renderer/components/automations/VoiceFxWhenFields.vue'
 import DraftNotice from '@renderer/components/DraftNotice.vue'
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -133,6 +134,7 @@ const chainItems = computed(() => automations.value.filter((a) => a.id !== draft
 const eventItems = (Object.keys(APP_EVENTS) as AppEventType[]).map((type) => ({ value: type, label: APP_EVENTS[type].label }))
 
 const leashWhen = computed(() => (draft.value?.when.kind === 'leash' ? draft.value.when : null))
+const voiceFxWhen = computed(() => (draft.value?.when.kind === 'voice-fx' ? draft.value.when : null))
 const leashEventItems = (Object.keys(LEASH_EVENTS) as LeashEvent[]).map((event) => ({ value: event, label: LEASH_EVENTS[event].label }))
 
 // Which viewer commands count: any, any shock, or one control (by id; the worn avatar's controls).
@@ -189,6 +191,8 @@ const setTriggerKind = (kind: AutomationTrigger['kind']): void => {
         ? { kind, event: { type: 'viewer-command', controlId: null, controlType: null } }
         : kind === 'leash'
           ? { kind, event: 'grabbed' }
+        : kind === 'voice-fx'
+          ? { kind, event: 'on', source: null }
           : kind === 'every'
             ? { kind, minutes: 30 }
             : kind === 'toy-event'
@@ -218,6 +222,7 @@ const TRIGGER_KINDS: Record<AutomationTrigger['kind'], { label: string; descript
     description: 'Someone grabs your avatar leash, pulls you to running or lets go.',
     icon: 'i-tkosc-collar'
   },
+  'voice-fx': { label: 'Voice effect', description: 'An effect goes on your voice, comes off or changes.', icon: 'i-lucide-audio-lines' },
   every: { label: 'Every so often', description: 'Every few minutes while the app is open.', icon: 'i-lucide-timer' },
   'toy-event': { label: 'Toys', description: 'A toy connects, disconnects or runs low.', icon: 'i-lucide-vibrate' },
   'board-event': { label: 'ESP32 board', description: 'A board goes offline or comes back.', icon: 'i-lucide-cpu' },
@@ -603,6 +608,11 @@ onBeforeRouteLeave(async () => {
               aria-label="Leash event"
             />
           </UFormField>
+
+          <VoiceFxWhenFields
+            v-if="voiceFxWhen"
+            :model-value="voiceFxWhen"
+          />
 
           <UFormField
             v-if="toyWhen"

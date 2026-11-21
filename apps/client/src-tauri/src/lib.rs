@@ -7,6 +7,7 @@ mod boards;
 mod controls;
 mod haptics;
 mod leash;
+mod voicefx;
 mod intiface;
 mod logging;
 mod mcp;
@@ -241,6 +242,13 @@ pub fn run() {
             leash::commands::leash_save,
             leash::commands::leash_state,
             leash::commands::leash_test_pull,
+            // Voice effects
+            voicefx::commands::voicefx_settings,
+            voicefx::commands::voicefx_save,
+            voicefx::commands::voicefx_state,
+            voicefx::commands::voicefx_devices,
+            voicefx::commands::voicefx_hold,
+            voicefx::commands::voicefx_release,
             // bHaptics
             bhaptics::commands::bhaptics_settings,
             bhaptics::commands::bhaptics_save,

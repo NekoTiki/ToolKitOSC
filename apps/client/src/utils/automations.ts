@@ -15,10 +15,14 @@ import type {
   ParameterCondition,
   ParameterValueType,
   ToyEvent,
-  ToyRun
+  ToyRun,
+  VoiceFxAction,
+  VoiceFxEvent,
+  VoiceFxStarter,
+  VoiceFxTrigger
 } from '@renderer/lib/tauri-bridge'
 import type { ControlType, ControlTypes } from '@toolkitosc/shared-ui'
-import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS } from '@toolkitosc/shared-ui'
+import { BHAPTICS_EFFECTS, BHAPTICS_LAYOUT, OWO_SENSATIONS, voiceFxEffect } from '@toolkitosc/shared-ui'
 
 // What each kind of "when" and "do" means, for the editor and the list. The backend checks the
 // same rules (src-tauri/src/automations/model.rs `validate`); this only keeps the editor from
@@ -379,6 +383,12 @@ export const STEP_KINDS: Record<
     icon: 'i-tkosc-collar',
     runs: ['moment']
   },
+  'voice-fx': {
+    label: 'Voice effect',
+    description: 'Put an effect on your voice, or take it off.',
+    icon: 'i-lucide-audio-lines',
+    runs: ['moment']
+  },
   'bhaptics-pulse': {
     label: 'bHaptics pulse',
     description: 'Play motors of your vest, head or arms for a moment.',
@@ -454,6 +464,8 @@ export const triggerIcon = (when: AutomationTrigger): string => {
       return 'i-lucide-repeat'
     case 'leash':
       return 'i-tkosc-collar'
+    case 'voice-fx':
+      return 'i-lucide-audio-lines'
     case 'app-event':
       return when.event.type === 'resumed' ? 'i-lucide-power' : when.event.type === 'stopped' ? 'i-lucide-octagon-x' : 'i-lucide-users'
     case 'every':
@@ -659,6 +671,8 @@ export const newStep = (kind: AutomationStep['kind'], condition: ConditionType):
       return { kind, text: '', delayMs: 0 }
     case 'leash-enabled':
       return { kind, enabled: false, delayMs: 0 }
+    case 'voice-fx':
+      return { kind, run: 'on', effect: null, level: 0.7, seconds: 30, delayMs: 0 }
     case 'bhaptics-pulse':
       return { kind, position: 'VestFront', motors: [], intensity: 0.6, ms: 1000, delayMs: 0 }
     case 'bhaptics-effect':
@@ -819,6 +833,31 @@ export const LEASH_EVENTS: Record<LeashEvent, { label: string; description: stri
   released: { label: 'Let go', description: 'Nobody holds the leash any more.' }
 }
 
+export const VOICE_FX_EVENTS: Record<VoiceFxEvent, { label: string; description: string }> = {
+  on: { label: 'Turns on', description: 'An effect goes on your voice.' },
+  off: { label: 'Turns off', description: 'Your voice is clean again.' },
+  changed: { label: 'Effect changes', description: 'Another effect takes over while one plays.' }
+}
+
+export const VOICE_FX_STARTERS: Record<VoiceFxStarter, string> = {
+  you: 'You',
+  avatar: 'Your avatar',
+  viewer: 'A viewer',
+  automation: 'An automation',
+  mouth: 'The mouth socket'
+}
+
+export const describeVoiceFxWhen = (when: VoiceFxTrigger): string =>
+  `a voice effect ${when.event === 'on' ? 'turns on' : when.event === 'off' ? 'turns off' : 'changes'}${when.source ? `, started by ${VOICE_FX_STARTERS[when.source].toLowerCase()}` : ''}`
+
+export const describeVoiceFxStep = (step: VoiceFxAction): string => {
+  if (step.run === 'off') return 'turn the voice effect off'
+
+  const effect = step.effect ? voiceFxEffect(step.effect).label : 'the default voice effect'
+
+  return `${step.run === 'toggle' ? 'toggle' : 'turn on'} ${effect} at ${Math.round(step.level * 100)}%${step.seconds ? ` for ${step.seconds} s` : ''}`
+}
+
 const describeEvent = (event: AppEvent, context?: DescribeContext): string => {
   if (event.type !== 'viewer-command') return APP_EVENTS[event.type].label.toLowerCase()
   if (event.controlType === 'open-shock-shocker' && !event.controlId)
@@ -830,6 +869,7 @@ const describeEvent = (event: AppEvent, context?: DescribeContext): string => {
 export const describeWhen = (when: AutomationTrigger, context?: DescribeContext): string => {
   if (when.kind === 'app-event') return describeEvent(when.event, context)
   if (when.kind === 'leash') return `the leash is ${when.event === 'running' ? 'pulled to running' : when.event === 'released' ? 'let go' : 'grabbed'}`
+  if (when.kind === 'voice-fx') return describeVoiceFxWhen(when)
   if (when.kind === 'every') return `every ${formatMinutes(when.minutes)}`
   if (when.kind === 'toy-event') return TOY_EVENTS[when.event].toLowerCase()
   if (when.kind === 'board-event') return `${when.boardId ? (context?.boards.find((b) => b.id === when.boardId)?.name ?? 'a board') : 'a board'} goes ${when.event}`
@@ -967,6 +1007,9 @@ export const describeStep = (step: AutomationStep, context: DescribeContext): st
       break
     case 'leash-enabled':
       what = step.enabled ? 'turn the leash on' : 'turn the leash off'
+      break
+    case 'voice-fx':
+      what = describeVoiceFxStep(step)
       break
     case 'bhaptics-pulse':
       what = `bHaptics ${BHAPTICS_LAYOUT[step.position].label.toLowerCase()} at ${Math.round(step.intensity * 100)}% for ${formatMs(step.ms)}`

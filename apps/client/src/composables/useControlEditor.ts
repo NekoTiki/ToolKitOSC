@@ -18,7 +18,8 @@ import type {
   OwoControl,
   PresetControl,
   SliderControl,
-  StepEnumControl
+  StepEnumControl,
+  VoiceFxControl
 } from '@toolkitosc/shared-ui'
 import { isOpenShockType } from '@toolkitosc/shared-ui'
 import _ from 'lodash'
@@ -46,7 +47,10 @@ type AnyDraft = Partial<
     Fields<IntifacePatternControl> &
     Fields<PresetControl> &
     Fields<BhapticsControl> &
-    Fields<OwoControl>
+    Fields<OwoControl> &
+    // Its `effects` are a narrower list than bHaptics' and its `cooldown` is in seconds: the
+    // defaults below reset both when the type changes.
+    Omit<Fields<VoiceFxControl>, 'effects'>
 > & {
   type?: ControlType['type']
   inputs?: BooleanGroupControl['inputs'] | BooleanEnumControl['inputs']
@@ -102,6 +106,14 @@ const typeDefaults: Record<ControlType['type'], (m: AnyDraft) => void> = {
     m.sensations = ['tap']
     m.cooldown = 2000
     m.signedInOnly = true
+  },
+  'voice-fx': (m) => {
+    m.kind = 'toggle'
+    m.effect = 'muffled'
+    m.level = 0.7
+    m.seconds = 20
+    m.cooldown = 30
+    m.effects = ['muffled', 'underwater', 'radio', 'soft-mute']
   }
 }
 
@@ -291,6 +303,9 @@ export function useControlEditor(groupId: string, controlId: string | null): Con
       case 'owo':
         if (!m.muscles?.length) next.muscles = 'Pick at least one muscle.'
         else if (!m.sensations?.length) next.muscles = 'Pick at least one sensation.'
+        break
+      case 'voice-fx':
+        if (m.kind === 'pick' && !m.effects?.length) next.options = 'Pick at least one effect.'
         break
     }
 

@@ -106,6 +106,7 @@ pub(super) fn handle_message(app: &AppHandle, raw: rosc::OscMessage, origin: Ori
         crate::automations::on_parameter(app, &osc_msg, previous.as_ref());
         crate::haptics::on_parameter(app, &osc_msg);
         crate::leash::on_parameter(app, &osc_msg);
+        crate::voicefx::on_parameter(app, &osc_msg);
         crate::bhaptics::on_parameter(app, &osc_msg);
         crate::owo::on_parameter(app, &osc_msg);
         crate::overlay::on_parameter(app, &osc_msg);
@@ -141,6 +142,7 @@ fn on_avatar_change(app: &AppHandle, avatar_id: &str) -> bool {
     crate::automations::avatar_changed(app);
     crate::haptics::avatar_changed(app);
     crate::leash::avatar_changed(app);
+    crate::voicefx::avatar_changed(app);
     crate::bhaptics::avatar_changed(app);
     crate::owo::avatar_changed(app);
     *state.unresolved_avatar.lock().unwrap() = None;

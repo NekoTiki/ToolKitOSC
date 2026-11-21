@@ -18,6 +18,7 @@ export { default as ControlPreset } from './components/ControlPreset.vue'
 export { default as ControlSlider } from './components/ControlSlider.vue'
 export { default as ControlSliderBase } from './components/ControlSliderBase.vue'
 export { default as ControlStepEnum } from './components/ControlStepEnum.vue'
+export { default as ControlVoiceFx } from './components/ControlVoiceFx.vue'
 export { default as Fader } from './components/Fader.vue'
 export { default as PatternRecorderBase } from './components/PatternRecorderBase.vue'
 export type { TileBadge } from './components/tileBadges'
@@ -40,6 +41,7 @@ export {
   NEUTRAL_COLOR_FAMILIES,
   SHADES
 } from './composables/useTheme'
+export { useVoiceFxControl } from './composables/useVoiceFxControl'
 export * from './constants/controlIcons'
 export * from './types/controls'
 export type { OpenShockCommandResult } from './types/openShock'

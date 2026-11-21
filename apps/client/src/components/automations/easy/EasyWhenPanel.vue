@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ConditionExtraFields from '@renderer/components/automations/ConditionExtraFields.vue'
+import VoiceFxWhenFields from '@renderer/components/automations/VoiceFxWhenFields.vue'
 import ParameterListen from '@renderer/components/parameters/ParameterListen.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
@@ -42,7 +43,7 @@ const { isOn, offAddonForAutomationKind, offAddonForControlType } = useAddons()
 const { args } = useOscMessages()
 const { boards } = useBoards()
 
-type Choice = 'avatar' | 'gesture' | 'you' | 'viewer' | 'switch' | 'leash' | 'toys' | 'board' | 'shock' | 'touch' | 'chain' | 'every' | 'resume' | 'stopped'
+type Choice = 'avatar' | 'gesture' | 'you' | 'viewer' | 'switch' | 'leash' | 'voice' | 'toys' | 'board' | 'shock' | 'touch' | 'chain' | 'every' | 'resume' | 'stopped'
 
 const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; description: string; icon: string }[] = [
   { value: 'avatar', kind: 'avatar-parameter', title: 'Something on your avatar', description: 'A boop, a headpat, a grab, a toggle in your menu.', icon: 'i-lucide-person-standing' },
@@ -51,6 +52,7 @@ const CHOICES: { value: Choice; kind: AutomationTrigger['kind']; title: string; 
   { value: 'viewer', kind: 'app-event', title: 'A viewer does something', description: 'Joins your share page, leaves, or uses a control.', icon: 'i-lucide-users' },
   { value: 'switch', kind: 'avatar-changed', title: 'You put on an avatar', description: 'Also when the app starts while you wear it.', icon: 'i-lucide-repeat' },
   { value: 'leash', kind: 'leash', title: 'Your leash', description: 'Someone grabs it, pulls you to running or lets go.', icon: 'i-tkosc-collar' },
+  { value: 'voice', kind: 'voice-fx', title: 'A voice effect', description: 'An effect goes on your voice, comes off or changes.', icon: 'i-lucide-audio-lines' },
   { value: 'toys', kind: 'toy-event', title: 'Your toys', description: 'A toy connects, disconnects or runs low.', icon: 'i-lucide-vibrate' },
   { value: 'board', kind: 'board-event', title: 'An ESP32 board', description: 'It goes offline or comes back.', icon: 'i-lucide-cpu' },
   { value: 'shock', kind: 'shock-sent', title: 'A shock goes out', description: 'When OpenShock actually sends it.', icon: 'i-lucide-zap' },
@@ -68,6 +70,7 @@ const choice = computed((): Choice => {
   if (w.kind === 'avatar-parameter') return handOf(w.parameter) ? 'gesture' : youState(w.parameter) ? 'you' : 'avatar'
   if (w.kind === 'avatar-changed') return 'switch'
   if (w.kind === 'leash') return 'leash'
+  if (w.kind === 'voice-fx') return 'voice'
   if (w.kind === 'every') return 'every'
   if (w.kind === 'toy-event') return 'toys'
   if (w.kind === 'board-event') return 'board'
@@ -94,6 +97,8 @@ const choose = (value: Choice): void => {
             ? { kind: 'avatar-changed', avatarId: id, avatarName: name }
             : value === 'leash'
               ? { kind: 'leash', event: 'grabbed' }
+            : value === 'voice'
+              ? { kind: 'voice-fx', event: 'on', source: null }
               : value === 'every'
                 ? { kind: 'every', minutes: 30 }
                 : value === 'toys'
@@ -356,6 +361,7 @@ const changedTarget = computed({
 // ---- Your leash
 
 const leashWhen = computed(() => (when.value.kind === 'leash' ? when.value : null))
+const voiceFxWhen = computed(() => (when.value.kind === 'voice-fx' ? when.value : null))
 const LEASH_ITEMS: { value: LeashEvent; label: string }[] = [
   { value: 'grabbed', label: 'Grabbed' },
   { value: 'running', label: 'Pulled to running' },
@@ -690,5 +696,10 @@ const LEASH_ITEMS: { value: LeashEvent; label: string }[] = [
         aria-label="Leash"
       />
     </UFormField>
+
+    <VoiceFxWhenFields
+      v-else-if="voiceFxWhen"
+      :model-value="voiceFxWhen"
+    />
   </FormSection>
 </template>

@@ -285,6 +285,23 @@ pub fn sanitize_command(control: &Value, command: &Value) -> Option<Value> {
             let level = cap.min(limit_range(limits).1);
             Some(json!({ "type": kind, "value": sensation, "muscles": muscles, "level": level }))
         }
+        "voice-fx" => {
+            let on = value?.as_bool()?;
+            // Only All in one lets the viewer say what plays: an effect it offers, within the
+            // profile's range.
+            if !on || control.get("kind").and_then(Value::as_str) != Some("pick") {
+                return Some(json!({ "type": kind, "value": on }));
+            }
+            let effect = command.get("effect")?.as_str()?;
+            let offered = control.get("effects")?.as_array()?.iter().any(|e| e.as_str() == Some(effect));
+            if !offered || crate::voicefx::model::Effect::parse(effect).is_none() {
+                return None;
+            }
+            let (min, max) = limit_range(limits);
+            let level = clamp(number(command.get("level"))?, min, max);
+            let timed = command.get("timed").and_then(Value::as_bool).unwrap_or(false);
+            Some(json!({ "type": kind, "value": true, "effect": effect, "level": level, "timed": timed }))
+        }
         _ => None
     }
 }

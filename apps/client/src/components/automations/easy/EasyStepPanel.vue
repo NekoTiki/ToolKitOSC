@@ -3,6 +3,7 @@ import BhapticsStepFields from '@renderer/components/automations/BhapticsStepFie
 import MoreStepFields from '@renderer/components/automations/MoreStepFields.vue'
 import OwoStepFields from '@renderer/components/automations/OwoStepFields.vue'
 import ToyStepFields from '@renderer/components/automations/ToyStepFields.vue'
+import VoiceFxStepFields from '@renderer/components/automations/VoiceFxStepFields.vue'
 import FormSection from '@renderer/components/ui/FormSection.vue'
 import OptionGrid from '@renderer/components/ui/OptionGrid.vue'
 import SegmentedControl from '@renderer/components/ui/SegmentedControl.vue'
@@ -64,6 +65,7 @@ const EASY_KINDS: Record<AutomationStep['kind'], string> = {
   'stop-everything': 'Stop everything',
   'board-output': 'Switch something on a board',
   'leash-enabled': 'Turn the leash on or off',
+  'voice-fx': 'Put an effect on your voice',
   'bhaptics-pulse': 'Buzz bHaptics motors',
   'bhaptics-effect': 'Play a bHaptics effect',
   'owo-sensation': 'Feel it on your OWO Skin',
@@ -409,6 +411,7 @@ const leashOn = computed({
 })
 const bhapticsStep = computed(() => (step.value.kind === 'bhaptics-pulse' || step.value.kind === 'bhaptics-effect' ? step.value : null))
 const owoStep = computed(() => (step.value.kind === 'owo-sensation' ? step.value : null))
+const voiceFxStep = computed(() => (step.value.kind === 'voice-fx' ? step.value : null))
 const moreStep = computed(() =>
   step.value.kind === 'automation-enabled' || step.value.kind === 'vr-toast' || step.value.kind === 'one-of' || step.value.kind === 'osc-message'
     ? step.value
@@ -682,6 +685,11 @@ const toyStep = computed(() => (step.value.kind === 'toy' || step.value.kind ===
     <OwoStepFields
       v-else-if="owoStep"
       :model-value="owoStep"
+    />
+
+    <VoiceFxStepFields
+      v-else-if="voiceFxStep"
+      :model-value="voiceFxStep"
     />
 
     <MoreStepFields

@@ -28,6 +28,9 @@ export function controlTileSpan(control: ControlType): TileSpan {
   // A body needs the room to draw on.
   if (control.type === 'bhaptics' || control.type === 'owo') return 'l'
 
+  // All in one needs the room for its effects and its strength.
+  if (control.type === 'voice-fx') return control.kind === 'pick' ? 'm' : 's'
+
   const options = optionCount(control)
 
   if (options !== null) return options > MAX_OPTIONS_IN_WIDE_TILE ? 'l' : 'm'

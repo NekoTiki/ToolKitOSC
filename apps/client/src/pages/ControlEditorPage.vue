@@ -11,6 +11,8 @@ import OpenShockFields from '@renderer/components/control-modal/OpenShockFields.
 import type { OwoOptions } from '@renderer/components/control-modal/OwoFields.vue'
 import OwoFields from '@renderer/components/control-modal/OwoFields.vue'
 import PresetField from '@renderer/components/control-modal/PresetField.vue'
+import type { VoiceFxOptions } from '@renderer/components/control-modal/VoiceFxFields.vue'
+import VoiceFxFields from '@renderer/components/control-modal/VoiceFxFields.vue'
 import DraftNotice from '@renderer/components/DraftNotice.vue'
 import IconSelectMenu from '@renderer/components/IconSelectMenu.vue'
 import ChoiceCard from '@renderer/components/ui/ChoiceCard.vue'
@@ -141,13 +143,17 @@ const allTypeGroups = computed<{ label: string; items: TypeChoice[] }[]>(() => [
     items: [{ value: 'owo', icon: 'i-lucide-zap', description: 'Viewers fire a muscle on your OWO Skin · Beta' }]
   },
   {
+    label: 'Voice effects',
+    items: [{ value: 'voice-fx', icon: 'i-lucide-audio-lines', description: 'Viewers put an effect on your voice · Beta' }]
+  },
+  {
     label: 'Presets',
     items: [{ value: 'preset', icon: 'i-lucide-play', description: 'Apply a saved preset in one tap', disabled: !editor.hasPresets.value, reason: 'Create a preset first' }]
   }
 ])
 
 // Option pickers size themselves from their option count (see shared-ui's controlTileSpan).
-const sizeable = computed(() => !['enum', 'boolean-enum', 'intiface-pattern', 'bhaptics', 'owo'].includes(model.value.type ?? ''))
+const sizeable = computed(() => !['enum', 'boolean-enum', 'intiface-pattern', 'bhaptics', 'owo', 'voice-fx'].includes(model.value.type ?? ''))
 
 const tileWidth = computed<'normal' | 'wide'>({
   get: () => (model.value.size === 'wide' ? 'wide' : 'normal'),
@@ -203,6 +209,18 @@ const owoOptions = computed<OwoOptions>({
     sensations: model.value.sensations ?? ['tap'],
     cooldown: model.value.cooldown ?? 2000,
     signedInOnly: model.value.signedInOnly ?? true
+  }),
+  set: (value) => Object.assign(model.value, value)
+})
+
+const voiceFxOptions = computed<VoiceFxOptions>({
+  get: () => ({
+    kind: model.value.kind ?? 'toggle',
+    effect: model.value.effect ?? 'muffled',
+    level: model.value.level ?? 0.7,
+    seconds: model.value.seconds ?? 20,
+    cooldown: model.value.cooldown ?? 30,
+    effects: (model.value.effects ?? []) as VoiceFxOptions['effects']
   }),
   set: (value) => Object.assign(model.value, value)
 })
@@ -374,7 +392,15 @@ onBeforeRouteLeave(async () => {
             </UFormField>
             <UFormField
               label="Tile width"
-              :description="sizeable ? undefined : type === 'bhaptics' || type === 'owo' ? 'Always 2×2, with room for the body.' : 'Automatic: two cells, or 2×2 above 8 options.'"
+              :description="
+                sizeable
+                  ? undefined
+                  : type === 'bhaptics' || type === 'owo'
+                    ? 'Always 2×2, with room for the body.'
+                    : type === 'voice-fx'
+                      ? 'Automatic: one cell, or two for All in one.'
+                      : 'Automatic: two cells, or 2×2 above 8 options.'
+              "
             >
               <SegmentedControl
                 v-if="sizeable"
@@ -516,6 +542,13 @@ onBeforeRouteLeave(async () => {
             :error="errors.muscles"
           >
             <OwoFields v-model="owoOptions" />
+          </UFormField>
+
+          <UFormField
+            v-if="type === 'voice-fx'"
+            :error="errors.options"
+          >
+            <VoiceFxFields v-model="voiceFxOptions" />
           </UFormField>
 
           <UFormField

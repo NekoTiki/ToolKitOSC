@@ -223,6 +223,10 @@ pub fn describe(control: Option<&serde_json::Value>, kind: &str, name: &str, val
             (format!("fired {name}{}", if vibrate { " (vibrate)" } else { "" }), detail)
         }
         "owo" => (format!("played {} on {name}", value.and_then(serde_json::Value::as_str).unwrap_or("a sensation")), String::new()),
+        "voice-fx" => {
+            let on = value.and_then(serde_json::Value::as_bool).unwrap_or(false);
+            (format!("turned {name} {}", if on { "on" } else { "off" }), String::new())
+        }
         "preset" => (format!("applied {name}"), String::new()),
         "button" => (format!("pressed {name}"), String::new()),
         _ => (format!("used {name}"), String::new())

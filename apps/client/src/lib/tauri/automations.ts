@@ -1,7 +1,7 @@
 // Automations - src-tauri/src/automations/.
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { BhapticsPosition, CreatedBy, IntifaceActuatorRef, OwoMuscle } from '@toolkitosc/shared-ui'
+import type { BhapticsPosition, CreatedBy, IntifaceActuatorRef, OwoMuscle, VoiceFxEffect } from '@toolkitosc/shared-ui'
 
 // Automations - mirrors src-tauri/src/automations/model.rs. "When" and "do" are tagged on `kind`
 // so other kinds (app events, chatbox...) can be added next to these.
@@ -66,6 +66,12 @@ export type AppEventTrigger = { kind: 'app-event'; event: AppEvent }
 export type LeashEvent = 'grabbed' | 'running' | 'released'
 export type LeashTrigger = { kind: 'leash'; event: LeashEvent }
 
+// Voice effects (its add-on): an effect goes on your voice, comes off or changes. `source` null:
+// whoever started it.
+export type VoiceFxEvent = 'on' | 'off' | 'changed'
+export type VoiceFxStarter = 'you' | 'avatar' | 'viewer' | 'automation' | 'mouth'
+export type VoiceFxTrigger = { kind: 'voice-fx'; event: VoiceFxEvent; source: VoiceFxStarter | null }
+
 // Every `minutes` while the app is open, counted from when it starts or is saved.
 export type EveryTrigger = { kind: 'every'; minutes: number }
 
@@ -84,6 +90,7 @@ export type AutomationTrigger =
   | AvatarChangedTrigger
   | AppEventTrigger
   | LeashTrigger
+  | VoiceFxTrigger
   | EveryTrigger
   | ToyEventTrigger
   | BoardEventTrigger
@@ -181,6 +188,9 @@ export type ChatboxStepAction = { kind: 'chatbox'; text: string }
 export type StopEverythingAction = { kind: 'stop-everything' }
 // Turns "Leash moves me" on or off (the avatar leash add-on).
 export type LeashEnabledAction = { kind: 'leash-enabled'; enabled: boolean }
+// Holds an effect on your voice or lets go of it (the voice effects add-on). Automations share one
+// hold. `effect` null: the default effect. `level` is 0-1. `seconds` 0: until a step turns it off.
+export type VoiceFxAction = { kind: 'voice-fx'; run: 'on' | 'off' | 'toggle'; effect: VoiceFxEffect | null; level: number; seconds: number }
 // The bHaptics add-on: some motors of one device for `ms` (all of them when `motors` is empty), or
 // a built-in effect across several. `intensity` is 0-1.
 export type BhapticsPulseAction = { kind: 'bhaptics-pulse'; position: BhapticsPosition; motors: number[]; intensity: number; ms: number }
@@ -215,6 +225,7 @@ export type AutomationAction =
   | ChatboxStepAction
   | StopEverythingAction
   | LeashEnabledAction
+  | VoiceFxAction
   | BhapticsPulseAction
   | BhapticsEffectAction
   | OwoSensationAction

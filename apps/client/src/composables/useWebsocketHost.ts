@@ -15,7 +15,7 @@ import type { ServerPolicy, ServerStatus } from '@renderer/lib/tauri-bridge'
 import { api } from '@renderer/lib/tauri-bridge'
 import { assistantName } from '@renderer/utils/viewers'
 import type { ClientListEntry, ControlTypes, RoomStatsMessage, ServerNotice, WaitingViewer } from '@toolkitosc/shared-ui'
-import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl } from '@toolkitosc/shared-ui'
+import { PROTOCOL_VERSION, useBhapticsControl, useIntifaceControl, useIntifacePatternControl, useOpenShockControl, useOwoControl, useVoiceFxControl } from '@toolkitosc/shared-ui'
 import type { WebSocketStatus } from '@vueuse/core'
 import type { ComputedRef } from 'vue'
 import { watch } from 'vue'
@@ -132,6 +132,7 @@ export function useWebsocketHost(): {
   const { lastUpdate: intifacePatternLastUpdate } = useIntifacePatternControl()
   const { state: bhapticsState } = useBhapticsControl()
   const { state: owoState } = useOwoControl()
+  const { controls: voiceFxControls } = useVoiceFxControl()
   const { clientType } = useClientType()
   const { shareSettings, showViewers } = useShareSettings()
   const { announceAction } = useChatbox()
@@ -361,6 +362,9 @@ export function useWebsocketHost(): {
   watch(bhapticsState, (state) => sendMessage('bhaptics-value-update', state))
   // The same for the OWO Skin (see owo/mod.rs).
   watch(owoState, (state) => sendMessage('owo-value-update', state))
+  // The Voice effects controls that are on or cooling down (see voicefx/mod.rs). Sent again when
+  // someone joins, so their tiles don't read off while an effect plays.
+  watch([voiceFxControls, () => clients.value.length], ([controls]) => sendMessage('voicefx-value-update', { controls }))
 
   watch([selectedPrimary, selectedSecondary], () => sendTheme())
 

@@ -2,7 +2,7 @@
 // hand-parsed independently in useWebsocketHost.ts (client), useWebsocketClient.ts (server app),
 // and the Nitro routes server/routes/host.ts + server/routes/ws/[ws].ts. Shapes below are taken
 // directly from those call sites, not guessed.
-import type { BhapticsPosition, ControlCommand, ControlGroup, ControlTypes, OwoMuscle, ViewerGroupInfo } from './controls'
+import type { BhapticsPosition, ControlCommand, ControlGroup, ControlTypes, OwoMuscle, ViewerGroupInfo, VoiceFxEffect } from './controls'
 import type { OpenShockCommandResult, OpenShockControlValue } from './openShock'
 import type { OSCArg } from './osc'
 import type { ColorFamilyWithoutNeutral } from './theme'
@@ -47,6 +47,9 @@ export interface WsEnvelope<Type extends string, Message> {
 // type) and an older viewer page can't draw the tile, so viewers need an updated server for it.
 //
 // Additive, no bump: the 'owo' control type and its commands, and 'owo-value-update', the same way.
+//
+// Additive, no bump: the 'voice-fx' control type and its commands, and 'voicefx-value-update', the
+// same way.
 //
 // No bump: the relay no longer checks commands against the controls, only their shape; the
 // desktop app always did and now does alone. Its daily stats count command-accepted. A new control
@@ -173,6 +176,24 @@ export interface BhapticsValueUpdateMessage {
   playing: Partial<Record<BhapticsPosition, number[]>>
   // Positions avatar touch drives: viewers' taps there wait.
   touched: BhapticsPosition[]
+}
+
+// What the host's OWO Skin plays right now, for every OWO tile (see useOwoControl.ts). Sent only
+// when it changes, at most every 100 ms.
+export interface VoiceFxValueUpdateMessage {
+  // By control id: the Voice effects controls that are on or cooling down (see useVoiceFxControl.ts).
+  controls: Record<string, VoiceFxControlState>
+}
+
+export interface VoiceFxControlState {
+  on: boolean
+  // The viewer who turned it on.
+  by?: string | null
+  effect?: VoiceFxEffect | null
+  level?: number | null
+  // Host clock, ms since 1970: when a timed one ends, and when it can be used again.
+  endsAt?: number | null
+  cooldownUntil?: number | null
 }
 
 // What the host's OWO Skin plays right now, for every OWO tile (see useOwoControl.ts). Sent only
@@ -360,6 +381,7 @@ export type HostToServerMessage =
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'bhaptics-value-update', BhapticsValueUpdateMessage>
   | WsEnvelope<'owo-value-update', OwoValueUpdateMessage>
+  | WsEnvelope<'voicefx-value-update', VoiceFxValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'rate-limited', RateLimitedMessage>
@@ -401,6 +423,7 @@ export type ServerToViewerMessage =
   | WsEnvelope<'intiface-pattern-value-update', IntifacePatternValueUpdateMessage>
   | WsEnvelope<'bhaptics-value-update', BhapticsValueUpdateMessage>
   | WsEnvelope<'owo-value-update', OwoValueUpdateMessage>
+  | WsEnvelope<'voicefx-value-update', VoiceFxValueUpdateMessage>
   | WsEnvelope<'client-invalid', ClientInvalidMessage>
   | WsEnvelope<'client-banned', ClientBannedMessage>
   | WsEnvelope<'rate-limited', RateLimitedMessage>

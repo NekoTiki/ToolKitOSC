@@ -1,3 +1,6 @@
+// Keeps the Voice effects tiles up to date, even when its page was never opened.
+import '@renderer/composables/useVoiceFx'
+
 import { useAddons } from '@renderer/composables/useAddons'
 import { setup } from '@renderer/composables/useSetup'
 import { api } from '@renderer/lib/tauri-bridge'

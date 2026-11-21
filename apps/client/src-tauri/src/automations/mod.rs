@@ -83,6 +83,7 @@ fn addon_off(app: &AppHandle, action: &Action) -> Option<&'static str> {
         Action::BhapticsPulse { .. } => crate::addons::owner_of_automation_kind("bhaptics-pulse"),
         Action::BhapticsEffect { .. } => crate::addons::owner_of_automation_kind("bhaptics-effect"),
         Action::OwoSensation { .. } => crate::addons::owner_of_automation_kind("owo-sensation"),
+        Action::VoiceFx { .. } => crate::addons::owner_of_automation_kind("voice-fx"),
         Action::Control { control_type, .. } => crate::addons::owner_of_control_type(control_type),
         Action::Toy { .. } => crate::addons::owner_of_automation_kind("toy"),
         Action::ToyPattern { .. } => crate::addons::owner_of_automation_kind("toy-pattern"),
@@ -185,6 +186,8 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
             Effect::Bhaptics(action) => crate::bhaptics::run_step(app, &action),
             Effect::Owo(_) if !crate::addons::is_on(app, "owo") => {}
             Effect::Owo(action) => crate::owo::run_step(app, &action),
+            Effect::VoiceFx(_) if !crate::addons::is_on(app, "voicefx") => {}
+            Effect::VoiceFx(action) => crate::voicefx::run_step(app, &action),
             Effect::Osc { address, value } => {
                 if let Err(err) = crate::osc::send(&app.state::<AppState>(), &OscCommand { address: address.clone(), args: vec![value] }) {
                     tracing::debug!("Couldn't send {address}: {err}");
@@ -230,6 +233,7 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
                     Action::BhapticsPulse { .. } => "bHaptics pulse",
                     Action::BhapticsEffect { .. } => "bHaptics effect",
                     Action::OwoSensation { .. } => "OWO sensation",
+                    Action::VoiceFx { .. } => "Voice effect",
                     Action::VrToast { .. } => "VR message",
                     Action::Toy { .. } => "Toy",
                     Action::ToyPattern { .. } => "Play pattern",
@@ -368,6 +372,7 @@ fn test_step(app: &AppHandle, id: &str, index: usize, action: &Action) -> Result
         Action::LeashEnabled { enabled } => Ok((Effect::Leash(*enabled), None)),
         Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => Ok((Effect::Bhaptics(action.clone()), None)),
         Action::OwoSensation { .. } => Ok((Effect::Owo(action.clone()), None)),
+        Action::VoiceFx { .. } => Ok((Effect::VoiceFx(action.clone()), None)),
         // App actions are handled above.
         Action::Control { .. }
         | Action::Profile { .. }
@@ -474,6 +479,11 @@ pub fn shock_sent(app: &AppHandle) {
 
 pub fn touch_event(app: &AppHandle, event: model::TouchEvent) {
     trigger(app, |when| matches!(when, model::Trigger::Touch { event: e } if *e == event));
+}
+
+/// Called without the voice effects lock held: its own steps take it.
+pub fn voicefx_event(app: &AppHandle, event: model::VoiceFxEvent, source: model::VoiceFxSource) {
+    trigger(app, |when| matches!(when, model::Trigger::VoiceFx { event: e, source: s } if *e == event && s.map_or(true, |s| s == source)));
 }
 
 pub fn leash_event(app: &AppHandle, event: model::LeashEvent) {

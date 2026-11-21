@@ -88,6 +88,13 @@ pub enum Trigger {
     ShockSent,
     /// Avatar touch starts or stops driving your toys or gear (the avatar haptics add-on).
     Touch { event: TouchEvent },
+    /// An effect goes on your voice, comes off or changes (the voice effects add-on): whoever
+    /// started it, or only `source`.
+    VoiceFx {
+        event: VoiceFxEvent,
+        #[serde(default)]
+        source: Option<VoiceFxSource>
+    },
     /// Another automation starts, or with `when_stops`, stops running. Chains stop after
     /// `MAX_CHAIN` links so two automations can't keep starting each other.
     #[serde(rename_all = "camelCase")]
@@ -126,6 +133,39 @@ pub enum TouchEvent {
     Starts,
     Stops
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum VoiceFxEvent {
+    On,
+    Off,
+    /// Another effect takes over while one plays.
+    Changed
+}
+
+/// Who holds a voice effect on (see `crate::voicefx`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum VoiceFxSource {
+    You,
+    Avatar,
+    Viewer,
+    Automation,
+    /// The mouth socket link.
+    Mouth
+}
+
+/// What a Voice effects step does to the automations' hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum VoiceFxRun {
+    On,
+    Off,
+    Toggle
+}
+
+/// The longest a Voice effects step keeps an effect on.
+pub const MAX_VOICE_FX_SECONDS: u32 = 3600;
 
 /// Longest gap of an `every` trigger: a day.
 pub const MAX_EVERY_MINUTES: u32 = 24 * 60;
@@ -427,6 +467,18 @@ pub enum Action {
     StopEverything,
     /// Turns "Leash moves me" on or off, like `TKOSC/Leash`.
     LeashEnabled { enabled: bool },
+    /// Holds an effect on your voice, or lets go of it. Automations share one hold.
+    VoiceFx {
+        run: VoiceFxRun,
+        /// None: the default effect.
+        #[serde(default)]
+        effect: Option<crate::voicefx::model::Effect>,
+        /// 0–1.
+        level: f64,
+        /// How long it stays on, 0 = until a step turns it off.
+        #[serde(default)]
+        seconds: u32
+    },
     /// Plays motors of one bHaptics position (all of them when `motors` is empty) for `ms`.
     #[serde(rename_all = "camelCase")]
     BhapticsPulse {
@@ -813,6 +865,12 @@ pub fn validate(automation: &Automation) -> Result<(), String> {
                 return Err("Pick another automation for it to follow.".into());
             }
         }
+        // A voice effects step would set it off again.
+        Trigger::VoiceFx { .. } => {
+            if automation.then.iter().any(|step| matches!(step.action, Action::VoiceFx { .. })) {
+                return Err("When a voice effect changes, it can't change it again.".into());
+            }
+        }
         Trigger::AppEvent { .. } | Trigger::Leash { .. } | Trigger::ToyEvent { .. } | Trigger::BoardEvent { .. } | Trigger::Touch { .. } => {}
     }
 
@@ -1027,6 +1085,11 @@ fn validate_step(step: &Step, runs: Runs, trigger: Option<&str>) -> Result<(), S
             }
         }
         Action::Profile { .. } | Action::StopEverything | Action::LeashEnabled { .. } => {}
+        Action::VoiceFx { level, seconds, .. } => {
+            if !(0.0..=1.0).contains(level) || *seconds > MAX_VOICE_FX_SECONDS {
+                return Err(format!("A voice effect needs a strength and up to {} min.", MAX_VOICE_FX_SECONDS / 60));
+            }
+        }
         Action::BhapticsPulse { position, motors, intensity, ms } => {
             if !(0.0..=1.0).contains(intensity) || *ms == 0 || *ms > MAX_BHAPTICS_PULSE_MS {
                 return Err(format!("A bHaptics pulse needs an intensity and up to {} s.", MAX_BHAPTICS_PULSE_MS / 1000));

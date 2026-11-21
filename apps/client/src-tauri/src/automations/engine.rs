@@ -137,6 +137,8 @@ pub enum Effect {
     Bhaptics(Action),
     /// An OWO sensation step.
     Owo(Action),
+    /// A Voice effects step.
+    VoiceFx(Action),
     /// Any OSC message, as it is.
     Osc { address: String, value: crate::types::OscArg }
 }
@@ -426,6 +428,7 @@ impl State {
             Action::LeashEnabled { enabled } => effects.push(Effect::Leash(*enabled)),
             Action::BhapticsPulse { .. } | Action::BhapticsEffect { .. } => effects.push(Effect::Bhaptics(action.clone())),
             Action::OwoSensation { .. } => effects.push(Effect::Owo(action.clone())),
+            Action::VoiceFx { .. } => effects.push(Effect::VoiceFx(action.clone())),
             Action::OscMessage { address, value } => effects.push(Effect::Osc { address: address.clone(), value: value.clone() }),
             Action::OneOf { options } if !options.is_empty() => {
                 let pick = ((env.now().roll * options.len() as f64) as usize).min(options.len() - 1);
