@@ -407,7 +407,7 @@ impl crate::addons::Addon for Addon {
         crate::addons::Manifest {
             id: "haptics",
             name: "Avatar haptics",
-            group: "toys",
+            group: "avatar",
             pitch: "Your toys, bHaptics gear and OWO Skin respond when someone touches your SPS avatar, like OscGoesBrrr",
             platforms: &["windows", "linux"],
             badges: &[],

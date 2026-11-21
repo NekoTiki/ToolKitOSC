@@ -671,7 +671,7 @@ impl crate::addons::Addon for Addon {
         crate::addons::Manifest {
             id: "openshock",
             name: "OpenShock",
-            group: "toys",
+            group: "shockers",
             pitch: "Shockers your viewers can fire, with the limits you set",
             platforms: &["windows", "linux"],
             badges: &["shocks"],
