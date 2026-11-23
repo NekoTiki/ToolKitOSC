@@ -274,9 +274,13 @@ export interface ClientListEntry {
 
 // The host's share-page settings that the server enforces when talking to viewers. An older host
 // never sends it, and the server falls back to the defaults (everything shown).
+export const SHARE_ACCESS = ['everyone', 'username', 'discord', 'approved'] as const
+export type ShareAccess = (typeof SHARE_ACCESS)[number]
+
 export interface ShareSettingsMessage {
   // Viewers see who else is on the share page, and who pressed what.
   showViewers: boolean
+  access?: ShareAccess
   // "Only people you let in": viewers sign in with Discord and wait on the share page until their
   // Discord id is in `approved`.
   approval?: boolean

@@ -17,6 +17,7 @@ const { clientType } = useClientType()
 
 const shareSettings = computed<ShareSettingsMessage>(() => ({
   showViewers: showViewers.value,
+  access: clientType.value,
   // "Only people you let in": the server keeps everyone else waiting on the share page.
   approval: clientType.value === 'approved',
   approved: viewersSetup.value.approved ?? [],

@@ -1,6 +1,7 @@
+import type { ShareAccess } from '@toolkitosc/shared-ui'
 import { onMounted, ref } from 'vue'
 
-export type ClientType = 'everyone' | 'username' | 'discord' | 'approved'
+export type ClientType = ShareAccess
 
 const clientType = ref<ClientType>('everyone')
 

@@ -120,6 +120,7 @@ export interface AccessEntry {
   displayName: string | null
   avatarUrl: string | null
   lastSeenAt: Date
+  shareAccess: string | null
   hasAccess: boolean
   canSelectModel: boolean
   grantedBy: string | null
@@ -139,6 +140,7 @@ export async function listAccessEntries(): Promise<AccessEntry[]> {
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
       lastSeenAt: users.lastSeenAt,
+      shareAccess: users.shareAccess,
       canSelectModel: aiAccess.canSelectModel,
       grantedBy: aiAccess.grantedBy,
       grantedAt: aiAccess.grantedAt,

@@ -33,7 +33,17 @@ export const ADDONS: Record<string, { name: string; icon: string; devices?: stri
   mcp: { name: 'AI assistants', icon: 'i-lucide-bot' }
 }
 
-export const addonInfo = (id: string): { name: string; icon: string; devices?: string } => ADDONS[id] ?? { name: id, icon: 'i-lucide-puzzle' }
+export const SHARE_ACCESS_INFO: Record<string, { name: string; icon: string }> = {
+  everyone: { name: 'Everyone', icon: 'i-lucide-lock-open' },
+  username: { name: 'Ask for a name', icon: 'i-lucide-user-round-pen' },
+  discord: { name: 'Discord only', icon: 'ic:baseline-discord' },
+  approved: { name: 'Only people you let in', icon: 'i-lucide-door-open' }
+}
+
+export const shareAccessInfo = (access: string | null | undefined): { name: string; icon: string } =>
+  (access && SHARE_ACCESS_INFO[access]) || { name: 'Unknown (older app)', icon: 'i-lucide-circle-help' }
+
+export const addonInfo =(id: string): { name: string; icon: string; devices?: string } => ADDONS[id] ?? { name: id, icon: 'i-lucide-puzzle' }
 
 // One add-on in a user's /api/admin/users/:id/stats `addons`.
 export interface AddonUsage {
@@ -54,6 +64,7 @@ export interface UserStatsResponse {
     suspendReason: string | null
     appVersion: string | null
     os: string | null
+    shareAccess: string | null
   }
   ai: StatsResult
   controls: ControlStatsResult
