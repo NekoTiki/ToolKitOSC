@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { AccessEntry } from '~/composables/useAdminUserAccess'
 import { accessEntryName } from '~/composables/useAdminUserAccess'
-import { addonInfo, shareAccessInfo } from '~/types/adminStats'
+import type { UserKind } from '~/types/adminStats'
+import { addonInfo, shareAccessInfo, USER_KINDS, userKind } from '~/types/adminStats'
 
 // Every account that has ever signed in, with its AI access at a glance. Managing one account
 // (credits, model choice, note, revoke) happens on its own page; granting access - including to
@@ -16,17 +17,33 @@ if (error.value) await redirectIfUnauthorized(error.value)
 const users = computed(() => data.value?.users ?? [])
 const query = ref('')
 const filter = ref<'all' | 'access' | 'none'>('all')
+const kindFilter = ref<'client' | 'web' | 'all'>('client')
 
 const matches = (user: AccessEntry, q: string): boolean =>
   user.discordId.includes(q) || !!user.username?.toLowerCase().includes(q) || !!user.displayName?.toLowerCase().includes(q)
 
+const KIND_FILTERS: Record<typeof kindFilter.value, { label: string; keeps: (kind: UserKind) => boolean }> = {
+  client: { label: 'Client', keeps: (kind) => kind === 'client' || kind === 'both' },
+  web: { label: 'Website', keeps: (kind) => kind === 'web' || kind === 'both' },
+  all: { label: 'All', keeps: () => true }
+}
+
+const ofKind = computed(() => users.value.filter((user) => KIND_FILTERS[kindFilter.value].keeps(userKind(user))))
+
 const filteredUsers = computed(() => {
   const q = query.value.trim().toLowerCase()
 
-  return users.value.filter(
+  return ofKind.value.filter(
     (user) => (filter.value === 'all' || (filter.value === 'access') === user.hasAccess) && (!q || matches(user, q))
   )
 })
+
+const kindFilterItems = computed(() =>
+  (Object.keys(KIND_FILTERS) as (keyof typeof KIND_FILTERS)[]).map((value) => ({
+    value,
+    label: `${KIND_FILTERS[value].label} · ${users.value.filter((user) => KIND_FILTERS[value].keeps(userKind(user))).length}`
+  }))
+)
 
 // The add-ons column fits 5 icons: past that, 4 and a "+N".
 const ADDON_ICONS = 5
@@ -37,10 +54,10 @@ const shownAddons = (user: AccessEntry): string[] => {
 }
 const hiddenAddons = (user: AccessEntry): string[] => (user.addons ?? []).slice(shownAddons(user).length)
 
-const accessCount = computed(() => users.value.filter((user) => user.hasAccess).length)
+const accessCount = computed(() => ofKind.value.filter((user) => user.hasAccess).length)
 
 const filterItems = computed(() => [
-  { value: 'all' as const, label: `All · ${users.value.length}` },
+  { value: 'all' as const, label: `All · ${ofKind.value.length}` },
   { value: 'access' as const, label: `AI access · ${accessCount.value}` },
   { value: 'none' as const, label: 'No access' }
 ])
@@ -208,6 +225,11 @@ const submitGrant = async (): Promise<void> => {
         class="min-w-52 flex-1"
       />
       <AdminSegmented
+        v-model="kindFilter"
+        :items="kindFilterItems"
+        label="User type"
+      />
+      <AdminSegmented
         v-model="filter"
         :items="filterItems"
         label="Filter"
@@ -223,7 +245,7 @@ const submitGrant = async (): Promise<void> => {
           v-for="user in filteredUsers"
           :key="user.discordId"
           :to="`/dashboard/user/${user.discordId}`"
-          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-2.5 transition-colors hover:bg-(--aurora-glass) md:grid-cols-[auto_minmax(0,1fr)_1rem_7.5rem_9rem_7rem_8rem_auto]"
+          class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-2.5 transition-colors hover:bg-(--aurora-glass) md:grid-cols-[auto_minmax(0,1fr)_2.25rem_1rem_7.5rem_9rem_7rem_8rem_auto]"
         >
           <UAvatar
             :src="user.avatarUrl ?? undefined"
@@ -234,11 +256,28 @@ const submitGrant = async (): Promise<void> => {
             <b class="truncate font-medium text-highlighted">{{ accessEntryName(user) }}</b>
             <small class="truncate font-mono text-[11.5px] text-muted">{{ user.discordId }}</small>
           </span>
+          <span
+            class="flex items-center gap-1 text-muted max-md:hidden"
+            :title="USER_KINDS[userKind(user)].name"
+            :aria-label="`Uses: ${USER_KINDS[userKind(user)].name}`"
+          >
+            <UIcon
+              v-for="icon in USER_KINDS[userKind(user)].icons"
+              :key="icon"
+              :name="icon"
+              class="size-4 shrink-0"
+            />
+          </span>
           <UIcon
+            v-if="user.clientSeenAt"
             :name="shareAccessInfo(user.shareAccess).icon"
             class="size-4 text-muted max-md:hidden"
             :title="`Sharing: ${shareAccessInfo(user.shareAccess).name}`"
             :aria-label="`Sharing: ${shareAccessInfo(user.shareAccess).name}`"
+          />
+          <span
+            v-else
+            class="max-md:hidden"
           />
           <span
             class="flex items-center gap-1 text-muted max-md:hidden"

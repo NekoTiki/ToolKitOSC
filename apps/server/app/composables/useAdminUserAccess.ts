@@ -7,6 +7,8 @@ export interface AccessEntry {
   avatarUrl: string | null
   lastSeenAt: string
   shareAccess?: string | null
+  clientSeenAt?: string | null
+  webSeenAt?: string | null
   hasAccess: boolean
   canSelectModel: boolean
   grantedBy: string | null

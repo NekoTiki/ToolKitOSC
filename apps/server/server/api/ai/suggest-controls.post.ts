@@ -171,7 +171,7 @@ export default defineEventHandler(async (event): Promise<{ requestId: string }> 
   // So credit/log rows always have a valid FK target, even for a desktop client that calls this
   // route without ever having opened a host WS connection (host.ts does the same upsert on its
   // own auth path).
-  await upsertUserFromAuth(user)
+  await upsertUserFromAuth(user, 'client')
 
   // Shape/type validation (non-empty strings, a known profile id, well-formed parameters) is
   // entirely zod's job now - readValidatedBody turns a thrown ZodError into a 400 on its own, so

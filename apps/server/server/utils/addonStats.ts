@@ -84,6 +84,6 @@ export async function addonUsageTotals(days: number) {
     })
     .from(addonUsage)
     .innerJoin(users, eq(users.discordId, addonUsage.discordId))
-    .where(gte(users.lastSeenAt, new Date(Date.now() - days * 86_400_000)))
+    .where(gte(users.clientSeenAt, new Date(Date.now() - days * 86_400_000)))
     .groupBy(addonUsage.addonId)
 }

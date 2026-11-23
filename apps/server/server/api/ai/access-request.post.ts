@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const { message } = await readValidatedBody(event, bodySchema.parse)
 
   // The request row points at the user row.
-  await upsertUserFromAuth(user)
+  await upsertUserFromAuth(user, 'client')
 
   if ((await requestAccess(user.discord.id, message || null)) === 'too-soon') {
     throw createError({ statusCode: 429, statusMessage: 'Your last request was declined. You can ask again a week after.' })

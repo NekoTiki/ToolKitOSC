@@ -209,7 +209,7 @@ export default defineWebSocketHandler({
           return
         }
 
-        await upsertUserFromAuth(user)
+        await upsertUserFromAuth(user, 'client')
 
         if (typeof data.message.appVersion === 'string') {
           await recordAppVersion(roomId!, data.message.appVersion, typeof data.message.os === 'string' ? data.message.os : null)

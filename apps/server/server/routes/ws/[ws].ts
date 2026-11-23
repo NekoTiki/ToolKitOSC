@@ -11,6 +11,7 @@ import { getDb } from '~~/server/db'
 import { isSuspended } from '~~/server/db/accounts'
 import { users } from '~~/server/db/schema'
 import { resolveShareCode } from '~~/server/db/shareLinks'
+import { upsertUserFromAuth } from '~~/server/db/users'
 import {
   hostArgs,
   hostControls,
@@ -289,6 +290,8 @@ export default defineWebSocketHandler({
     const userIp = useWsIp(peer)
     // A suspended account watches as a guest.
     const user = sessionUser?.discord?.id && (await isSuspended(sessionUser.discord.id)) ? null : sessionUser
+
+    if (user?.discord?.id) void upsertUserFromAuth(user, 'web').catch((error) => console.error('[ws] failed to record viewer:', error))
     const refusal = connectionRefusal({
       socketsFromIp: socketsFromIp(userIp),
       viewersInRoom: clientList.get(roomId)?.size ?? 0,
