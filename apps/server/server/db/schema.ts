@@ -30,7 +30,9 @@ export const users = sqliteTable('users', {
   // The host's "Only people you let in", kept so it still holds after a server restart until
   // their app is back and sends who they let in.
   shareApproval: integer('share_approval', { mode: 'boolean' }).notNull().default(false),
-  shareAccess: text('share_access')
+  shareAccess: text('share_access'),
+  clientSeenAt: integer('client_seen_at', { mode: 'timestamp' }),
+  webSeenAt: integer('web_seen_at', { mode: 'timestamp' })
 })
 
 // Settings admins change from the dashboard (see utils/serverSettings.ts), one row per key, the

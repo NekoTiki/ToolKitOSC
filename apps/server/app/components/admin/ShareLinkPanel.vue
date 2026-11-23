@@ -3,7 +3,7 @@
 // link keeps working.
 import { shareAccessInfo } from '~/types/adminStats'
 
-const props = defineProps<{ discordId: string; links: { main: string | null; custom: string | null }; access: string | null }>()
+const props = defineProps<{ discordId: string; links: { main: string | null; custom: string | null }; access?: string | null }>()
 const emit = defineEmits<{ changed: [] }>()
 
 const { adminFetch } = useAdminApi()
@@ -41,10 +41,16 @@ const freeName = async (): Promise<void> => {
     </p>
 
     <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm">
-      <dt class="text-muted">
+      <dt
+        v-if="access !== undefined"
+        class="text-muted"
+      >
         Who can use it
       </dt>
-      <dd class="flex min-w-0 items-center gap-1.5">
+      <dd
+        v-if="access !== undefined"
+        class="flex min-w-0 items-center gap-1.5"
+      >
         <UIcon
           :name="shareAccessInfo(access).icon"
           class="size-4 shrink-0 self-center text-muted"

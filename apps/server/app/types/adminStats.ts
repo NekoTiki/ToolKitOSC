@@ -43,7 +43,19 @@ export const SHARE_ACCESS_INFO: Record<string, { name: string; icon: string }> =
 export const shareAccessInfo = (access: string | null | undefined): { name: string; icon: string } =>
   (access && SHARE_ACCESS_INFO[access]) || { name: 'Unknown (older app)', icon: 'i-lucide-circle-help' }
 
-export const addonInfo =(id: string): { name: string; icon: string; devices?: string } => ADDONS[id] ?? { name: id, icon: 'i-lucide-puzzle' }
+export type UserKind = 'client' | 'web' | 'both' | 'none'
+
+export const userKind = (user: { clientSeenAt?: string | null; webSeenAt?: string | null }): UserKind =>
+  user.clientSeenAt ? (user.webSeenAt ? 'both' : 'client') : user.webSeenAt ? 'web' : 'none'
+
+export const USER_KINDS: Record<UserKind, { name: string; icons: string[] }> = {
+  client: { name: 'Client', icons: ['i-lucide-monitor'] },
+  web: { name: 'Website', icons: ['i-lucide-globe'] },
+  both: { name: 'Client and website', icons: ['i-lucide-monitor', 'i-lucide-globe'] },
+  none: { name: 'Never connected', icons: [] }
+}
+
+export const addonInfo = (id: string): { name: string; icon: string; devices?: string } => ADDONS[id] ?? { name: id, icon: 'i-lucide-puzzle' }
 
 // One add-on in a user's /api/admin/users/:id/stats `addons`.
 export interface AddonUsage {
@@ -65,6 +77,8 @@ export interface UserStatsResponse {
     appVersion: string | null
     os: string | null
     shareAccess: string | null
+    clientSeenAt: string | null
+    webSeenAt: string | null
   }
   ai: StatsResult
   controls: ControlStatsResult

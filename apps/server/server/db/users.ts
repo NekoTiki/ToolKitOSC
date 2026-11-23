@@ -10,14 +10,17 @@ interface UpsertUserInput {
   avatarUrl?: string | null
 }
 
-async function upsertUser(input: UpsertUserInput): Promise<void> {
+export type SeenVia = 'client' | 'web'
+
+async function upsertUser(input: UpsertUserInput, via: SeenVia): Promise<void> {
   const db = getDb()
   const now = new Date()
   const record = {
     username: input.username ?? null,
     displayName: input.displayName ?? null,
     avatarUrl: input.avatarUrl ?? null,
-    lastSeenAt: now
+    lastSeenAt: now,
+    ...(via === 'client' ? { clientSeenAt: now } : { webSeenAt: now })
   }
 
   await db
@@ -32,7 +35,7 @@ async function upsertUser(input: UpsertUserInput): Promise<void> {
 export async function upsertUserFromAuth(user: {
   discord?: { id: string; avatar: string; name: string }
   username?: string
-}): Promise<void> {
+}, via: SeenVia): Promise<void> {
   if (!user.discord?.id) return
 
   await upsertUser({
@@ -40,7 +43,7 @@ export async function upsertUserFromAuth(user: {
     username: user.username,
     displayName: user.discord.name,
     avatarUrl: user.discord.avatar
-  })
+  }, via)
 }
 
 export async function recordAppVersion(discordId: string, appVersion: string, os: string | null): Promise<void> {
@@ -50,7 +53,7 @@ export async function recordAppVersion(discordId: string, appVersion: string, os
 // How many accounts seen in the last `days` run each app version and OS.
 export async function appVersionCounts(days: number) {
   const db = getDb()
-  const recent = and(gte(users.lastSeenAt, new Date(Date.now() - days * 86_400_000)), isNotNull(users.appVersion))
+  const recent = and(gte(users.clientSeenAt,new Date(Date.now() - days * 86_400_000)), isNotNull(users.appVersion))
   const [versions, systems] = await Promise.all([
     db.select({ label: users.appVersion, value: count() }).from(users).where(recent).groupBy(users.appVersion).orderBy(users.appVersion),
     db.select({ label: users.os, value: count() }).from(users).where(recent).groupBy(users.os)

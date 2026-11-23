@@ -1,18 +1,21 @@
+import { upsertUserFromAuth } from '~~/server/db/users'
+
 export default defineOAuthDiscordEventHandler({
   config: {},
   async onSuccess(event, { user }) {
     const { id, user: previous, secure } = await getUserSession(event)
+    const sessionUser = {
+      discord: {
+        id: user.id,
+        avatar: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
+        name: user.global_name
+      },
+      username: user.username,
+      email: user.email
+    }
 
     await replaceUserSession(event, {
-      user: {
-        discord: {
-          id: user.id,
-          avatar: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
-          name: user.global_name
-        },
-        username: user.username,
-        email: user.email
-      },
+      user: sessionUser,
       secure: {
         ...secure,
         desktopAuthRequestId: undefined,
@@ -25,6 +28,8 @@ export default defineOAuthDiscordEventHandler({
     if (secure?.desktopAuthRequestId) {
       return sendRedirect(event, `/auth/desktop?requestId=${secure.desktopAuthRequestId}`)
     }
+
+    await upsertUserFromAuth(sessionUser, 'web')
 
     return sendRedirect(event, '/connect')
   },

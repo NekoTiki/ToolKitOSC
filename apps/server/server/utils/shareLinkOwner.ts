@@ -6,7 +6,8 @@ import { upsertUserFromAuth } from '~~/server/db/users'
 // The signed-in host for the /api/share-link routes: the desktop app sends its bearer token, the
 // website (connect page) its session cookie. Upserted so their share_links rows have a user row.
 export async function shareLinkOwner(event: H3Event): Promise<string> {
-  const user = getHeader(event, 'authorization') ? await verifyDesktopToken(event) : (await requireUserSession(event)).user
+  const fromClient = !!getHeader(event, 'authorization')
+  const user = fromClient ? await verifyDesktopToken(event) : (await requireUserSession(event)).user
 
   if (!user.discord?.id) throw createError({ statusCode: 401, statusMessage: 'No Discord identity' })
 
@@ -15,7 +16,7 @@ export async function shareLinkOwner(event: H3Event): Promise<string> {
 
   if (problem) throw createError({ statusCode: 403, statusMessage: problem })
 
-  await upsertUserFromAuth(user)
+  await upsertUserFromAuth(user, fromClient ? 'client' : 'web')
 
   return user.discord.id
 }

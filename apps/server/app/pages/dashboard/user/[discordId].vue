@@ -2,6 +2,7 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 import type { UserStatsResponse } from '~/types/adminStats'
+import { USER_KINDS, userKind } from '~/types/adminStats'
 
 // One account: the header and the section links here, each section a subpage (user/[discordId]/*)
 // that gets the data fetched here as props.
@@ -84,6 +85,7 @@ const sections = computed<NavigationMenuItem[]>(() =>
                   relative
                 />
               </template>
+              · {{ USER_KINDS[userKind(userStats.user)].name.toLowerCase() }}
               <template v-if="userStats.user.appVersion">
                 · app {{ userStats.user.appVersion }}{{ userStats.user.os ? ` on ${userStats.user.os}` : '' }}
               </template>

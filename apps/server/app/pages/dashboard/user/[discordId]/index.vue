@@ -23,7 +23,7 @@ defineEmits<{ changed: [] }>()
     <AdminShareLinkPanel
       :discord-id="discordId"
       :links="userStats.shareLinks"
-      :access="userStats.user.shareAccess"
+      :access="userStats.user.clientSeenAt ? userStats.user.shareAccess : undefined"
       @changed="$emit('changed')"
     />
   </div>
