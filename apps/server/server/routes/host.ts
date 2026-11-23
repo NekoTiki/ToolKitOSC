@@ -7,6 +7,7 @@ import type {
   ControlGroup,
   HostToServerMessage,
   OSCArg,
+  ShareAccess,
   ShareSettingsMessage,
   ViewerActionMessage,
   ViewerGroupsMessage
@@ -14,7 +15,8 @@ import type {
 import {
   KNOWN_CONTROL_TYPES,
   MIN_SUPPORTED_PROTOCOL_VERSION,
-  PROTOCOL_VERSION
+  PROTOCOL_VERSION,
+  SHARE_ACCESS
 } from '#shared/types/protocol'
 import { getDb } from '~~/server/db'
 import { accountProblem } from '~~/server/db/accounts'
@@ -313,15 +315,18 @@ export default defineWebSocketHandler({
       const approval = data.message.approval === true
       const approved = Array.isArray(data.message.approved) ? data.message.approved.filter((id): id is string => typeof id === 'string') : []
 
-      if (approval !== !!hostShareSettings.get(roomId)?.approval) {
+      const previous = hostShareSettings.get(roomId)
+      const access = SHARE_ACCESS.includes(data.message.access as ShareAccess) ? data.message.access : undefined
+
+      if (approval !== !!previous?.approval || (access && access !== previous?.access)) {
         void getDb()
           .update(users)
-          .set({ shareApproval: approval })
+          .set({ shareApproval: approval, ...(access && { shareAccess: access }) })
           .where(eq(users.discordId, roomId))
-          .catch((error) => console.error('[host] failed to save share approval:', error))
+          .catch((error) => console.error('[host] failed to save share settings:', error))
       }
 
-      hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false, approval, approved, showTopViewers: data.message.showTopViewers === true })
+      hostShareSettings.set(roomId, { showViewers: data.message.showViewers !== false, access, approval, approved, showTopViewers: data.message.showTopViewers === true })
       broadcastPresence(roomId)
       recheckAccess(roomId)
       sendTopViewers(roomId)

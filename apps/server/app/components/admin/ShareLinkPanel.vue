@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // The user's share links, and freeing their custom name (squatting, impersonation). Their random
 // link keeps working.
-const props = defineProps<{ discordId: string; links: { main: string | null; custom: string | null } }>()
+import { shareAccessInfo } from '~/types/adminStats'
+
+const props = defineProps<{ discordId: string; links: { main: string | null; custom: string | null }; access: string | null }>()
 const emit = defineEmits<{ changed: [] }>()
 
 const { adminFetch } = useAdminApi()
@@ -38,10 +40,17 @@ const freeName = async (): Promise<void> => {
       They haven't shared a link yet.
     </p>
 
-    <dl
-      v-else
-      class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm"
-    >
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm">
+      <dt class="text-muted">
+        Who can use it
+      </dt>
+      <dd class="flex min-w-0 items-center gap-1.5">
+        <UIcon
+          :name="shareAccessInfo(access).icon"
+          class="size-4 shrink-0 self-center text-muted"
+        />
+        <span class="truncate">{{ shareAccessInfo(access).name }}</span>
+      </dd>
       <template v-if="links.main">
         <dt class="text-muted">
           Link

@@ -20,3 +20,5 @@ export { KNOWN_CONTROL_TYPES } from '@toolkitosc/shared-ui/types'
 
 // Same: the reserved pattern values for a viewer's own pattern (see VIEWER_PATTERN_ID in controls.ts).
 export { VIEWER_LIVE_ID, VIEWER_PATTERN_ID } from '@toolkitosc/shared-ui/types'
+
+export { SHARE_ACCESS } from '@toolkitosc/shared-ui/types'
